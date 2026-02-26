@@ -14,8 +14,7 @@ def parse_markdown_tasks(file_path):
             content = f.read()
         
         # Regex to find the ## Tasks section and its content until the next header or end of file
-        pattern = r"## Tasks\s*(.*?)(?=
-##|$)"
+        pattern = r"## Tasks\s*(.*?)(?=##|$)"
         match = re.search(pattern, content, re.DOTALL)
         
         if match:

@@ -49,32 +49,77 @@ We've mapped out the five-phase plan:
 
 ---
 
-## Phase 2: The Local Observer Layer (Turning Static Notes Into Active Triggers)
+## Phase 4: The AI Orchestration (The Scheduler Brain)
 
-The heart of the bridge is knowing *when* to cross it. I didn’t want to run a manual script every time I updated my notes; I wanted the system to feel invisible.
+Now for the "magic." I have my tasks (from markdown) and my availability (from Google Calendar). I need an orchestrator to sit in the middle and make smart decisions.
 
 ### The Strategy
-We used the `watchdog` library in Python to monitor my `.md` files. This is where the **PatternMatchingEventHandler** came in handy. It listens specifically for modifications to markdown files and ignores everything else.
+We chose the Gemini 1.5 Flash model for its speed and its ability to follow strict formatting instructions. I'm feeding it a "Context Payload":
+- **Current Tasks:** A list of what I need to do.
+- **Busy Slots:** A list of when I'm already booked.
+- **The Prompt:** Explicit instructions to fit tasks into free slots and return the result *only* as a JSON array.
 
-### 💡 Lesson Learned: The "Double Trigger" Gotcha
-One interesting thing I discovered is that many modern text editors (like Obsidian or VS Code) often trigger *multiple* save events for a single user action. This can cause the script to fire twice in rapid succession.
+### 💡 Lesson Learned: The "Deprecated Package" Pivot
+Software moves fast, and AI software moves at lightspeed. Halfway through my Phase 4 development, I ran into a 404 error and a warning that the `google-generativeai` package had been deprecated in favor of a new, cleaner SDK: `google-genai`.
 
-**Hint for others:** I implemented a simple `time.time()` check in the event handler to debounce these triggers, ensuring the AI is only called once per save.
+**Hint for others:** If you see "models/gemini-1.5-flash not found" or package warnings, it’s time to pivot. I had to:
+1.  Update my `requirements.txt` to `google-genai`.
+2.  Rewrite the AI script to use the new `genai.Client` class.
+3.  The result? A cleaner API and more reliable responses. Don’t be afraid to refactor when the tech shifts underneath you.
 
-### The Parsing Logic
-Instead of over-engineering a complex markdown AST parser, we used a simple but robust Regex approach to target a specific header: `## Tasks`. This keeps the script lightweight and focused.
+### 💡 Lesson Learned: The "Model Name" Rabbit Hole
+Even after switching to the new SDK, I hit a wall with a `404 Not Found` error for the model name. It turns out that depending on your specific API key and region, the model you expect (like `gemini-1.5-flash`) might be named differently (like `gemini-flash-latest`).
 
-```python
-# A snippet of our simple but effective parsing logic
-pattern = r"## Tasks\s*(.*?)(?=\n##|$)"
-match = re.search(pattern, content, re.DOTALL)
-```
+**Hint for others:** If you're getting 404 errors, don't guess the model name. Write a tiny diagnostic script using `client.models.list()` to see exactly what your API key is allowed to use. It saved me hours of frustration.
+
+### 💡 Lesson Learned: The JSON "Sanity Check"
+One common failure with AI is "hallucination"—sometimes it adds conversational filler like "Sure! Here is your schedule:". 
+
+**Hint for others:** I implemented a simple cleanup function in Python to strip away any markdown code blocks (like ```json) that the AI might wrap around its response. This ensures the JSON is always "parse-able" and won't crash the script.
+
+### 🛡️ Security First: Use a `.env` File
+Never hard-code your API keys directly into your scripts. I created a `.env` file and added `python-dotenv` to my dependencies. This keeps my Gemini key separate from my code and my Git history.
 
 ### Current Status
 - [x] Environment Foundation
-- [x] Local Observer Layer (Monitoring & Parsing)
-- [ ] Calendar & Appointments Layer (Next)
-- [ ] AI Orchestration
-- [ ] The Sync & Write-Back Loop
+- [x] Local Observer Layer
+- [x] Calendar & Appointments Layer
+- [x] AI Orchestration (Prompt & Logic)
+- [x] The Sync & Write-Back Loop
 
 ---
+
+## Phase 5: The Sync & Write-Back Loop (Closing the Circle)
+
+The final step was making the AI's decisions visible and actionable. It's one thing for a script to *calculate* a schedule; it's another for that schedule to magically appear in your calendar and your notes.
+
+### The Strategy
+We created a final `main.py` that orchestrates the entire lifecycle:
+1.  **Watchdog** triggers when I save my daily note.
+2.  **Parser** extracts my `## Tasks`.
+3.  **Calendar Manager** fetches my current `Busy` blocks.
+4.  **AI Orchestration** builds a JSON-formatted plan.
+5.  **Sync Back:** The script creates actual events in Google Calendar and then overwrites the `## Today's Plan` section in my markdown file with the finalized times.
+
+### 💡 Lesson Learned: The "Visual Feedback" Loop
+I discovered that having the script write back to the markdown file is the most satisfying part. Seeing a bulleted list of times appear in your notes seconds after you save is the "Aha!" moment where the AI truly feels like a helpful assistant.
+
+### Conclusion: My AI Agent is Alive
+This project taught me that "AI agents" aren't just large language models; they are the glue between those models and our everyday tools. By bridging local markdown files with cloud APIs, I've built a system that manages the logistics so I can focus on the creative work.
+
+---
+
+## Next Steps: Adding Local Models (Ollama) and Agent Frameworks (OpenClaw)
+
+As the project matures, I'm looking beyond cloud-only models. 
+
+### Local First with Ollama
+For those concerned with privacy or just wanting to play with the latest open-weights models, I'm integrating [Ollama](https://ollama.com/). This allows me to run models like Llama 3 or Mistral directly on my local machine (both Mac and Linux). It's incredibly fast and reduces my dependency on external APIs for simpler scheduling tasks.
+
+### Agent Orchestration with OpenClaw
+To give my assistant even more "agency," I'm exploring [OpenClaw](https://openclaw.ai/). It provides a structured way to handle multi-step agentic workflows and tool-calling, which will be essential as I add more complex features like priority-based scheduling and multi-calendar support.
+
+**What's next?** I'm thinking about adding priority levels to my tasks or maybe a "reflection" loop where the AI asks me how the day went at 5 PM. But for now, I'm just going to enjoy having a calendar that populates itself.
+
+---
+

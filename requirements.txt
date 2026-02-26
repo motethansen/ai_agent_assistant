@@ -2,5 +2,5 @@ watchdog
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
-google-generativeai
+google-genai
 python-dotenv
