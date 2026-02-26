@@ -1,6 +1,8 @@
 import time
 import os
 import re
+import datetime
+import json
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 import calendar_manager
@@ -121,13 +123,77 @@ def display_docs():
     print("---------------------
 ")
 
+def handle_morning_planning(obsidian_path):
+    """
+    Runs an interactive morning planning session.
+    """
+    print("🌅 --- Morning Planning Session ---")
+    tasks = get_unified_tasks(obsidian_path)
+    service = calendar_manager.get_calendar_service()
+    busy_slots = calendar_manager.get_busy_slots(service)
+    
+    print("AI is processing your backlog for today...")
+    result = ai_orchestration.generate_schedule(tasks, busy_slots, morning_mode=True)
+    
+    if result:
+        # Suggestions for new categories
+        if result.get("suggestions"):
+            print("
+--- Task Suggestions ---")
+            for sug in result["suggestions"]:
+                print(f"Suggestion: '{sug['task']}' -> Category: {sug['suggested_category']} (Reason: {sug['reason']})")
+        
+        # Proposed schedule
+        schedule = result.get("schedule", [])
+        if schedule:
+            print("
+--- Proposed Daily Schedule ---")
+            for item in schedule:
+                print(f"[{item['start'].split('T')[1][:5]}] {item['task']} ({item.get('category', 'Uncategorized')})")
+            
+            confirm = input("
+Add these items to your calendar? (y/n/skip): ").strip().lower()
+            if confirm == 'y':
+                calendar_manager.create_events(service, schedule)
+                update_markdown_plan(obsidian_path, schedule)
+            else:
+                print("Skipped calendar sync.")
+    else:
+        print("Failed to generate schedule suggestion.")
+
+def handle_evening_review(obsidian_path):
+    """
+    Runs an interactive evening review session.
+    """
+    print("🌙 --- Evening Review Session ---")
+    tasks = get_unified_tasks(obsidian_path)
+    # Check for completions
+    print("Checking which tasks from today's plan were completed...")
+    for t in tasks:
+        # We'll just ask for status for now as part of the loop
+        if t.get("source") == "Obsidian" and t.get("due_date") == datetime.datetime.now().strftime("%Y-%m-%d"):
+             status = input(f"Did you complete: '{t['task']}'? (y/n): ").strip().lower()
+             if status == 'y':
+                 print(f"Great work on {t['task']}!")
+    
+    print("
+Backlog summary for tomorrow:")
+    # Future logic for moving incomplete tasks to the next day
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AI Agent Assistant: Local Markdown-Calendar-AI Bridge")
     parser.add_argument("--docs", action="store_true", help="Display project documentation in terminal")
+    parser.add_argument("--morning", action="store_true", help="Start morning planning mode")
+    parser.add_argument("--evening", action="store_true", help="Start evening review mode")
+    parser.add_argument("--file", type=str, help="Specific markdown file to process", default="daily_note.md")
     args = parser.parse_args()
 
     if args.docs:
         display_docs()
+    elif args.morning:
+        handle_morning_planning(args.file)
+    elif args.evening:
+        handle_evening_review(args.file)
     else:
         path = "."
         event_handler = TaskSyncHandler()

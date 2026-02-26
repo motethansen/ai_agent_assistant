@@ -42,12 +42,12 @@
 - [x] Ensure Reminders act as cross-category activities.
 
 ### Phase 8: Daily Backlog & AI Assistant Workflow
-- [ ] Create an agent to process tasks from Obsidian and Apple Reminders into a unified backlog.
-- [ ] Develop AI assistant capability to manage the backlog daily.
-- [ ] Implement morning/evening suggestions: AI suggests tasks for the calendar, asks for time allocation, and verifies completion status.
-- [ ] Maintain a category-specific backlog with categories.
-- [ ] Implement logic for the AI to detect new uncategorized tasks from Obsidian and ask/suggest new categories.
-- [ ] Automatically schedule or track daily exercise and rest.
+- [x] Create an agent to process tasks from Obsidian and Apple Reminders into a unified backlog.
+- [x] Develop AI assistant capability to manage the backlog daily.
+- [x] Implement morning/evening suggestions: AI suggests tasks for the calendar, asks for time allocation, and verifies completion status.
+- [x] Maintain a category-specific backlog with categories.
+- [x] Implement logic for the AI to detect new uncategorized tasks from Obsidian and ask/suggest new categories.
+- [x] Automatically schedule or track daily exercise and rest.
 
 ### Phase 9: Automated Testing & Reporting
 - [x] Create a `tests/` directory with unit and integration tests (using `pytest`).
