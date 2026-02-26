@@ -6,6 +6,30 @@ from watchdog.events import PatternMatchingEventHandler
 import calendar_manager
 import ai_orchestration
 from observer import parse_markdown_tasks
+from reminders_manager import get_apple_reminders
+
+def get_unified_tasks(obsidian_path):
+    """
+    Merges tasks from Obsidian and Apple Reminders.
+    """
+    # 1. Parse Obsidian tasks
+    obsidian_tasks = parse_markdown_tasks(obsidian_path)
+    
+    # 2. Get Apple Reminders
+    # Pull the list name from the .config file if available
+    reminders_list = "Reminders"
+    if os.path.exists(".config"):
+        with open(".config", "r") as f:
+            for line in f:
+                if "APPLE_REMINDERS_LIST=" in line:
+                    reminders_list = line.split("=")[1].strip()
+    
+    apple_tasks = get_apple_reminders(reminders_list)
+    
+    # 3. Combine
+    unified_backlog = obsidian_tasks + apple_tasks
+    print(f"Unified Backlog: {len(unified_backlog)} tasks ({len(obsidian_tasks)} Obsidian, {len(apple_tasks)} Apple Reminders)")
+    return unified_backlog
 
 def update_markdown_plan(file_path, schedule):
     """
@@ -50,10 +74,10 @@ class TaskSyncHandler(PatternMatchingEventHandler):
         print(f"
 --- Change Detected in {os.path.basename(event.src_path)} ---")
         
-        # 1. Parse tasks
-        tasks = parse_markdown_tasks(event.src_path)
+        # 1. Get Unified Backlog
+        tasks = get_unified_tasks(event.src_path)
         if not tasks:
-            print("No tasks found in '## Tasks' section. Skipping sync.")
+            print("No tasks found in current backlog. Skipping sync.")
             return
         
         # 2. Get Calendar context
@@ -75,17 +99,47 @@ class TaskSyncHandler(PatternMatchingEventHandler):
         else:
             print("Failed to generate schedule from AI.")
 
+import argparse
+
+def display_docs():
+    """
+    Renders documentation files in the terminal.
+    """
+    docs_dir = "docs"
+    if not os.path.exists(docs_dir):
+        print("No documentation found in 'docs/' directory.")
+        return
+
+    print("
+--- Documentation ---")
+    for doc_file in os.listdir(docs_dir):
+        if doc_file.endswith(".md"):
+            print(f"
+[ {doc_file} ]")
+            with open(os.path.join(docs_dir, doc_file), 'r') as f:
+                print(f.read())
+    print("---------------------
+")
+
 if __name__ == "__main__":
-    path = "."
-    event_handler = TaskSyncHandler()
-    observer = Observer()
-    observer.schedule(event_handler, path, recursive=False)
-    
-    print(f"🚀 AI Agent Assistant is active and monitoring {os.path.abspath(path)}...")
-    observer.start()
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+    parser = argparse.ArgumentParser(description="AI Agent Assistant: Local Markdown-Calendar-AI Bridge")
+    parser.add_argument("--docs", action="store_true", help="Display project documentation in terminal")
+    args = parser.parse_args()
+
+    if args.docs:
+        display_docs()
+    else:
+        path = "."
+        event_handler = TaskSyncHandler()
+        observer = Observer()
+        observer.schedule(event_handler, path, recursive=False)
+        
+        print(f"🚀 AI Agent Assistant is active and monitoring {os.path.abspath(path)}...")
+        observer.start()
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            observer.stop()
+        observer.join()
+

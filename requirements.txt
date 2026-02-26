@@ -4,3 +4,13 @@ google-auth-oauthlib
 google-auth-httplib2
 google-genai
 python-dotenv
+# Testing & Reporting
+pytest
+pytest-mock
+pytest-html
+# Frontend
+streamlit
+# Apple Reminders retrieval
+pyobjc-framework-EventKit
+
+

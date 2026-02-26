@@ -6,29 +6,52 @@ from watchdog.events import PatternMatchingEventHandler
 
 def parse_markdown_tasks(file_path):
     """
-    Parses a markdown file to extract tasks from the '## Tasks' section.
+    Parses a markdown file to extract tasks with categories and dates.
+    Format example: - [ ] #winedragons Review wireframes ^2026-02-24
     """
     tasks = []
     try:
         with open(file_path, 'r') as f:
             content = f.read()
         
-        # Regex to find the ## Tasks section and its content until the next header or end of file
+        # Regex to find the ## Tasks section and its content
         pattern = r"## Tasks\s*(.*?)(?=##|$)"
         match = re.search(pattern, content, re.DOTALL)
         
         if match:
             tasks_content = match.group(1).strip()
-            # Extract individual task lines (e.g., - [ ] or - [x])
+            # Extract individual task lines with metadata
+            # - [ ] #category Task Description ^YYYY-MM-DD
             task_lines = re.findall(r"- \[[ xX]\] (.*)", tasks_content)
-            for task in task_lines:
-                # We can refine this later to distinguish between [ ] and [x]
-                tasks.append(task)
+            for raw_task in task_lines:
+                task_data = {
+                    "task": raw_task,
+                    "category": "Uncategorized",
+                    "due_date": None,
+                    "source": "Obsidian"
+                }
+                
+                # Extract #category
+                cat_match = re.search(r"#([\w.]+)", raw_task)
+                if cat_match:
+                    task_data["category"] = cat_match.group(1)
+                    # Remove the tag from the task description
+                    task_data["task"] = raw_task.replace(f"#{task_data['category']}", "").strip()
+                
+                # Extract ^YYYY-MM-DD (Obsidian/Logseq convention)
+                date_match = re.search(r"\^(\d{4}-\d{2}-\d{2})", task_data["task"])
+                if date_match:
+                    task_data["due_date"] = date_match.group(1)
+                    # Clean up the task description
+                    task_data["task"] = task_data["task"].replace(f"^{task_data['due_date']}", "").strip()
+                
+                tasks.append(task_data)
         
         return tasks
     except Exception as e:
         print(f"Error reading {file_path}: {e}")
         return []
+
 
 class MarkdownEventHandler(PatternMatchingEventHandler):
     patterns = ["*.md"]
