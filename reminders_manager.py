@@ -1,6 +1,12 @@
 import os
-from EventKit import EKEventStore, EKEntityTypeReminder
+try:
+    from EventKit import EKEventStore, EKEntityTypeReminder
+except ImportError:
+    EKEventStore = None
+    EKEntityTypeReminder = None
+
 from datetime import datetime, timedelta
+
 from dotenv import load_dotenv
 
 # Load configuration (optional)
@@ -11,8 +17,12 @@ def get_apple_reminders(list_name="Reminders", incomplete_only=True):
     Fetches reminders from a specific Apple Reminders list on macOS.
     Note: Requires 'Full Disk Access' or 'Reminders' permission for the terminal/IDE.
     """
+    if EKEventStore is None:
+        print("Warning: EventKit (pyobjc) not available. Skipping Apple Reminders.")
+        return []
     try:
         store = EKEventStore.alloc().initWithAccessToEntityTypes_(EKEntityTypeReminder)
+
         
         # We need to fetch synchronously or handle the async callback
         # For simplicity in a CLI script, we'll use a predicate

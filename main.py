@@ -44,19 +44,17 @@ def update_markdown_plan(file_path, schedule):
         with open(file_path, 'r') as f:
             content = f.read()
 
-        plan_text = "## Today's Plan
-"
+        plan_text = "## Today's Plan\n"
         for item in schedule:
             # Clean up the ISO time for better readability
             start_time = item['start'].split('T')[1][:5]
             end_time = item['end'].split('T')[1][:5]
-            plan_text += f"- **{start_time} - {end_time}**: {item['task']}
-"
+            plan_text += f"- **{start_time} - {end_time}**: {item['task']}\n"
         
         # Replace the section using regex
-        pattern = r"## Today's Plan.*?(?=
-##|$)"
+        pattern = r"## Today's Plan.*?(?=\n##|$)"
         new_content = re.sub(pattern, plan_text, content, flags=re.DOTALL)
+
         
         with open(file_path, 'w') as f:
             f.write(new_content)
@@ -73,8 +71,7 @@ class TaskSyncHandler(PatternMatchingEventHandler):
             return
         self.last_triggered = time.time()
         
-        print(f"
---- Change Detected in {os.path.basename(event.src_path)} ---")
+        print(f"\n--- Change Detected in {os.path.basename(event.src_path)} ---")
         
         # 1. Get Unified Backlog
         tasks = get_unified_tasks(event.src_path)
@@ -96,8 +93,7 @@ class TaskSyncHandler(PatternMatchingEventHandler):
             
             # 5. Write back to Markdown
             update_markdown_plan(event.src_path, schedule)
-            print("--- Sync Complete ---
-")
+            print("--- Sync Complete ---\n")
         else:
             print("Failed to generate schedule from AI.")
 
@@ -112,16 +108,13 @@ def display_docs():
         print("No documentation found in 'docs/' directory.")
         return
 
-    print("
---- Documentation ---")
+    print("\n--- Documentation ---")
     for doc_file in os.listdir(docs_dir):
         if doc_file.endswith(".md"):
-            print(f"
-[ {doc_file} ]")
+            print(f"\n[ {doc_file} ]")
             with open(os.path.join(docs_dir, doc_file), 'r') as f:
                 print(f.read())
-    print("---------------------
-")
+    print("---------------------\n")
 
 def handle_morning_planning(obsidian_path):
     """
@@ -138,21 +131,18 @@ def handle_morning_planning(obsidian_path):
     if result:
         # Suggestions for new categories
         if result.get("suggestions"):
-            print("
---- Task Suggestions ---")
+            print("\n--- Task Suggestions ---")
             for sug in result["suggestions"]:
                 print(f"Suggestion: '{sug['task']}' -> Category: {sug['suggested_category']} (Reason: {sug['reason']})")
         
         # Proposed schedule
         schedule = result.get("schedule", [])
         if schedule:
-            print("
---- Proposed Daily Schedule ---")
+            print("\n--- Proposed Daily Schedule ---")
             for item in schedule:
                 print(f"[{item['start'].split('T')[1][:5]}] {item['task']} ({item.get('category', 'Uncategorized')})")
             
-            confirm = input("
-Add these items to your calendar? (y/n/skip): ").strip().lower()
+            confirm = input("\nAdd these items to your calendar? (y/n/skip): ").strip().lower()
             if confirm == 'y':
                 calendar_manager.create_events(service, schedule)
                 update_markdown_plan(obsidian_path, schedule)
@@ -176,8 +166,8 @@ def handle_evening_review(obsidian_path):
              if status == 'y':
                  print(f"Great work on {t['task']}!")
     
-    print("
-Backlog summary for tomorrow:")
+    print("\nBacklog summary for tomorrow:")
+
     # Future logic for moving incomplete tasks to the next day
 
 if __name__ == "__main__":
