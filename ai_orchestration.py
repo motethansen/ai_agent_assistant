@@ -93,35 +93,37 @@ def generate_schedule(tasks, busy_slots, morning_mode=False):
             mode_instruction = "This is a MORNING PLANNING session. Suggest which tasks from the backlog should be done today based on their due dates and categories."
         
         prompt = f"""
-        You are a professional personal assistant and scheduler.
+        You are a professional personal assistant and scheduler with FILE SYSTEM ACCESS.
         Current Date/Time: {current_time}
         {mode_instruction}
 
-        TASKS BACKLOG (with categories and due dates):
+        TASKS BACKLOG:
         {json.dumps(tasks, indent=2)}
         
-        EXISTING CALENDAR COMMITMENTS (BUSY SLOTS):
+        EXISTING CALENDAR COMMITMENTS:
         {json.dumps(busy_slots, indent=2)}
         
-        VALID CATEGORIES:
-        {", ".join(VALID_CATEGORIES)}
-
+        CAPABILITIES:
+        1. SCHEDULING: Fit tasks into free slots.
+        2. FILE SYSTEM: You can create folders and files in the user's Obsidian vault.
+        
         GOAL:
-        1. Fit tasks into available free slots today.
-        2. MANDATORY: Include at least 30-60 minutes for 'exercise' and 30 minutes for 'rest'.
-        3. CATEGORIZATION: If a task has no category or an invalid one, suggest a new category or map it to the closest valid one.
-        4. SCHEDULING: 
-           - prioritize tasks with today's due date.
-           - Allocate 30-90 minutes per task.
+        - MANDATORY: Include 30-60m for 'exercise' and 30m for 'rest'.
+        - ACTION PROPOSALS: If the user asks to create a folder, move a file, or migrate tasks, use the "actions" field.
         
         OUTPUT FORMAT:
         Return a JSON object with:
+        - "response": A brief text message to the user.
         - "schedule": Array of {{"task": str, "category": str, "start": ISO8601, "end": ISO8601}}
-        - "suggestions": Array of {{"task": str, "suggested_category": str, "reason": str}} for uncategorized items.
+        - "suggestions": Array of {{"task": str, "suggested_category": str, "reason": str}}
         - "actions": Array of {{"type": "create_folder"|"write_file", "path": str, "content": str (optional), "reason": str}}
         
+        Example for migrating reminders to a new file:
+        {{"actions": [{{"type": "create_folder", "path": "AI_Agent", "reason": "Grouping AI tasks"}}, {{"type": "write_file", "path": "AI_Agent/Backlog.md", "content": "# Backlog...", "reason": "Migrating reminders"}}]}}
+
         Do not include any other text. Just the JSON.
         """
+
 
 
         response = client.models.generate_content(
