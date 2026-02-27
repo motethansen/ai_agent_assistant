@@ -185,7 +185,12 @@ def execute_actions(actions):
         return
 
     workspace = get_config_value("WORKSPACE_DIR", ".")
+    if "your/markdown/notes" in workspace:
+        print("⚠️ WARNING: 'WORKSPACE_DIR' in .config appears to be a placeholder.")
+        print(f"Current path: {os.path.abspath(workspace)}")
+    
     fs_agent = FileSystemAgent(workspace)
+
     
     print("\n⚡ AI is proposing the following actions:")
     for i, action in enumerate(actions, 1):
@@ -388,22 +393,28 @@ def handle_chat_mode(obsidian_path):
                     # Try to parse actions if the AI returned JSON
                     try:
                         text_content = response.text.strip()
-                        # Sanitize if it's wrapped in markdown
-                        if text_content.startswith("```json"):
-                            text_content = text_content[7:].rsplit("```", 1)[0].strip()
-                        elif text_content.startswith("```"):
-                            text_content = text_content[3:].rsplit("```", 1)[0].strip()
                         
-                        data = json.loads(text_content)
-                        if isinstance(data, dict):
-                            print(f"🤖 AI: {data.get('response', 'Action proposed below.')}")
-                            if "actions" in data:
-                                execute_actions(data["actions"])
-                        else:
-                            print(f"🤖 AI: {response.text}")
-                    except:
+                        # Find the first { and last } to extract JSON from conversational text
+                        start_idx = text_content.find('{')
+                        end_idx = text_content.rfind('}')
+                        
+                        if start_idx != -1 and end_idx != -1:
+                            json_str = text_content[start_idx:end_idx+1]
+                            data = json.loads(json_str)
+                            
+                            if isinstance(data, dict):
+                                if "response" in data:
+                                    print(f"🤖 AI: {data['response']}")
+                                if "actions" in data:
+                                    execute_actions(data["actions"])
+                                return # Successfully handled JSON
+                        
+                        # Fallback if no JSON found or parsing failed
+                        print(f"🤖 AI: {response.text}")
+                    except Exception as e:
                         # Fallback to plain text if not JSON
                         print(f"🤖 AI (Gemini): {response.text}")
+
             except Exception as e:
 
                 error_str = str(e).lower()

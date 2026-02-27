@@ -105,11 +105,13 @@ def generate_schedule(tasks, busy_slots, morning_mode=False):
         
         CAPABILITIES:
         1. SCHEDULING: Fit tasks into free slots.
-        2. FILE SYSTEM: You can create folders and files in the user's Obsidian vault.
+        2. FILE SYSTEM: You have DIRECT access to create folders and files in the user's Obsidian vault.
         
         GOAL:
         - MANDATORY: Include 30-60m for 'exercise' and 30m for 'rest'.
-        - ACTION PROPOSALS: If the user asks to create a folder, move a file, or migrate tasks, use the "actions" field.
+        - ACTION PROPOSALS: If the user asks to "add", "create", "migrate", or "save" something to Obsidian, YOU MUST use the "actions" field.
+        - NO COPY-PASTE: Never ask the user to copy and paste text. Instead, propose a "write_file" action to do it for them.
+
         
         OUTPUT FORMAT:
         Return a JSON object with:

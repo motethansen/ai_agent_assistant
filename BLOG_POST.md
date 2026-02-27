@@ -77,8 +77,13 @@ One common failure with AI is "hallucination"—sometimes it adds conversational
 
 **Hint for others:** I implemented a simple cleanup function in Python to strip away any markdown code blocks (like ```json) that the AI might wrap around its response. This ensures the JSON is always "parse-able" and won't crash the script.
 
-### 🛡️ Security First: Use a `.env` File
-Never hard-code your API keys directly into your scripts. I created a `.env` file and added `python-dotenv` to my dependencies. This keeps my Gemini key separate from my code and my Git history.
+### 🛡️ Security First: Use a `.env` and `.config` File
+Never hard-code your API keys or local paths directly into your scripts. I created a `.config` file (and a `.env`) to keep sensitive data separate from the code.
+
+**Key Configuration:**
+- **`GEMINI_API_KEY`**: Your brain's fuel.
+- **`WORKSPACE_DIR`**: This is critical! It tells the AI exactly where your Obsidian vault lives. By setting this to your local vault path (e.g., `/Users/michael/Obsidian/SecondBrain`), the assistant gains the ability to organize your files and create new notes exactly where you need them.
+- **`CALENDAR_ID`**: Point the assistant to a specific Google Calendar if you don't want to use your primary one.
 
 ### Current Status
 - [x] Environment Foundation

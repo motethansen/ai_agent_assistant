@@ -30,5 +30,10 @@ OLLAMA_HOST=http://localhost:11434
 APPLE_REMINDERS_LIST=Reminders
 
 # General Settings
+# WORKSPACE_DIR: The absolute path to your Obsidian vault or Markdown notes folder.
+# This is where the AI will create folders and files when you request it.
+# Example (Mac): /Users/yourname/Documents/ObsidianVault
+# Example (Linux): /home/yourname/Notes
 WORKSPACE_DIR=/path/to/your/markdown/notes
+
 DEBOUNCE_SECONDS=5
