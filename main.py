@@ -234,8 +234,27 @@ def handle_chat_mode(obsidian_path):
                 print("Web interface is opening in your browser.")
             elif command == "docs":
                 display_docs()
+            elif command.startswith("model"):
+                parts = user_input.split()
+                if len(parts) >= 3:
+                    action, target = parts[1].lower(), parts[2].lower()
+                    if target in ai_orchestration.MODELS_ENABLED:
+                        if action == "enable":
+                            ai_orchestration.MODELS_ENABLED[target] = True
+                            print(f"✅ Model '{target}' enabled.")
+                        elif action == "disable":
+                            ai_orchestration.MODELS_ENABLED[target] = False
+                            print(f"❌ Model '{target}' disabled.")
+                        else:
+                            print(f"Unknown action: {action}. Use enable/disable.")
+                    else:
+                        print(f"Unknown model: {target}. Available: {', '.join(ai_orchestration.MODELS_ENABLED.keys())}")
+                else:
+                    print("Usage: /model <enable/disable> <model_name>")
+                    print(f"Current Status: {ai_orchestration.MODELS_ENABLED}")
             else:
                 print(f"Unknown command: /{command}. Type /commands for help.")
+
         else:
             # AI Chat integration
             print("AI is thinking...")

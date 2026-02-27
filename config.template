@@ -1,8 +1,19 @@
 # .config template - copy this to .config and fill in your details.
 # DO NOT COMMIT THE REAL .config FILE TO GITHUB.
 
+# LLM Activation (Set to true or false)
+ENABLE_GEMINI=true
+ENABLE_OLLAMA=true
+ENABLE_OPENCLAW=true
+
+# Model Routing (Specify which model handles which task: gemini, ollama, openclaw)
+ROUTING_SCHEDULING=gemini
+ROUTING_PARSING=ollama
+ROUTING_CHAT=gemini
+
 # Google Gemini API Settings
 GEMINI_API_KEY=your_gemini_api_key_here
+
 
 # Google Calendar Settings
 CALENDAR_ID=primary

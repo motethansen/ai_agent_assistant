@@ -15,11 +15,61 @@ VALID_CATEGORIES = [
     "learning Thai", "writing academic papers", "budgeting app", "Personal"
 ]
 
+import requests
+
+# Default model settings (can be overridden by .config)
+MODELS_ENABLED = {
+    "gemini": True,
+    "ollama": True,
+    "openclaw": True
+}
+
+def get_routing(task_type="scheduling"):
+    """
+    Determines which model should handle the given task type.
+    """
+    # Simple mock for config lookup (in a real app, this would read .config)
+    # Default routing
+    if task_type == "parsing" and MODELS_ENABLED["ollama"]:
+        return "ollama"
+    return "gemini" if MODELS_ENABLED["gemini"] else "ollama"
+
+def ollama_generate(prompt, model="llama3"):
+    """
+    Calls a local Ollama instance for generation.
+    """
+    url = "http://localhost:11434/api/generate"
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=30)
+        return response.json().get("response", "")
+    except Exception as e:
+        return f"Error calling local Ollama: {e}"
+
 def generate_schedule(tasks, busy_slots, morning_mode=False):
     """
-    Sends tasks and busy slots to the AI to generate a daily schedule or suggestion.
+    Sends tasks and busy slots to the AI to generate a daily schedule.
+    Routes to the configured model.
     """
+    model_to_use = get_routing("scheduling")
+    
+    if model_to_use == "ollama":
+        print("Using local Ollama for scheduling...")
+        prompt = f"Schedule these tasks: {json.dumps(tasks)} avoiding these busy slots: {json.dumps(busy_slots)}. Return JSON."
+        response_text = ollama_generate(prompt)
+        # (Ollama response would need careful JSON parsing here)
+        try:
+            return json.loads(response_text)
+        except:
+            return None
+
+    # Default to Gemini logic...
     if not api_key:
+
         print("Error: GEMINI_API_KEY not found in .env file.")
         return None
 
