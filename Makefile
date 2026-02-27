@@ -10,12 +10,12 @@ install:
 # Run all tests using pytest
 test:
 	@echo "Running tests..."
-	@.venv/bin/pytest tests/
+	@PYTHONPATH=. .venv/bin/pytest tests/
 
 # Run tests and generate an HTML report (requires pytest-html)
 test-report:
 	@echo "Running tests and generating HTML report..."
-	@.venv/bin/pytest tests/ --html=reports/test_report.html --self-contained-html
+	@PYTHONPATH=. .venv/bin/pytest tests/ --html=reports/test_report.html --self-contained-html
 
 # Clean up temporary files
 clean:
@@ -27,3 +27,9 @@ clean:
 # Display CLI-based documentation
 docs:
 	@.venv/bin/python main.py --docs
+
+# Launch the Streamlit UI
+run-ui:
+	@echo "Launching AI Agent Assistant UI..."
+	@.venv/bin/streamlit run app.py
+

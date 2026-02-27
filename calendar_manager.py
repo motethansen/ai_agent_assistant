@@ -41,7 +41,7 @@ def get_calendar_service():
         print(f'An error occurred: {error}')
         return None
 
-def get_busy_slots(service, date_str=None):
+def get_busy_slots(service, calendar_id='primary', date_str=None):
     """
     Fetches events for the specified date and returns a list of busy time slots.
     date_str should be in 'YYYY-MM-DD' format. Defaults to today.
@@ -58,9 +58,9 @@ def get_busy_slots(service, date_str=None):
     start_of_day = day.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z'
     end_of_day = day.replace(hour=23, minute=59, second=59, microsecond=0).isoformat() + 'Z'
 
-    print(f"Fetching busy slots for {day.date()}...")
+    print(f"Fetching busy slots for {day.date()} from calendar: {calendar_id}...")
     
-    events_result = service.events().list(calendarId='primary', timeMin=start_of_day,
+    events_result = service.events().list(calendarId=calendar_id, timeMin=start_of_day,
                                         timeMax=end_of_day, singleEvents=True,
                                         orderBy='startTime').execute()
     events = events_result.get('items', [])
@@ -79,14 +79,14 @@ def get_busy_slots(service, date_str=None):
     
     return busy_slots
 
-def create_events(service, schedule):
+def create_events(service, schedule, calendar_id='primary'):
     """
     Creates calendar events from a list of scheduled tasks.
     """
     if not service or not schedule:
         return
 
-    print(f"Syncing {len(schedule)} tasks to Google Calendar...")
+    print(f"Syncing {len(schedule)} tasks to Google Calendar: {calendar_id}...")
     for item in schedule:
         event = {
             'summary': f"AI: {item['task']}",
@@ -94,7 +94,7 @@ def create_events(service, schedule):
             'end': {'dateTime': item['end']},
         }
         try:
-            event_result = service.events().insert(calendarId='primary', body=event).execute()
+            event_result = service.events().insert(calendarId=calendar_id, body=event).execute()
             print(f"Created: {event_result.get('htmlLink')}")
         except Exception as e:
             print(f"Error creating event for {item['task']}: {e}")

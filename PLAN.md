@@ -61,6 +61,18 @@
 - [x] Develop a **Streamlit** (browser-based) dashboard for visual backlog management, schedule review, and manual overrides.
 - [ ] Ensure the CLI remains the primary engine for background automation.
 
+### Phase 11: Interactive CLI Chat & Slash Commands
+- [x] Implement an interactive chat loop in the terminal (e.g., `python main.py --chat`).
+- [x] Add support for slash commands:
+    - `/sync`: Manually trigger a task sync.
+    - `/backlog`: Display the current unified backlog.
+    - `/plan`: Trigger a morning planning session.
+    - `/review`: Trigger an evening review session.
+    - `/ui`: Launch the Streamlit web interface from the CLI.
+    - `/exit`: Quit the interactive session.
+- [x] Integrate the AI orchestrator to answer questions about the schedule or backlog within the chat.
+- [x] Ensure the CLI feels similar to `gemini-cli` or `claude-cli` for a consistent developer experience.
+
 ## Summary of Planned Development
 The system will act as a bridge between your local knowledge base and your schedule. 
 1. **Watchdog** will monitor your markdown files for changes. 
