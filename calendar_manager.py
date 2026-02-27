@@ -39,7 +39,10 @@ def get_calendar_service():
         return service
     except HttpError as error:
         print(f'An error occurred: {error}')
+        if "invalid_scope" in str(error):
+            print("💡 TIP: You likely have an old 'token.json'. Delete it and run the script again to re-authenticate.")
         return None
+
 
 def get_busy_slots(service, calendar_id='primary', date_str=None):
     """

@@ -27,12 +27,23 @@ MODELS_ENABLED = {
 def get_routing(task_type="scheduling"):
     """
     Determines which model should handle the given task type.
+    Pulls from MODELS_ENABLED and defaults to Ollama if Gemini is disabled.
     """
-    # Simple mock for config lookup (in a real app, this would read .config)
-    # Default routing
-    if task_type == "parsing" and MODELS_ENABLED["ollama"]:
+    # 1. Check if Gemini is enabled and we have an API key
+    if MODELS_ENABLED.get("gemini") and api_key:
+        # Check if specific task routing is set to gemini
+        return "gemini"
+        
+    # 2. Fallback to Ollama if enabled
+    if MODELS_ENABLED.get("ollama"):
         return "ollama"
-    return "gemini" if MODELS_ENABLED["gemini"] else "ollama"
+        
+    # 3. Last resort - OpenClaw
+    if MODELS_ENABLED.get("openclaw"):
+        return "openclaw"
+        
+    return "ollama" # Default fallback
+
 
 def ollama_generate(prompt, model="llama3"):
     """

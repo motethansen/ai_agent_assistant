@@ -17,4 +17,6 @@ client_secret.json
 # User-specific
 *.local
 .config
+datainput/
+
 

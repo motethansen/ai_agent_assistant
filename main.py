@@ -176,11 +176,23 @@ def handle_evening_review(obsidian_path):
 
 import subprocess
 
+def print_banner():
+    """Prints the AI Agent Assistant banner."""
+    banner = """
+    #######################################
+    #                                     #
+    #        🤖 AI AGENT ASSISTANT        #
+    #                                     #
+    #######################################
+    """
+    print(banner)
+
 def handle_chat_mode(obsidian_path):
     """
     Starts an interactive CLI chat loop with slash commands.
     """
-    print("\n🤖 AI Agent Assistant: Interactive Chat Mode")
+    print_banner()
+    print("🤖 AI Agent Assistant: Interactive Chat Mode")
     print("Type /commands to see available slash commands or type your question.")
     
     while True:
@@ -190,7 +202,9 @@ def handle_chat_mode(obsidian_path):
             continue
             
         if user_input.startswith("/"):
-            command = user_input[1:].lower()
+            command_full = user_input[1:].lower()
+            parts = command_full.split()
+            command = parts[0]
             
             if command == "exit" or command == "quit":
                 print("Goodbye!")
@@ -202,13 +216,22 @@ def handle_chat_mode(obsidian_path):
                 print("  /plan     - Trigger a morning planning session")
                 print("  /review   - Trigger an evening review session")
                 print("  /ui       - Launch the Streamlit web interface")
+                print("  /models   - Show current status of LLM models")
+                print("  /model    - Enable/disable models (e.g., /model disable gemini)")
                 print("  /docs     - Show project documentation")
+                print("  /create-agent - Scaffold a new custom agent")
+                print("  /list-agents  - Show available custom agents")
                 print("  /exit     - Quit the chat mode")
             elif command == "sync":
-                print("Manually triggering sync...")
+                print("Syncing reminders to local storage...")
+                subprocess.run(["python3", "debug_reminders.py"])
+                print("Manually triggering task sync...")
                 tasks = get_unified_tasks(obsidian_path)
                 calendar_id = get_config_value("CALENDAR_ID", "primary")
                 service = calendar_manager.get_calendar_service()
+                if not service:
+                    print("❌ Calendar service not available. Check credentials.")
+                    continue
                 busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
                 schedule = ai_orchestration.generate_schedule(tasks, busy_slots)
                 if schedule:
@@ -217,7 +240,11 @@ def handle_chat_mode(obsidian_path):
                     print("Sync complete.")
                 else:
                     print("Failed to generate schedule.")
+            elif command == "reminders-sync":
+                print("Extracting reminders from Apple Reminders app...")
+                subprocess.run(["python3", "debug_reminders.py"])
             elif command == "backlog":
+
                 tasks = get_unified_tasks(obsidian_path)
                 print("\n--- Current Backlog ---")
                 for i, t in enumerate(tasks, 1):
@@ -232,8 +259,30 @@ def handle_chat_mode(obsidian_path):
                 print("Launching Streamlit UI in the background...")
                 subprocess.Popen([".venv/bin/streamlit", "run", "app.py"])
                 print("Web interface is opening in your browser.")
+            elif command == "docs":
+                display_docs()
+            elif command == "models":
+                print(f"\nModel Activation Status:")
+                for m, enabled in ai_orchestration.MODELS_ENABLED.items():
+                    status = "✅ ENABLED" if enabled else "❌ DISABLED"
+                    print(f"  - {m:10}: {status}")
+            elif command == "model":
+                if len(parts) >= 3:
+                    action, target = parts[1].lower(), parts[2].lower()
+                    if target in ai_orchestration.MODELS_ENABLED:
+                        if action == "enable":
+                            ai_orchestration.MODELS_ENABLED[target] = True
+                            print(f"✅ Model '{target}' enabled.")
+                        elif action == "disable":
+                            ai_orchestration.MODELS_ENABLED[target] = False
+                            print(f"❌ Model '{target}' disabled.")
+                        else:
+                            print(f"Unknown action: {action}. Use enable/disable.")
+                    else:
+                        print(f"Unknown model: {target}. Available: {', '.join(ai_orchestration.MODELS_ENABLED.keys())}")
+                else:
+                    print("Usage: /model <enable/disable> <model_name>")
             elif command.startswith("create-agent"):
-                parts = user_input.split()
                 if len(parts) >= 2:
                     agent_name = parts[1].lower().replace("-", "_")
                     agent_path = f"custom_agents/{agent_name}.py"
@@ -246,7 +295,6 @@ def handle_chat_mode(obsidian_path):
                 else:
                     print("Usage: /create-agent <name>")
             elif command.startswith("push-agent"):
-                parts = user_input.split()
                 if len(parts) >= 3:
                     agent_name, repo_url = parts[1].lower(), parts[2]
                     agent_dir = f"custom_agents/{agent_name}_repo"
@@ -265,25 +313,6 @@ def handle_chat_mode(obsidian_path):
             elif command.startswith("list-agents"):
                 agents = [f[:-3] for f in os.listdir("custom_agents") if f.endswith(".py") and f != "__init__.py"]
                 print(f"Available Agents: {', '.join(agents) if agents else 'None'}")
-            elif command.startswith("model"):
-
-                parts = user_input.split()
-                if len(parts) >= 3:
-                    action, target = parts[1].lower(), parts[2].lower()
-                    if target in ai_orchestration.MODELS_ENABLED:
-                        if action == "enable":
-                            ai_orchestration.MODELS_ENABLED[target] = True
-                            print(f"✅ Model '{target}' enabled.")
-                        elif action == "disable":
-                            ai_orchestration.MODELS_ENABLED[target] = False
-                            print(f"❌ Model '{target}' disabled.")
-                        else:
-                            print(f"Unknown action: {action}. Use enable/disable.")
-                    else:
-                        print(f"Unknown model: {target}. Available: {', '.join(ai_orchestration.MODELS_ENABLED.keys())}")
-                else:
-                    print("Usage: /model <enable/disable> <model_name>")
-                    print(f"Current Status: {ai_orchestration.MODELS_ENABLED}")
             else:
                 print(f"Unknown command: /{command}. Type /commands for help.")
 
@@ -291,10 +320,16 @@ def handle_chat_mode(obsidian_path):
             # AI Chat integration
             print("AI is thinking...")
             try:
-                # Get both backlog and calendar context for better answers
+                # Get context
                 tasks = get_unified_tasks(obsidian_path)
                 calendar_id = get_config_value("CALENDAR_ID", "primary")
                 service = calendar_manager.get_calendar_service()
+                
+                # Check if we failed at service level (e.g. invalid scope)
+                if not service:
+                    print("⚠️ AI: I cannot access your calendar. Please check 'token.json' and 'credentials.json'.")
+                    continue
+
                 busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
                 
                 context_payload = {
@@ -303,20 +338,32 @@ def handle_chat_mode(obsidian_path):
                     "current_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                 }
                 
-                prompt = f"The user is asking: '{user_input}'. Based on their state: {json.dumps(context_payload)}, provide a helpful and concise answer."
+                prompt = f"User Question: '{user_input}'. Context: {json.dumps(context_payload)}. Provide a helpful answer."
                 
-                client = ai_orchestration.genai.Client(api_key=ai_orchestration.api_key)
-                # Using the stable model configured in ai_orchestration
-                response = client.models.generate_content(
-                    model='gemini-flash-latest',
-                    contents=prompt
-                )
-                print(f"🤖 AI: {response.text}")
+                # Determine model to use
+                model_to_use = ai_orchestration.get_routing("chat")
+                
+                if model_to_use == "ollama":
+                    print(" (Routing to local Ollama...)")
+                    response_text = ai_orchestration.ollama_generate(prompt)
+                    print(f"🤖 AI (Ollama): {response_text}")
+                else:
+                    client = ai_orchestration.genai.Client(api_key=ai_orchestration.api_key)
+                    response = client.models.generate_content(
+                        model='gemini-flash-latest',
+                        contents=prompt
+                    )
+                    print(f"🤖 AI (Gemini): {response.text}")
             except Exception as e:
-                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                    print("⚠️ AI: I've hit my API rate limit or daily quota. Please try again in a moment or check your Gemini API plan.")
+                error_str = str(e).lower()
+                if "429" in error_str or "resource_exhausted" in error_str:
+                    print("⚠️ AI: I've hit my API rate limit or daily quota. Please try again in a moment.")
+                elif "invalid_scope" in error_str:
+                    print("⚠️ AI: I encountered an 'invalid_scope' error. This usually happens after a security update.")
+                    print("💡 FIX: Please run 'rm token.json' and restart the chat to re-authenticate with Google.")
                 else:
                     print(f"⚠️ AI: I encountered an error: {e}")
+
 
 
 if __name__ == "__main__":
