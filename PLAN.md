@@ -80,10 +80,10 @@
 - [x] Create a routing mechanism in `ai_orchestration.py` to allow users to specify which LLM handles which specific tasks (e.g., local models for basic parsing, API models for complex scheduling).
 
 ### Phase 13: Dynamic Agent Creation Framework
-- [ ] Create a CLI command (e.g., `/create-agent <name>`) that scaffolds a new Python agent dynamically.
-- [ ] Implement backend code separation so user-defined agents are generated into an isolated directory structure (e.g., `custom_agents/`).
-- [ ] Support committing and pushing these user-defined agents into their own separate Git repositories, encouraging a modular and shareable agent ecosystem.
-- [ ] Enable the main assistant backend to discover and load these external agents dynamically at runtime.
+- [x] Create a CLI command (e.g., `/create-agent <name>`) that scaffolds a new Python agent dynamically.
+- [x] Implement backend code separation so user-defined agents are generated into an isolated directory structure (e.g., `custom_agents/`).
+- [x] Support committing and pushing these user-defined agents into their own separate Git repositories, encouraging a modular and shareable agent ecosystem.
+- [x] Enable the main assistant backend to discover and load these external agents dynamically at runtime.
 
 ## Summary of Planned Development
 The system will act as a bridge between your local knowledge base and your schedule. 

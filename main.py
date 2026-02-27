@@ -232,9 +232,41 @@ def handle_chat_mode(obsidian_path):
                 print("Launching Streamlit UI in the background...")
                 subprocess.Popen([".venv/bin/streamlit", "run", "app.py"])
                 print("Web interface is opening in your browser.")
-            elif command == "docs":
-                display_docs()
+            elif command.startswith("create-agent"):
+                parts = user_input.split()
+                if len(parts) >= 2:
+                    agent_name = parts[1].lower().replace("-", "_")
+                    agent_path = f"custom_agents/{agent_name}.py"
+                    if os.path.exists(agent_path):
+                        print(f"⚠️ Agent '{agent_name}' already exists.")
+                    else:
+                        with open(agent_path, "w") as f:
+                            f.write(f'\"\"\"\nAgent: {agent_name}\nCreated dynamically by AI Agent Assistant\n\"\"\"\n\ndef run(context):\n    \"\"\"Main entry point for the {agent_name} agent.\"\"\"\n    print(f"[{agent_name}] Running with context: {{len(context)}} tasks")\n    # Add your logic here\n    return f"Agent {agent_name} executed successfully."\n')
+                        print(f"✅ Agent '{agent_name}' scaffolded at {agent_path}.")
+                else:
+                    print("Usage: /create-agent <name>")
+            elif command.startswith("push-agent"):
+                parts = user_input.split()
+                if len(parts) >= 3:
+                    agent_name, repo_url = parts[1].lower(), parts[2]
+                    agent_dir = f"custom_agents/{agent_name}_repo"
+                    os.makedirs(agent_dir, exist_ok=True)
+                    # Move the file into its own repo folder
+                    os.rename(f"custom_agents/{agent_name}.py", f"{agent_dir}/agent.py")
+                    # Init git and push
+                    subprocess.run(["git", "init"], cwd=agent_dir)
+                    subprocess.run(["git", "add", "."], cwd=agent_dir)
+                    subprocess.run(["git", "commit", "-m", "Initial commit for custom agent"], cwd=agent_dir)
+                    subprocess.run(["git", "remote", "add", "origin", repo_url], cwd=agent_dir)
+                    print(f"🚀 Agent '{agent_name}' prepared for push to {repo_url}.")
+                    print(f"Run 'cd {agent_dir} && git push -u origin main' to complete.")
+                else:
+                    print("Usage: /push-agent <name> <repo_url>")
+            elif command.startswith("list-agents"):
+                agents = [f[:-3] for f in os.listdir("custom_agents") if f.endswith(".py") and f != "__init__.py"]
+                print(f"Available Agents: {', '.join(agents) if agents else 'None'}")
             elif command.startswith("model"):
+
                 parts = user_input.split()
                 if len(parts) >= 3:
                     action, target = parts[1].lower(), parts[2].lower()
