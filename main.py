@@ -175,8 +175,39 @@ def handle_evening_review(obsidian_path):
     # Future logic for moving incomplete tasks to the next day
 
 import subprocess
+from file_system_agent import FileSystemAgent
+
+def execute_actions(actions):
+    """
+    Shows proposed AI actions to the user and executes them upon confirmation.
+    """
+    if not actions:
+        return
+
+    workspace = get_config_value("WORKSPACE_DIR", ".")
+    fs_agent = FileSystemAgent(workspace)
+    
+    print("\n⚡ AI is proposing the following actions:")
+    for i, action in enumerate(actions, 1):
+        print(f"  {i}. {action['type'].upper()}: {action['path']} (Reason: {action.get('reason', 'None')})")
+    
+    confirm = input("\nExecute these actions? (y/n): ").strip().lower()
+    if confirm == 'y':
+        for action in actions:
+            try:
+                if action['type'] == "create_folder":
+                    msg = fs_agent.create_folder(action['path'])
+                    print(f"✅ {msg}")
+                elif action['type'] == "write_file":
+                    msg = fs_agent.write_file(action['path'], action.get('content', ''))
+                    print(f"✅ {msg}")
+            except Exception as e:
+                print(f"❌ Error executing {action['type']}: {e}")
+    else:
+        print("🚫 Actions cancelled.")
 
 def print_banner():
+
     """Prints the AI Agent Assistant banner."""
     banner = """
     #######################################
@@ -353,12 +384,35 @@ def handle_chat_mode(obsidian_path):
                         model='gemini-flash-latest',
                         contents=prompt
                     )
-                    print(f"🤖 AI (Gemini): {response.text}")
+                    
+                    # Try to parse actions if the AI returned JSON
+                    try:
+                        text_content = response.text.strip()
+                        # Sanitize if it's wrapped in markdown
+                        if text_content.startswith("```json"):
+                            text_content = text_content[7:].rsplit("```", 1)[0].strip()
+                        elif text_content.startswith("```"):
+                            text_content = text_content[3:].rsplit("```", 1)[0].strip()
+                        
+                        data = json.loads(text_content)
+                        if isinstance(data, dict):
+                            print(f"🤖 AI: {data.get('response', 'Action proposed below.')}")
+                            if "actions" in data:
+                                execute_actions(data["actions"])
+                        else:
+                            print(f"🤖 AI: {response.text}")
+                    except:
+                        # Fallback to plain text if not JSON
+                        print(f"🤖 AI (Gemini): {response.text}")
             except Exception as e:
+
                 error_str = str(e).lower()
                 if "429" in error_str or "resource_exhausted" in error_str:
                     print("⚠️ AI: I've hit my API rate limit or daily quota. Please try again in a moment.")
+                elif "503" in error_str or "unavailable" in error_str:
+                    print("⚠️ AI: The Gemini service is currently overloaded (503 Service Unavailable). This is usually temporary. Please try again in a few seconds.")
                 elif "invalid_scope" in error_str:
+
                     print("⚠️ AI: I encountered an 'invalid_scope' error. This usually happens after a security update.")
                     print("💡 FIX: Please run 'rm token.json' and restart the chat to re-authenticate with Google.")
                 else:

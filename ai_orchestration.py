@@ -118,9 +118,11 @@ def generate_schedule(tasks, busy_slots, morning_mode=False):
         Return a JSON object with:
         - "schedule": Array of {{"task": str, "category": str, "start": ISO8601, "end": ISO8601}}
         - "suggestions": Array of {{"task": str, "suggested_category": str, "reason": str}} for uncategorized items.
+        - "actions": Array of {{"type": "create_folder"|"write_file", "path": str, "content": str (optional), "reason": str}}
         
         Do not include any other text. Just the JSON.
         """
+
 
         response = client.models.generate_content(
             model='gemini-flash-latest',

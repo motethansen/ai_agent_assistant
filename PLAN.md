@@ -85,6 +85,12 @@
 - [x] Support committing and pushing these user-defined agents into their own separate Git repositories, encouraging a modular and shareable agent ecosystem.
 - [x] Enable the main assistant backend to discover and load these external agents dynamically at runtime.
 
+### Phase 14: File System Agent & Action Capabilities
+- [x] Implement a specialized "File System Agent" that can safely perform I/O operations (create folders, move files, generate new .md notes).
+- [x] Update the CLI chat loop to support "Action Loops" where the AI can propose a file system change and wait for user confirmation.
+- [x] Add support for "Reminders-to-Obsidian" migration: Automatically create a new Obsidian note from stored local JSON reminders.
+- [x] Ensure all file operations are relative to the configured `WORKSPACE_DIR`.
+
 ## Summary of Planned Development
 The system will act as a bridge between your local knowledge base and your schedule. 
 1. **Watchdog** will monitor your markdown files for changes. 
