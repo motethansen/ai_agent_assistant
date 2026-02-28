@@ -385,291 +385,290 @@ def handle_chat_mode(obsidian_path):
                 if command == "exit" or command == "quit":
                     print("Goodbye!")
                     break
-            elif command == "commands" or command == "help":
-                print("\nAvailable Commands:")
-                print("  /sync     - Manually trigger task sync from Obsidian and Reminders")
-                print("  /pull     - Sync Calendar -> Markdown (Two-Way Sync)")
-                print("  /backlog  - Display the current unified backlog (grouped by category)")
-                print("  /stats    - Display focus analytics for today")
-                print("  /plan     - Trigger a morning planning session")
-                print("  /review   - Trigger an evening review session")
-                print("  /ui       - Launch the Streamlit web interface")
-                print("  /models   - Show current status of LLM models")
-                print("  /model    - Enable/disable models (e.g., /model disable gemini)")
-                print("  /gmail    - List snoozed and filtered emails from Gmail")
-                print("  /gmail-filter - Manage Gmail search filters (e.g., /gmail-filter add 'from:boss')")
-                print("  /docs     - Show project documentation")
-                print("  /create-agent - Scaffold a new custom agent")
-                print("  /list-agents  - Show available custom agents")
-                print("  /exit     - Quit the chat mode")
-            elif command == "sync":
-                print("Syncing reminders to local storage...")
-                subprocess.run(["python3", "debug_reminders.py"])
-                print("Manually triggering task sync...")
-                tasks = get_unified_tasks(obsidian_path)
-                calendar_id = get_config_value("CALENDAR_ID", "primary")
-                service = calendar_manager.get_calendar_service()
-                if not service:
-                    print("❌ Calendar service not available. Check credentials.")
-                    continue
-                busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
-                logseq_path = get_config_value("LOGSEQ_DIR", None)
-                schedule = ai_orchestration.generate_schedule(
-                    tasks, 
-                    busy_slots, 
-                    workspace_dir=obsidian_path, 
-                    logseq_dir=logseq_path
-                )
-                if schedule:
-                    calendar_manager.create_events(service, schedule, calendar_id=calendar_id)
-                    update_markdown_plan(obsidian_path, schedule)
-                    print("Sync complete.")
-                else:
-                    print("Failed to generate schedule.")
-            elif command == "pull":
-                sync_calendar_to_markdown(obsidian_path)
-            elif command == "stats":
-                print("\n📊 --- Today's Focus Stats ---")
-                service = calendar_manager.get_calendar_service()
-                calendar_id = get_config_value("CALENDAR_ID", "primary")
-                if service:
-                    managed = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
-                    if managed:
-                        cat_hours = {}
-                        total_mins = 0
-                        for m in managed:
-                            start = datetime.datetime.fromisoformat(m['start'].replace('Z', ''))
-                            end = datetime.datetime.fromisoformat(m['end'].replace('Z', ''))
-                            mins = (end - start).total_seconds() / 60
-                            total_mins += mins
-                            cat = m.get('category', 'General')
-                            cat_hours[cat] = cat_hours.get(cat, 0) + mins
-                        
-                        for cat, mins in cat_hours.items():
-                            print(f"  - {cat:20}: {mins/60:4.1f} hours")
-                        print(f"  TOTAL PLANNED FOCUS: {total_mins/60:4.1f} hours")
+                elif command == "commands" or command == "help":
+                    print("\nAvailable Commands:")
+                    print("  /sync     - Manually trigger task sync from Obsidian and Reminders")
+                    print("  /pull     - Sync Calendar -> Markdown (Two-Way Sync)")
+                    print("  /backlog  - Display the current unified backlog (grouped by category)")
+                    print("  /stats    - Display focus analytics for today")
+                    print("  /plan     - Trigger a morning planning session")
+                    print("  /review   - Trigger an evening review session")
+                    print("  /ui       - Launch the Streamlit web interface")
+                    print("  /models   - Show current status of LLM models")
+                    print("  /model    - Enable/disable models (e.g., /model disable gemini)")
+                    print("  /gmail    - List snoozed and filtered emails from Gmail")
+                    print("  /gmail-filter - Manage Gmail search filters (e.g., /gmail-filter add 'from:boss')")
+                    print("  /docs     - Show project documentation")
+                    print("  /create-agent - Scaffold a new custom agent")
+                    print("  /list-agents  - Show available custom agents")
+                    print("  /exit     - Quit the chat mode")
+                elif command == "sync":
+                    print("Syncing reminders to local storage...")
+                    subprocess.run(["python3", "debug_reminders.py"])
+                    print("Manually triggering task sync...")
+                    tasks = get_unified_tasks(obsidian_path)
+                    calendar_id = get_config_value("CALENDAR_ID", "primary")
+                    service = calendar_manager.get_calendar_service()
+                    if not service:
+                        print("❌ Calendar service not available. Check credentials.")
+                        continue
+                    busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
+                    logseq_path = get_config_value("LOGSEQ_DIR", None)
+                    schedule = ai_orchestration.generate_schedule(
+                        tasks, 
+                        busy_slots, 
+                        workspace_dir=obsidian_path, 
+                        logseq_dir=logseq_path
+                    )
+                    if schedule:
+                        calendar_manager.create_events(service, schedule, calendar_id=calendar_id)
+                        update_markdown_plan(obsidian_path, schedule)
+                        print("Sync complete.")
                     else:
-                        print("No AI-managed events found for today.")
-                else:
-                    print("Could not connect to Google Calendar.")
-            elif command == "backlog":
-                tasks = get_unified_tasks(obsidian_path)
-                print(f"\n--- Unified Backlog ({len(tasks)} tasks) ---")
-                # Group by category
-                cats = {}
-                for t in tasks:
-                    cat = t.get("category", "Uncategorized")
-                    if cat not in cats: cats[cat] = []
-                    cats[cat].append(t)
-                
-                for cat, task_list in cats.items():
-                    print(f"\n[{cat.upper()}]")
-                    for t in task_list:
-                        source_icon = "📝" if t['source'] == "Obsidian" else "🪵" if t['source'] == "Logseq" else "🍎"
-                        due = f" (Due: {t['due_date']})" if t.get('due_date') else ""
-                        print(f"  {source_icon} {t['task']}{due}")
-            elif command == "plan":
-                handle_morning_planning(obsidian_path)
-            elif command == "review":
-                handle_evening_review(obsidian_path)
-            elif command == "ui":
-                print("Launching Streamlit UI in the background...")
-                subprocess.Popen([".venv/bin/streamlit", "run", "app.py"])
-                print("Web interface is opening in your browser.")
-            elif command == "docs":
-                display_docs()
-            elif command == "models":
-                print(f"\nModel Activation Status:")
-                for m, enabled in ai_orchestration.MODELS_ENABLED.items():
-                    status = "✅ ENABLED" if enabled else "❌ DISABLED"
-                    print(f"  - {m:10}: {status}")
-            elif command == "model":
-                if len(parts) >= 3:
-                    action, target = parts[1].lower(), parts[2].lower()
-                    if target in ai_orchestration.MODELS_ENABLED:
-                        if action == "enable":
-                            ai_orchestration.MODELS_ENABLED[target] = True
-                            print(f"✅ Model '{target}' enabled.")
-                        elif action == "disable":
-                            ai_orchestration.MODELS_ENABLED[target] = False
-                            print(f"❌ Model '{target}' disabled.")
+                        print("Failed to generate schedule.")
+                elif command == "pull":
+                    sync_calendar_to_markdown(obsidian_path)
+                elif command == "stats":
+                    print("\n📊 --- Today's Focus Stats ---")
+                    service = calendar_manager.get_calendar_service()
+                    calendar_id = get_config_value("CALENDAR_ID", "primary")
+                    if service:
+                        managed = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
+                        if managed:
+                            cat_hours = {}
+                            total_mins = 0
+                            for m in managed:
+                                start = datetime.datetime.fromisoformat(m['start'].replace('Z', ''))
+                                end = datetime.datetime.fromisoformat(m['end'].replace('Z', ''))
+                                mins = (end - start).total_seconds() / 60
+                                total_mins += mins
+                                cat = m.get('category', 'General')
+                                cat_hours[cat] = cat_hours.get(cat, 0) + mins
+                            
+                            for cat, mins in cat_hours.items():
+                                print(f"  - {cat:20}: {mins/60:4.1f} hours")
+                            print(f"  TOTAL PLANNED FOCUS: {total_mins/60:4.1f} hours")
                         else:
-                            print(f"Unknown action: {action}. Use enable/disable.")
+                            print("No AI-managed events found for today.")
                     else:
-                        print(f"Unknown model: {target}. Available: {', '.join(ai_orchestration.MODELS_ENABLED.keys())}")
-                else:
-                    print("Usage: /model <enable/disable> <model_name>")
-            elif command == "create-agent":
-                if len(parts) >= 2:
-                    agent_name = parts[1].lower().replace("-", "_")
-                    agent_path = f"custom_agents/{agent_name}.py"
-                    if os.path.exists(agent_path):
-                        print(f"⚠️ Agent '{agent_name}' already exists.")
-                    else:
-                        with open(agent_path, "w") as f:
-                            f.write(f'\"\"\"\nAgent: {agent_name}\nCreated dynamically by AI Agent Assistant\n\"\"\"\n\ndef run(context):\n    \"\"\"Main entry point for the {agent_name} agent.\"\"\"\n    print(f"[{agent_name}] Running with context: {{len(context)}} tasks")\n    # Add your logic here\n    return f"Agent {agent_name} executed successfully."\n')
-                        print(f"✅ Agent '{agent_name}' scaffolded at {agent_path}.")
-                else:
-                    print("Usage: /create-agent <name>")
-            elif command == "push-agent":
-                if len(parts) >= 3:
-                    agent_name, repo_url = parts[1].lower(), parts[2]
-                    agent_dir = f"custom_agents/{agent_name}_repo"
-                    os.makedirs(agent_dir, exist_ok=True)
-                    # Move the file into its own repo folder
-                    os.rename(f"custom_agents/{agent_name}.py", f"{agent_dir}/agent.py")
-                    # Init git and push
-                    subprocess.run(["git", "init"], cwd=agent_dir)
-                    subprocess.run(["git", "add", "."], cwd=agent_dir)
-                    subprocess.run(["git", "commit", "-m", "Initial commit for custom agent"], cwd=agent_dir)
-                    subprocess.run(["git", "remote", "add", "origin", repo_url], cwd=agent_dir)
-                    print(f"🚀 Agent '{agent_name}' prepared for push to {repo_url}.")
-                    print(f"Run 'cd {agent_dir} && git push -u origin main' to complete.")
-                else:
-                    print("Usage: /push-agent <name> <repo_url>")
-            elif command == "list-agents":
-                agents = [f[:-3] for f in os.listdir("custom_agents") if f.endswith(".py") and f != "__init__.py"]
-                print(f"Available Agents: {', '.join(agents) if agents else 'None'}")
-            elif command == "gmail":
-                print("Checking Gmail for snoozed and filtered emails...")
-                service = gmail_agent.get_gmail_service()
-                if service:
-                    snoozed = gmail_agent.get_snoozed_emails(service)
-                    print(f"\n--- Snoozed Emails ({len(snoozed)}) ---")
-                    for e in snoozed:
-                        print(f"  💤 {e['subject']} (From: {e['from']})")
+                        print("Could not connect to Google Calendar.")
+                elif command == "backlog":
+                    tasks = get_unified_tasks(obsidian_path)
+                    print(f"\n--- Unified Backlog ({len(tasks)} tasks) ---")
+                    # Group by category
+                    cats = {}
+                    for t in tasks:
+                        cat = t.get("category", "Uncategorized")
+                        if cat not in cats: cats[cat] = []
+                        cats[cat].append(t)
                     
-                    filters = gmail_agent.load_filters()
-                    if filters:
-                        filtered = gmail_agent.get_filtered_emails(service, filters)
-                        print(f"\n--- Filtered Emails ({len(filtered)}) ---")
-                        for e in filtered:
-                            print(f"  🔍 [{e['filter']}] {e['subject']} (From: {e['from']})")
+                    for cat, task_list in cats.items():
+                        print(f"\n[{cat.upper()}]")
+                        for t in task_list:
+                            source_icon = "📝" if t['source'] == "Obsidian" else "🪵" if t['source'] == "Logseq" else "🍎"
+                            due = f" (Due: {t['due_date']})" if t.get('due_date') else ""
+                            print(f"  {source_icon} {t['task']}{due}")
+                elif command == "plan":
+                    handle_morning_planning(obsidian_path)
+                elif command == "review":
+                    handle_evening_review(obsidian_path)
+                elif command == "ui":
+                    print("Launching Streamlit UI in the background...")
+                    subprocess.Popen([".venv/bin/streamlit", "run", "app.py"])
+                    print("Web interface is opening in your browser.")
+                elif command == "docs":
+                    display_docs()
+                elif command == "models":
+                    print(f"\nModel Activation Status:")
+                    for m, enabled in ai_orchestration.MODELS_ENABLED.items():
+                        status = "✅ ENABLED" if enabled else "❌ DISABLED"
+                        print(f"  - {m:10}: {status}")
+                elif command == "model":
+                    if len(parts) >= 3:
+                        action, target = parts[1].lower(), parts[2].lower()
+                        if target in ai_orchestration.MODELS_ENABLED:
+                            if action == "enable":
+                                ai_orchestration.MODELS_ENABLED[target] = True
+                                print(f"✅ Model '{target}' enabled.")
+                            elif action == "disable":
+                                ai_orchestration.MODELS_ENABLED[target] = False
+                                print(f"❌ Model '{target}' disabled.")
+                            else:
+                                print(f"Unknown action: {action}. Use enable/disable.")
+                        else:
+                            print(f"Unknown model: {target}. Available: {', '.join(ai_orchestration.MODELS_ENABLED.keys())}")
                     else:
-                        print("\nNo filters set. Use /gmail-filter add <query> to add one.")
-                else:
-                    print("❌ Could not connect to Gmail. Check 'credentials.json' and 'token.json'.")
-            elif command == "gmail-filter":
-                if len(parts) >= 2:
-                    sub_cmd = parts[1].lower()
-                    if sub_cmd == "add" and len(parts) >= 3:
-                        query = " ".join(parts[2:])
-                        if gmail_agent.add_filter(query):
-                            print(f"✅ Filter added: '{query}'")
+                        print("Usage: /model <enable/disable> <model_name>")
+                elif command == "create-agent":
+                    if len(parts) >= 2:
+                        agent_name = parts[1].lower().replace("-", "_")
+                        agent_path = f"custom_agents/{agent_name}.py"
+                        if os.path.exists(agent_path):
+                            print(f"⚠️ Agent '{agent_name}' already exists.")
                         else:
-                            print(f"ℹ️ Filter already exists: '{query}'")
-                    elif sub_cmd == "remove" and len(parts) >= 3:
-                        query = " ".join(parts[2:])
-                        if gmail_agent.remove_filter(query):
-                            print(f"✅ Filter removed: '{query}'")
-                        else:
-                            print(f"❌ Filter not found: '{query}'")
-                    elif sub_cmd == "list":
+                            with open(agent_path, "w") as f:
+                                f.write(f'\"\"\"\nAgent: {agent_name}\nCreated dynamically by AI Agent Assistant\n\"\"\"\n\ndef run(context):\n    \"\"\"Main entry point for the {agent_name} agent.\"\"\"\n    print(f"[{agent_name}] Running with context: {{len(context)}} tasks")\n    # Add your logic here\n    return f"Agent {agent_name} executed successfully."\n')
+                            print(f"✅ Agent '{agent_name}' scaffolded at {agent_path}.")
+                    else:
+                        print("Usage: /create-agent <name>")
+                elif command == "push-agent":
+                    if len(parts) >= 3:
+                        agent_name, repo_url = parts[1].lower(), parts[2]
+                        agent_dir = f"custom_agents/{agent_name}_repo"
+                        os.makedirs(agent_dir, exist_ok=True)
+                        # Move the file into its own repo folder
+                        os.rename(f"custom_agents/{agent_name}.py", f"{agent_dir}/agent.py")
+                        # Init git and push
+                        subprocess.run(["git", "init"], cwd=agent_dir)
+                        subprocess.run(["git", "add", "."], cwd=agent_dir)
+                        subprocess.run(["git", "commit", "-m", "Initial commit for custom agent"], cwd=agent_dir)
+                        subprocess.run(["git", "remote", "add", "origin", repo_url], cwd=agent_dir)
+                        print(f"🚀 Agent '{agent_name}' prepared for push to {repo_url}.")
+                        print(f"Run 'cd {agent_dir} && git push -u origin main' to complete.")
+                    else:
+                        print("Usage: /push-agent <name> <repo_url>")
+                elif command == "list-agents":
+                    agents = [f[:-3] for f in os.listdir("custom_agents") if f.endswith(".py") and f != "__init__.py"]
+                    print(f"Available Agents: {', '.join(agents) if agents else 'None'}")
+                elif command == "gmail":
+                    print("Checking Gmail for snoozed and filtered emails...")
+                    service = gmail_agent.get_gmail_service()
+                    if service:
+                        snoozed = gmail_agent.get_snoozed_emails(service)
+                        print(f"\n--- Snoozed Emails ({len(snoozed)}) ---")
+                        for e in snoozed:
+                            print(f"  💤 {e['subject']} (From: {e['from']})")
+                        
                         filters = gmail_agent.load_filters()
-                        print("\n--- Gmail Search Filters ---")
-                        for i, f in enumerate(filters, 1):
-                            print(f"  {i}. {f}")
+                        if filters:
+                            filtered = gmail_agent.get_filtered_emails(service, filters)
+                            print(f"\n--- Filtered Emails ({len(filtered)}) ---")
+                            for e in filtered:
+                                print(f"  🔍 [{e['filter']}] {e['subject']} (From: {e['from']})")
+                        else:
+                            print("\nNo filters set. Use /gmail-filter add <query> to add one.")
+                    else:
+                        print("❌ Could not connect to Gmail. Check 'credentials.json' and 'token.json'.")
+                elif command == "gmail-filter":
+                    if len(parts) >= 2:
+                        sub_cmd = parts[1].lower()
+                        if sub_cmd == "add" and len(parts) >= 3:
+                            query = " ".join(parts[2:])
+                            if gmail_agent.add_filter(query):
+                                print(f"✅ Filter added: '{query}'")
+                            else:
+                                print(f"ℹ️ Filter already exists: '{query}'")
+                        elif sub_cmd == "remove" and len(parts) >= 3:
+                            query = " ".join(parts[2:])
+                            if gmail_agent.remove_filter(query):
+                                print(f"✅ Filter removed: '{query}'")
+                            else:
+                                print(f"❌ Filter not found: '{query}'")
+                        elif sub_cmd == "list":
+                            filters = gmail_agent.load_filters()
+                            print("\n--- Gmail Search Filters ---")
+                            for i, f in enumerate(filters, 1):
+                                print(f"  {i}. {f}")
+                        else:
+                            print("Usage: /gmail-filter <add/remove/list> [query]")
                     else:
                         print("Usage: /gmail-filter <add/remove/list> [query]")
                 else:
-                    print("Usage: /gmail-filter <add/remove/list> [query]")
+                    print(f"Unknown command: /{command}. Type /commands for help.")
+
             else:
-                print(f"Unknown command: /{command}. Type /commands for help.")
-
-        else:
-            # AI Chat integration
-            print("AI is thinking...")
-            try:
-                # Get context
-                tasks = get_unified_tasks(obsidian_path)
-                calendar_id = get_config_value("CALENDAR_ID", "primary")
-                service = calendar_manager.get_calendar_service()
-                
-                # Check if we failed at service level (e.g. invalid scope)
-                if not service:
-                    print("⚠️ AI: I cannot access your calendar. Please check 'token.json' and 'credentials.json'.")
-                    continue
-
-                busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
-                
-                # Get Gmail context
-                gmail_service = gmail_agent.get_gmail_service()
-                snoozed_emails = []
-                filtered_emails = []
-                if gmail_service:
-                    snoozed_emails = gmail_agent.get_snoozed_emails(gmail_service)
-                    filters = gmail_agent.load_filters()
-                    if filters:
-                        filtered_emails = gmail_agent.get_filtered_emails(gmail_service, filters)
-
-                context_payload = {
-                    "backlog": tasks,
-                    "calendar_busy_slots": busy_slots,
-                    "gmail_snoozed": snoozed_emails,
-                    "gmail_filtered": filtered_emails,
-                    "current_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                }
-                
-                prompt = f"User Question: '{user_input}'. Context: {json.dumps(context_payload)}. Provide a helpful answer."
-                
-                # Determine model to use
-                model_to_use = ai_orchestration.get_routing("chat")
-                
-                if model_to_use == "ollama":
-                    print(" (Routing to local Ollama...)")
-                    response_text = ai_orchestration.ollama_generate(prompt)
-                    print(f"🤖 AI (Ollama): {response_text}")
-                else:
-                    client = ai_orchestration.genai.Client(api_key=ai_orchestration.api_key)
-                    response = client.models.generate_content(
-                        model='gemini-flash-latest',
-                        contents=prompt
-                    )
+                # AI Chat integration
+                print("AI is thinking...")
+                try:
+                    # Get context
+                    tasks = get_unified_tasks(obsidian_path)
+                    calendar_id = get_config_value("CALENDAR_ID", "primary")
+                    service = calendar_manager.get_calendar_service()
                     
-                    # Try to parse actions if the AI returned JSON
-                    try:
-                        text_content = response.text.strip()
+                    # Check if we failed at service level (e.g. invalid scope)
+                    if not service:
+                        print("⚠️ AI: I cannot access your calendar. Please check 'token.json' and 'credentials.json'.")
+                        continue
+
+                    busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
+                    
+                    # Get Gmail context
+                    gmail_service = gmail_agent.get_gmail_service()
+                    snoozed_emails = []
+                    filtered_emails = []
+                    if gmail_service:
+                        snoozed_emails = gmail_agent.get_snoozed_emails(gmail_service)
+                        filters = gmail_agent.load_filters()
+                        if filters:
+                            filtered_emails = gmail_agent.get_filtered_emails(gmail_service, filters)
+
+                    context_payload = {
+                        "backlog": tasks,
+                        "calendar_busy_slots": busy_slots,
+                        "gmail_snoozed": snoozed_emails,
+                        "gmail_filtered": filtered_emails,
+                        "current_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    }
+                    
+                    prompt = f"User Question: '{user_input}'. Context: {json.dumps(context_payload)}. Provide a helpful answer."
+                    
+                    # Determine model to use
+                    model_to_use = ai_orchestration.get_routing("chat")
+                    
+                    if model_to_use == "ollama":
+                        print(" (Routing to local Ollama...)")
+                        response_text = ai_orchestration.ollama_generate(prompt)
+                        print(f"🤖 AI (Ollama): {response_text}")
+                    else:
+                        client = ai_orchestration.genai.Client(api_key=ai_orchestration.api_key)
+                        response = client.models.generate_content(
+                            model='gemini-flash-latest',
+                            contents=prompt
+                        )
                         
-                        # Find the first { and last } to extract JSON from conversational text
-                        start_idx = text_content.find('{')
-                        end_idx = text_content.rfind('}')
-                        
-                        if start_idx != -1 and end_idx != -1:
-                            json_str = text_content[start_idx:end_idx+1]
-                            data = json.loads(json_str)
+                        # Try to parse actions if the AI returned JSON
+                        try:
+                            text_content = response.text.strip()
                             
-                            if isinstance(data, dict):
-                                if "response" in data:
-                                    print(f"🤖 AI: {data['response']}")
-                                if "actions" in data:
-                                    execute_actions(data["actions"])
-                                continue # Successfully handled JSON
-                        
-                        # Fallback if no JSON found or parsing failed
-                        print(f"🤖 AI: {response.text}")
-                    except Exception as e:
-                        # Fallback to plain text if not JSON
-                        print(f"🤖 AI (Gemini): {response.text}")
+                            # Find the first { and last } to extract JSON from conversational text
+                            start_idx = text_content.find('{')
+                            end_idx = text_content.rfind('}')
+                            
+                            if start_idx != -1 and end_idx != -1:
+                                json_str = text_content[start_idx:end_idx+1]
+                                data = json.loads(json_str)
+                                
+                                if isinstance(data, dict):
+                                    if "response" in data:
+                                        print(f"🤖 AI: {data['response']}")
+                                    if "actions" in data:
+                                        execute_actions(data["actions"])
+                                    continue # Successfully handled JSON
+                            
+                            # Fallback if no JSON found or parsing failed
+                            print(f"🤖 AI: {response.text}")
+                        except Exception as e:
+                            # Fallback to plain text if not JSON
+                            print(f"🤖 AI (Gemini): {response.text}")
 
-            except Exception as e:
-
-                error_str = str(e).lower()
-                if "429" in error_str or "resource_exhausted" in error_str:
-                    print("⚠️ AI: I've hit my API rate limit or daily quota. Please try again in a moment.")
-                elif "503" in error_str or "unavailable" in error_str:
-                    print("⚠️ AI: The Gemini service is currently overloaded (503 Service Unavailable). This is usually temporary. Please try again in a few seconds.")
-                elif "invalid_scope" in error_str:
-
-                    print("⚠️ AI: I encountered an 'invalid_scope' error. This usually happens after a security update.")
-                    print("💡 FIX: Please run 'rm token.json' and restart the chat to re-authenticate with Google.")
-                else:
-                    print(f"⚠️ AI: I encountered an error: {e}")
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if "429" in error_str or "resource_exhausted" in error_str:
+                        print("⚠️ AI: I've hit my API rate limit or daily quota. Please try again in a moment.")
+                    elif "503" in error_str or "unavailable" in error_str:
+                        print("⚠️ AI: The Gemini service is currently overloaded (503 Service Unavailable). This is usually temporary. Please try again in a few seconds.")
+                    elif "invalid_scope" in error_str:
+                        print("⚠️ AI: I encountered an 'invalid_scope' error. This usually happens after a security update.")
+                        print("💡 FIX: Please run 'rm token.json' and restart the chat to re-authenticate with Google.")
+                    else:
+                        print(f"⚠️ AI: I encountered an error: {e}")
         except KeyboardInterrupt:
             print("\nGoodbye!")
             break
         except Exception as e:
             print(f"❌ An unexpected error occurred: {e}")
             traceback.print_exc()
+
 
 
 
