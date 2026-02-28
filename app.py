@@ -65,6 +65,19 @@ with st.sidebar:
     st.caption(f"LogSeq Source: {logseq_dir}")
     
     st.divider()
+    st.subheader("⚡ Productivity Profile")
+    chronotype = get_config_value("CHRONOTYPE", "balanced")
+    dw_start = get_config_value("DEEP_WORK_START", "09:00")
+    dw_end = get_config_value("DEEP_WORK_END", "12:00")
+    
+    st.write(f"Chronotype: **{chronotype.replace('_', ' ').title()}**")
+    st.write(f"Deep Work Window: **{dw_start} - {dw_end}**")
+    
+    with st.expander("📝 Edit Preferences"):
+        st.info("Edit your .config file or install settings to change these.")
+        st.caption("Focus Categories: " + get_config_value("FOCUS_CATEGORIES", "None"))
+
+    st.divider()
     if st.button("🔄 Pull from Calendar (Reverse Sync)"):
         with st.spinner("Reconciling Calendar -> Markdown..."):
             sync_calendar_to_markdown(obsidian_file)

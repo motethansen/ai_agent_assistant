@@ -114,14 +114,28 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
         client = genai.Client(api_key=api_key)
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         
+        # --- User Preference Integration ---
+        # Fetch preferences from .config (helper imports or local)
+        from main import get_config_value
+        chronotype = get_config_value("CHRONOTYPE", "balanced")
+        dw_start = get_config_value("DEEP_WORK_START", "09:00")
+        dw_end = get_config_value("DEEP_WORK_END", "12:00")
+        focus_cats = get_config_value("FOCUS_CATEGORIES", "")
+
         mode_instruction = ""
         if morning_mode:
-            mode_instruction = "This is a MORNING PLANNING session. Suggest which tasks from the backlog should be done today based on their due dates and categories."
+            mode_instruction = f"This is a MORNING PLANNING session. Suggest which tasks from the backlog should be done today based on their due dates and categories. Chronotype: {chronotype}. Deep Work Window: {dw_start}-{dw_end}."
         
         prompt = f"""
         You are a professional personal assistant and scheduler with FILE SYSTEM ACCESS.
         Current Date/Time: {current_time}
         {mode_instruction}
+
+        USER PRODUCTIVITY PROFILE:
+        - Chronotype: {chronotype}
+        - Deep Work Window (High-Focus tasks only): {dw_start} to {dw_end}
+        - Focus Categories (Require Deep Work): {focus_cats}
+        - Task Logic: Schedule Focus Categories during the Deep Work Window. Schedule administrative/low-energy tasks outside this window or during the afternoon.
 
         TASKS BACKLOG:
         {json.dumps(tasks, indent=2)}
@@ -133,7 +147,7 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
         {rag_context}
         
         CAPABILITIES:
-        1. SCHEDULING: Fit tasks into free slots.
+        1. SCHEDULING: Fit tasks into free slots according to the Productivity Profile.
         2. FILE SYSTEM: You have DIRECT access to create folders and files in the user's Obsidian vault.
         
         GOAL:

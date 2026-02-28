@@ -149,11 +149,18 @@ if [ ! -f ".config" ]; then
     read -p "Enter your Google Calendar ID (default: primary): " calendar_id
     read -p "Enter your Obsidian Workspace Path: " workspace_dir
     read -p "Enter your LogSeq Graph Path: " logseq_dir
+    echo "--- Productivity Settings ---"
+    read -p "Enter your Chronotype (morning_owl/night_owl/balanced): " chronotype
+    read -p "Enter your Deep Work Start (e.g., 09:00): " dw_start
+    read -p "Enter your Deep Work End (e.g., 12:00): " dw_end
 
     gemini_key=${gemini_key:-"your_gemini_api_key_here"}
     calendar_id=${calendar_id:-"primary"}
     workspace_dir=${workspace_dir:-"/path/to/your/markdown/notes"}
     logseq_dir=${logseq_dir:-"/path/to/your/logseq/graph"}
+    chronotype=${chronotype:-"morning_owl"}
+    dw_start=${dw_start:-"09:00"}
+    dw_end=${dw_end:-"12:00"}
 
     update_config() {
         sed "s|$1=.*|$1=$2|" .config > .config.tmp && mv .config.tmp .config
@@ -163,6 +170,9 @@ if [ ! -f ".config" ]; then
     update_config "CALENDAR_ID" "$calendar_id"
     update_config "WORKSPACE_DIR" "$workspace_dir"
     update_config "LOGSEQ_DIR" "$logseq_dir"
+    update_config "CHRONOTYPE" "$chronotype"
+    update_config "DEEP_WORK_START" "$dw_start"
+    update_config "DEEP_WORK_END" "$dw_end"
 fi
 
 # 5. Background Sync Option

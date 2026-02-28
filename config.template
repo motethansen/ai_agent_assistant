@@ -38,3 +38,12 @@ WORKSPACE_DIR=/path/to/your/markdown/notes
 LOGSEQ_DIR=/path/to/your/logseq/graph
 
 DEBOUNCE_SECONDS=5
+
+# User Productivity Preferences
+# CHRONOTYPE: morning_owl, night_owl, or balanced
+CHRONOTYPE=morning_owl
+# DEEP_WORK_START/END: Preferred time window for high-focus tasks (e.g., 09:00, 17:00)
+DEEP_WORK_START=09:00
+DEEP_WORK_END=12:00
+# FOCUS_CATEGORIES: Comma-separated list of categories that require deep work
+FOCUS_CATEGORIES=winedragons,writing academic papers,dev,learning Thai
