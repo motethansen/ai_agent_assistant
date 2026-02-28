@@ -58,6 +58,9 @@ def update_markdown_plan(file_path, schedule):
         return
 
     try:
+        # Sort schedule by start time
+        schedule = sorted(schedule, key=lambda x: x['start'])
+
         with open(file_path, 'r') as f:
             content = f.read()
 
@@ -72,12 +75,31 @@ def update_markdown_plan(file_path, schedule):
         pattern = r"## Today's Plan.*?(?=\n##|$)"
         new_content = re.sub(pattern, plan_text, content, flags=re.DOTALL)
 
-        
         with open(file_path, 'w') as f:
             f.write(new_content)
         print(f"Updated {os.path.basename(file_path)} with Today's Plan.")
     except Exception as e:
         print(f"Error updating markdown file: {e}")
+
+def sync_calendar_to_markdown(obsidian_path):
+    """
+    Pulls 'AI: ' events from Google Calendar and updates the markdown file.
+    (Two-Way Sync: Calendar -> Markdown)
+    """
+    print(f"🔄 Pulling latest AI events from Google Calendar to {os.path.basename(obsidian_path)}...")
+    
+    calendar_id = get_config_value("CALENDAR_ID", "primary")
+    service = calendar_manager.get_calendar_service()
+    if not service:
+        print("❌ Could not connect to Google Calendar.")
+        return
+
+    managed_events = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
+    if managed_events:
+        update_markdown_plan(obsidian_path, managed_events)
+        print(f"✅ Successfully synced {len(managed_events)} events from Calendar to Markdown.")
+    else:
+        print("ℹ️ No AI-managed events found in today's calendar.")
 
 class TaskSyncHandler(PatternMatchingEventHandler):
     patterns = ["*.md"]
@@ -263,6 +285,7 @@ def handle_chat_mode(obsidian_path):
             elif command == "commands" or command == "help":
                 print("\nAvailable Commands:")
                 print("  /sync     - Manually trigger task sync from Obsidian and Reminders")
+                print("  /pull     - Sync Calendar -> Markdown (Two-Way Sync)")
                 print("  /backlog  - Display the current unified backlog")
                 print("  /plan     - Trigger a morning planning session")
                 print("  /review   - Trigger an evening review session")
@@ -291,6 +314,8 @@ def handle_chat_mode(obsidian_path):
                     print("Sync complete.")
                 else:
                     print("Failed to generate schedule.")
+            elif command == "pull":
+                sync_calendar_to_markdown(obsidian_path)
             elif command == "reminders-sync":
                 print("Extracting reminders from Apple Reminders app...")
                 subprocess.run(["python3", "debug_reminders.py"])

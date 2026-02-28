@@ -82,6 +82,41 @@ def get_busy_slots(service, calendar_id='primary', date_str=None):
     
     return busy_slots
 
+def get_managed_events(service, calendar_id='primary', date_str=None):
+    """
+    Fetches events for the specified date and returns only those prefixed with 'AI: '.
+    """
+    if not service:
+        return []
+
+    if date_str:
+        day = datetime.datetime.strptime(date_str, '%Y-%m-%d')
+    else:
+        day = datetime.datetime.now()
+
+    start_of_day = day.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z'
+    end_of_day = day.replace(hour=23, minute=59, second=59, microsecond=0).isoformat() + 'Z'
+
+    events_result = service.events().list(calendarId=calendar_id, timeMin=start_of_day,
+                                        timeMax=end_of_day, singleEvents=True,
+                                        orderBy='startTime').execute()
+    events = events_result.get('items', [])
+
+    managed_events = []
+    for event in events:
+        summary = event.get('summary', '')
+        if summary.startswith("AI: "):
+            start = event['start'].get('dateTime', event['start'].get('date'))
+            end = event['end'].get('dateTime', event['end'].get('date'))
+            if 'T' in start:
+                managed_events.append({
+                    'task': summary.replace("AI: ", "").strip(),
+                    'start': start,
+                    'end': end
+                })
+    
+    return managed_events
+
 def create_events(service, schedule, calendar_id='primary'):
     """
     Creates calendar events from a list of scheduled tasks.
