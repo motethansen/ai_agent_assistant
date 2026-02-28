@@ -53,10 +53,13 @@ Update your `.config` file with your specific paths and keys:
 - **`CALENDAR_ID`**: Your Google Calendar ID (usually `primary`).
 - **`GEMINI_API_KEY`**: Your Google Gemini API key.
 
-### 3. Run the Assistant
-- **Passive Sync:** `python main.py` (Watches for file changes)
-- **Interactive Chat:** `python main.py --chat`
-- **Web Dashboard:** `make run-ui`
+### 3. Run the Assistant (Seamlessly)
+You can run the assistant using the `./assistant` wrapper script or `make` commands. Both will automatically use the virtual environment for you.
+
+- **Background Observer:** `./assistant` (or `make run`)
+- **Interactive Chat:** `./assistant --chat` (or `make run-chat`)
+- **Web Dashboard:** `./assistant --ui` (or `make run-ui`)
+- **Manual Sync:** `./assistant --sync`
 
 ## 🧪 Testing & Docs
 - **Run Tests:** `make test`

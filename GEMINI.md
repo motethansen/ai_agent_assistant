@@ -11,13 +11,14 @@ This project is an automated "AI Assistant" that synchronizes tasks from local M
 - **Regex (re)**: For parsing and updating specific headers within Markdown files.
 
 ## Architecture
-1. **Observer Layer (`observer.py` & `main.py`)**: Listens for modifications to `.md` files in the directory.
-2. **Parser**: Extracts tasks from a `## Tasks` section in the modified file.
+1. **Observer Layer (`observer.py` & `main.py`)**: Listens for modifications to `.md` files in Obsidian vaults and LogSeq journals.
+2. **Parser (`observer.py`)**: Extracts tasks from a `## Tasks` section (Obsidian) or from LogSeq's block-based `TODO/LATER` structure.
 3. **Calendar Manager (`calendar_manager.py`)**: Fetches existing appointments for the day to identify "Busy" blocks.
-4. **AI Orchestrator (`ai_orchestration.py`)**: Sends tasks and busy slots to Gemini with a prompt to generate an optimized JSON schedule.
-5. **Sync Engine**: 
+4. **AI Orchestrator (`ai_orchestration.py`)**: Sends tasks and busy slots to Gemini (or local Ollama) with a prompt to generate an optimized JSON schedule.
+5. **Sync Engine (`main.py` & `cron_job.py`)**: 
     - Pushes scheduled tasks to Google Calendar.
-    - Updates the Markdown file's `## Today's Plan` section with the final schedule.
+    - Updates the Markdown file's `## Today's Plan` section.
+    - Can run as a persistent observer or a periodic cron job.
 
 ## Building and Running
 
@@ -25,16 +26,17 @@ This project is an automated "AI Assistant" that synchronizes tasks from local M
 - Python 3.10+
 - Google Cloud Project with Calendar API enabled.
 - `credentials.json` (OAuth Client ID) in the root directory.
-- `GEMINI_API_KEY` in a `.env` file.
 
-### Setup Commands
+### Setup & Management
 ```bash
-# Create and activate virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+# Unified installation script (macOS/Linux)
+./install.sh
 
-# Install dependencies
-pip install -r requirements.txt
+# Setup automated hourly sync (cron)
+./install.sh cron
+
+# Upgrade to latest code and dependencies
+./install.sh upgrade
 ```
 
 ### Running the Project

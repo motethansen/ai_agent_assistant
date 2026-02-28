@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# Seamless wrapper for AI Agent Assistant
+# This script executes commands within the virtual environment automatically.
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+VENV_STREAMLIT="$SCRIPT_DIR/.venv/bin/streamlit"
+
+if [ ! -f "$VENV_PYTHON" ]; then
+    echo "Error: Virtual environment not found. Please run ./install.sh first."
+    exit 1
+fi
+
+case "$1" in
+    --ui)
+        shift
+        $VENV_STREAMLIT run "$SCRIPT_DIR/app.py" "$@"
+        ;;
+    --chat)
+        shift
+        $VENV_PYTHON "$SCRIPT_DIR/main.py" --chat "$@"
+        ;;
+    --sync)
+        shift
+        $VENV_PYTHON "$SCRIPT_DIR/cron_job.py" "$@"
+        ;;
+    *)
+        $VENV_PYTHON "$SCRIPT_DIR/main.py" "$@"
+        ;;
+esac

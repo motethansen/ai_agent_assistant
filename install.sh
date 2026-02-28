@@ -58,7 +58,7 @@ setup_cron() {
     CRON_LINE="0 * * * * cd $(pwd) && $VENV_PYTHON $CRON_SCRIPT >> $LOG_FILE 2>&1"
     
     # Check if the cron job already exists
-    if crontab -l | grep -q "$CRON_SCRIPT"; then
+    if crontab -l 2>/dev/null | grep -q "$CRON_SCRIPT"; then
         echo "Cron job already exists. Updating..."
         (crontab -l | grep -v "$CRON_SCRIPT"; echo "$CRON_LINE") | crontab -
     else
@@ -73,6 +73,14 @@ COMMAND=$1
 
 check_env
 
+# If already installed and no command provided, ask if user wants to upgrade
+if [ -z "$COMMAND" ] && [ -d ".venv" ] && [ -f ".config" ]; then
+    read -p "Existing installation detected. Would you like to check for updates? (y/n): " want_upgrade
+    if [[ "$want_upgrade" == "y"* ]]; then
+        upgrade_solution
+    fi
+fi
+
 if [ "$COMMAND" == "upgrade" ]; then
     upgrade_solution
     exit 0
@@ -83,9 +91,9 @@ if [ "$COMMAND" == "cron" ]; then
     exit 0
 fi
 
-# Standard Installation
+# Standard Installation flow (if not already handled)
 
-# 1. Install Ollama if not present
+# 1. Install/Check Ollama
 echo "Checking for Ollama..."
 if ! command -v ollama &> /dev/null; then
     echo "Ollama is not installed. Installing Ollama..."
@@ -103,22 +111,25 @@ else
     echo "Ollama is already installed."
 fi
 
-# 2. Create a virtual environment if it doesn't exist
+# Ensure default model is present if Ollama is running
+if command -v ollama &> /dev/null; then
+    echo "Ensuring Ollama model 'llama3' is available..."
+    # We use '|| true' because ollama might not be running yet, which is fine for now
+    ollama pull llama3 || echo "Note: Could not pull llama3 automatically. Make sure Ollama app is running."
+fi
+
+# 2. Virtual environment setup
 if [ ! -d ".venv" ]; then
     echo "Creating virtual environment..."
     python3 -m venv .venv
-else
-    echo "Virtual environment already exists."
 fi
 
-# 3. Activate the virtual environment
+# 3. Activate and Install Dependencies
 source .venv/bin/activate
 pip install --upgrade pip
 
-# 4. Install Python dependencies
 if [ -f "requirements.txt" ]; then
-    echo "Installing Python dependencies from requirements.txt..."
-    # On Linux, skip pyobjc-framework-EventKit (it's macOS only)
+    echo "Installing Python dependencies..."
     if [ "$OS_TYPE" == "Linux" ]; then
         grep -v "pyobjc" requirements.txt > requirements_linux.txt
         pip install -r requirements_linux.txt
@@ -126,53 +137,42 @@ if [ -f "requirements.txt" ]; then
     else
         pip install -r requirements.txt
     fi
-else
-    echo "Warning: requirements.txt not found. Skipping dependency installation."
 fi
 
-# 5. Generate the .config file and ask user for configuration
+# 4. Configuration
 if [ ! -f ".config" ]; then
     echo "Generating .config file from template..."
     cp config.template .config
     
     echo "--- System Configuration ---"
-    echo "Please provide your settings. Press ENTER to skip and use defaults/placeholders."
-
     read -p "Enter your Google Gemini API Key: " gemini_key
     read -p "Enter your Google Calendar ID (default: primary): " calendar_id
-    read -p "Enter your Obsidian/Workspace Path: " workspace_dir
+    read -p "Enter your Obsidian Workspace Path: " workspace_dir
     read -p "Enter your LogSeq Graph Path: " logseq_dir
 
-    # Default fallbacks
     gemini_key=${gemini_key:-"your_gemini_api_key_here"}
     calendar_id=${calendar_id:-"primary"}
     workspace_dir=${workspace_dir:-"/path/to/your/markdown/notes"}
     logseq_dir=${logseq_dir:-"/path/to/your/logseq/graph"}
 
-    # Update the .config file using a portable approach for sed
     update_config() {
-        KEY=$1
-        VALUE=$2
-        # Use a temporary file to be safe across different sed versions
-        sed "s|$KEY=.*|$KEY=$VALUE|" .config > .config.tmp && mv .config.tmp .config
+        sed "s|$1=.*|$1=$2|" .config > .config.tmp && mv .config.tmp .config
     }
 
     update_config "GEMINI_API_KEY" "$gemini_key"
     update_config "CALENDAR_ID" "$calendar_id"
     update_config "WORKSPACE_DIR" "$workspace_dir"
     update_config "LOGSEQ_DIR" "$logseq_dir"
-    
-    echo "SUCCESS: .config file created and updated."
-else
-    echo ".config file already exists. Use .config to modify your settings."
 fi
 
-# 6. Reminder for Google Calendar credentials
-if [ ! -f "credentials.json" ]; then
-    echo "⚠️  REMINDER: You still need to place your 'credentials.json' from Google Cloud in the root directory."
+# 5. Background Sync Option
+if ! crontab -l 2>/dev/null | grep -q "cron_job.py"; then
+    read -p "Would you like to enable automated hourly background sync (cron)? (y/n): " enable_cron
+    if [[ "$enable_cron" == "y"* ]]; then
+        setup_cron
+    fi
 fi
 
 echo "--- Installation Complete ---"
-echo "To start the assistant, run: source .venv/bin/activate && python3 main.py"
-echo "To setup a regular background sync, run: ./install.sh cron"
-echo "To upgrade in the future, run: ./install.sh upgrade"
+echo "To start the assistant: source .venv/bin/activate && python3 main.py"
+echo "To upgrade in the future: ./install.sh upgrade"

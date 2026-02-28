@@ -1,11 +1,26 @@
 # Makefile for AI Agent Assistant
 
-.PHONY: install test test-report clean docs
+.PHONY: install test test-report clean docs run run-chat run-ui cron upgrade
 
 # Installation and setup
 install:
 	@chmod +x install.sh
 	@./install.sh
+
+# Background observer (Main loop)
+run:
+	@echo "Starting AI Agent Assistant background observer..."
+	@.venv/bin/python3 main.py
+
+# Interactive chat mode
+run-chat:
+	@echo "Starting AI Agent Assistant interactive chat..."
+	@.venv/bin/python3 main.py --chat
+
+# Launch the Streamlit UI
+run-ui:
+	@echo "Launching AI Agent Assistant UI..."
+	@.venv/bin/streamlit run app.py
 
 # Run all tests using pytest
 test:
@@ -26,10 +41,11 @@ clean:
 
 # Display CLI-based documentation
 docs:
-	@.venv/bin/python main.py --docs
+	@.venv/bin/python3 main.py --docs
 
-# Launch the Streamlit UI
-run-ui:
-	@echo "Launching AI Agent Assistant UI..."
-	@.venv/bin/streamlit run app.py
+# Other management commands
+cron:
+	@./install.sh cron
 
+upgrade:
+	@./install.sh upgrade

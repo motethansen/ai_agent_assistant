@@ -28,18 +28,20 @@
 ### Phase 5: Sync & Write-Back Loop
 - [x] Update Google Calendar with the AI-generated schedule.
 - [x] Write the finalized schedule back to the markdown file under a `## Today's Plan` header.
-- [ ] (Optional) Set up background services (`launchd` for macOS).
+- [x] Set up background services (Cron job integration).
 
 ### Phase 6: OpenClaw and Ollama Integration
-- [ ] Add OpenClaw and Ollama modules to the system.
-- [ ] Update `install.sh` to install Ollama and OpenClaw locally.
-- [ ] Add logic to check for successful installation of the modules.
+- [x] Add OpenClaw and Ollama modules to the system.
+- [x] Update `install.sh` to install Ollama and OpenClaw locally.
+- [x] Add logic to check for successful installation of the modules (including `ollama pull`).
 
 ### Phase 7: Obsidian & Apple Reminders Retrieval
 - [x] Implement an agent to parse Obsidian for tasks and check their associated dates.
 - [x] Create a script/module to retrieve tasks from Apple Reminders.
 - [x] Add configuration support in `.config` to specify which Apple Reminders list to retrieve tasks from.
 - [x] Ensure Reminders act as cross-category activities.
+- [x] Implement LogSeq task scanning (Journals and Pages).
+- [x] Support Linux (Ubuntu) environment.
 
 ### Phase 8: Daily Backlog & AI Assistant Workflow
 - [x] Create an agent to process tasks from Obsidian and Apple Reminders into a unified backlog.
@@ -48,6 +50,8 @@
 - [x] Maintain a category-specific backlog with categories.
 - [x] Implement logic for the AI to detect new uncategorized tasks from Obsidian and ask/suggest new categories.
 - [x] Automatically schedule or track daily exercise and rest.
+- [x] Support seamless launching through wrapper script and Makefile.
+- [x] Support automated upgrades through install script.
 
 ### Phase 9: Automated Testing & Reporting
 - [x] Create a `tests/` directory with unit and integration tests (using `pytest`).
