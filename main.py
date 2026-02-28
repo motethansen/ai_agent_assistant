@@ -3,6 +3,7 @@ import os
 import re
 import datetime
 import json
+import traceback
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 import calendar_manager
@@ -367,19 +368,23 @@ def handle_chat_mode(obsidian_path):
     print("Type /commands to see available slash commands or type your question.")
     
     while True:
-        user_input = input("\n👤 You: ").strip()
-        
-        if not user_input:
-            continue
+        try:
+            user_input = input("\n👤 You: ").strip()
             
-        if user_input.startswith("/"):
-            command_full = user_input[1:].lower()
-            parts = command_full.split()
-            command = parts[0]
-            
-            if command == "exit" or command == "quit":
-                print("Goodbye!")
-                break
+            if not user_input:
+                continue
+                
+            if user_input.startswith("/"):
+                command_full = user_input[1:].lower().strip()
+                parts = command_full.split()
+                if not parts:
+                    print("⚠️ Invalid command. Type /commands for help.")
+                    continue
+                command = parts[0]
+                
+                if command == "exit" or command == "quit":
+                    print("Goodbye!")
+                    break
             elif command == "commands" or command == "help":
                 print("\nAvailable Commands:")
                 print("  /sync     - Manually trigger task sync from Obsidian and Reminders")
@@ -494,7 +499,7 @@ def handle_chat_mode(obsidian_path):
                         print(f"Unknown model: {target}. Available: {', '.join(ai_orchestration.MODELS_ENABLED.keys())}")
                 else:
                     print("Usage: /model <enable/disable> <model_name>")
-            elif command.startswith("create-agent"):
+            elif command == "create-agent":
                 if len(parts) >= 2:
                     agent_name = parts[1].lower().replace("-", "_")
                     agent_path = f"custom_agents/{agent_name}.py"
@@ -506,7 +511,7 @@ def handle_chat_mode(obsidian_path):
                         print(f"✅ Agent '{agent_name}' scaffolded at {agent_path}.")
                 else:
                     print("Usage: /create-agent <name>")
-            elif command.startswith("push-agent"):
+            elif command == "push-agent":
                 if len(parts) >= 3:
                     agent_name, repo_url = parts[1].lower(), parts[2]
                     agent_dir = f"custom_agents/{agent_name}_repo"
@@ -638,7 +643,7 @@ def handle_chat_mode(obsidian_path):
                                     print(f"🤖 AI: {data['response']}")
                                 if "actions" in data:
                                     execute_actions(data["actions"])
-                                return # Successfully handled JSON
+                                continue # Successfully handled JSON
                         
                         # Fallback if no JSON found or parsing failed
                         print(f"🤖 AI: {response.text}")
@@ -659,6 +664,12 @@ def handle_chat_mode(obsidian_path):
                     print("💡 FIX: Please run 'rm token.json' and restart the chat to re-authenticate with Google.")
                 else:
                     print(f"⚠️ AI: I encountered an error: {e}")
+        except KeyboardInterrupt:
+            print("\nGoodbye!")
+            break
+        except Exception as e:
+            print(f"❌ An unexpected error occurred: {e}")
+            traceback.print_exc()
 
 
 
