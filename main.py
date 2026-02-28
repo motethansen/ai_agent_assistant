@@ -300,7 +300,8 @@ def handle_chat_mode(obsidian_path):
                 print("\nAvailable Commands:")
                 print("  /sync     - Manually trigger task sync from Obsidian and Reminders")
                 print("  /pull     - Sync Calendar -> Markdown (Two-Way Sync)")
-                print("  /backlog  - Display the current unified backlog")
+                print("  /backlog  - Display the current unified backlog (grouped by category)")
+                print("  /stats    - Display focus analytics for today")
                 print("  /plan     - Trigger a morning planning session")
                 print("  /review   - Trigger an evening review session")
                 print("  /ui       - Launch the Streamlit web interface")
@@ -336,17 +337,46 @@ def handle_chat_mode(obsidian_path):
                     print("Failed to generate schedule.")
             elif command == "pull":
                 sync_calendar_to_markdown(obsidian_path)
-            elif command == "reminders-sync":
-                print("Extracting reminders from Apple Reminders app...")
-                subprocess.run(["python3", "debug_reminders.py"])
+            elif command == "stats":
+                print("\n📊 --- Today's Focus Stats ---")
+                service = calendar_manager.get_calendar_service()
+                calendar_id = get_config_value("CALENDAR_ID", "primary")
+                if service:
+                    managed = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
+                    if managed:
+                        cat_hours = {}
+                        total_mins = 0
+                        for m in managed:
+                            start = datetime.datetime.fromisoformat(m['start'].replace('Z', ''))
+                            end = datetime.datetime.fromisoformat(m['end'].replace('Z', ''))
+                            mins = (end - start).total_seconds() / 60
+                            total_mins += mins
+                            cat = m.get('category', 'General')
+                            cat_hours[cat] = cat_hours.get(cat, 0) + mins
+                        
+                        for cat, mins in cat_hours.items():
+                            print(f"  - {cat:20}: {mins/60:4.1f} hours")
+                        print(f"  TOTAL PLANNED FOCUS: {total_mins/60:4.1f} hours")
+                    else:
+                        print("No AI-managed events found for today.")
+                else:
+                    print("Could not connect to Google Calendar.")
             elif command == "backlog":
-
                 tasks = get_unified_tasks(obsidian_path)
-                print("\n--- Current Backlog ---")
-                for i, t in enumerate(tasks, 1):
+                print(f"\n--- Unified Backlog ({len(tasks)} tasks) ---")
+                # Group by category
+                cats = {}
+                for t in tasks:
                     cat = t.get("category", "Uncategorized")
-                    due = f" (Due: {t['due_date']})" if t.get('due_date') else ""
-                    print(f"{i}. [{cat}] {t['task']}{due}")
+                    if cat not in cats: cats[cat] = []
+                    cats[cat].append(t)
+                
+                for cat, task_list in cats.items():
+                    print(f"\n[{cat.upper()}]")
+                    for t in task_list:
+                        source_icon = "📝" if t['source'] == "Obsidian" else "🪵" if t['source'] == "Logseq" else "🍎"
+                        due = f" (Due: {t['due_date']})" if t.get('due_date') else ""
+                        print(f"  {source_icon} {t['task']}{due}")
             elif command == "plan":
                 handle_morning_planning(obsidian_path)
             elif command == "review":

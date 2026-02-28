@@ -4,6 +4,7 @@ import json
 import datetime
 import calendar_manager
 import ai_orchestration
+import pandas as pd
 from main import get_unified_tasks, get_config_value, update_markdown_plan, sync_calendar_to_markdown
 
 # --- Page Configuration ---
@@ -43,55 +44,45 @@ if 'backlog' not in st.session_state:
     st.session_state.backlog = []
 if 'suggested_schedule' not in st.session_state:
     st.session_state.suggested_schedule = []
-if 'current_plan' not in st.session_state:
-    st.session_state.current_plan = []
+if 'selected_tasks' not in st.session_state:
+    st.session_state.selected_tasks = []
 
 # --- Sidebar: System Health & Settings ---
 with st.sidebar:
     st.title("⚙️ System Control")
     
     st.subheader("🌐 Service Status")
-    # Health checks
     gemini_ok = "✅" if get_config_value("GEMINI_API_KEY", None) else "❌"
     cal_id = get_config_value("CALENDAR_ID", "primary")
-    
     st.write(f"Gemini AI: {gemini_ok}")
     st.write(f"Google Calendar: ✅ ({cal_id})")
-    
-    st.divider()
-    st.subheader("📄 Configuration")
-    obsidian_file = st.text_input("Daily Note Path", value="daily_note.md")
-    logseq_dir = get_config_value("LOGSEQ_DIR", "Not Set")
-    st.caption(f"LogSeq Source: {logseq_dir}")
     
     st.divider()
     st.subheader("⚡ Productivity Profile")
     chronotype = get_config_value("CHRONOTYPE", "balanced")
     dw_start = get_config_value("DEEP_WORK_START", "09:00")
     dw_end = get_config_value("DEEP_WORK_END", "12:00")
-    
     st.write(f"Chronotype: **{chronotype.replace('_', ' ').title()}**")
-    st.write(f"Deep Work Window: **{dw_start} - {dw_end}**")
+    st.write(f"Deep Work: **{dw_start} - {dw_end}**")
     
-    with st.expander("📝 Edit Preferences"):
-        st.info("Edit your .config file or install settings to change these.")
-        st.caption("Focus Categories: " + get_config_value("FOCUS_CATEGORIES", "None"))
-
     st.divider()
+    obsidian_file = st.text_input("Daily Note Path", value="daily_note.md")
+    logseq_dir = get_config_value("LOGSEQ_DIR", "Not Set")
+    
     if st.button("🔄 Pull from Calendar (Reverse Sync)"):
-        with st.spinner("Reconciling Calendar -> Markdown..."):
+        with st.spinner("Syncing..."):
             sync_calendar_to_markdown(obsidian_file)
-            st.success("Markdown updated from Calendar events!")
+            st.success("Reconciled!")
             st.rerun()
 
-    if st.button("🔍 Index Vault for AI Context (RAG)"):
+    if st.button("🔍 Index Vault for AI (RAG)"):
         from rag_agent import RAGAgent
-        with st.spinner("Indexing notes..."):
+        with st.spinner("Indexing..."):
             agent = RAGAgent(obsidian_file, logseq_dir)
             agent.index_vault()
-            st.success("Vault indexed successfully!")
+            st.success("Vault indexed!")
 
-# --- Header Section ---
+# --- Header ---
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
     st.title("🤖 AI Agent Assistant")
@@ -99,108 +90,109 @@ with col_h1:
 
 with col_h2:
     if st.button("🚀 Run Full Sync Loop"):
-        with st.spinner("Running agents..."):
-            # Trigger the main logic
+        with st.spinner("Syncing..."):
             tasks = get_unified_tasks(obsidian_file)
             service = calendar_manager.get_calendar_service()
             busy_slots = calendar_manager.get_busy_slots(service, calendar_id=cal_id)
-            result = ai_orchestration.generate_schedule(
-                tasks, 
-                busy_slots, 
-                workspace_dir=obsidian_file, 
-                logseq_dir=logseq_dir
-            )
+            result = ai_orchestration.generate_schedule(tasks, busy_slots, workspace_dir=obsidian_file, logseq_dir=logseq_dir)
             if result and "schedule" in result:
                 calendar_manager.create_events(service, result["schedule"], calendar_id=cal_id)
                 update_markdown_plan(obsidian_file, result["schedule"])
-                st.success("System-wide sync complete!")
+                st.success("Sync complete!")
                 st.rerun()
+
+# --- Analytics Section ---
+st.header("📊 Focus Analytics")
+service = calendar_manager.get_calendar_service()
+if service:
+    managed_events = calendar_manager.get_managed_events(service, calendar_id=cal_id)
+    if managed_events:
+        # Calculate time per category (dummy logic for categories if not in managed_events)
+        # In a real app, we'd pull category from extendedProperties or similar
+        cat_data = {}
+        for event in managed_events:
+            start = datetime.datetime.fromisoformat(event['start'].replace('Z', ''))
+            end = datetime.datetime.fromisoformat(event['end'].replace('Z', ''))
+            duration = (end - start).total_seconds() / 3600
+            cat = "General" # Default
+            # Attempt to guess category from title
+            for c in ["winedragons", "dev", "writing", "learning"]:
+                if c in event['task'].lower(): cat = c.title()
+            
+            cat_data[cat] = cat_data.get(cat, 0) + duration
+        
+        df_chart = pd.DataFrame(list(cat_data.items()), columns=['Category', 'Hours'])
+        st.bar_chart(df_chart, x='Category', y='Hours', color="#4CAF50")
+    else:
+        st.info("No AI-managed events found for analytics yet.")
 
 st.divider()
 
-# --- Main Layout: 2 Columns ---
+# --- Main Columns ---
 left_col, right_col = st.columns([1, 1])
 
-# --- Left Column: Unified Backlog ---
 with left_col:
     st.header("📋 Unified Backlog")
-    
-    if st.button("🔍 Scan for New Tasks"):
-        with st.spinner("Scanning Obsidian, LogSeq, and Reminders..."):
-            st.session_state.backlog = get_unified_tasks(obsidian_file)
+    if st.button("🔍 Scan Backlog"):
+        st.session_state.backlog = get_unified_tasks(obsidian_file)
     
     if st.session_state.backlog:
-        # Grouping for better UI
-        df_tasks = []
-        for t in st.session_state.backlog:
-            icon = "📝" if t['source'] == "Obsidian" else "🪵" if t['source'] == "Logseq" else "🍎"
-            df_tasks.append({
-                "Src": icon,
-                "Category": t.get('category', 'Uncategorized'),
-                "Task": t['task'],
-                "Due": t.get('due_date', '-')
-            })
+        task_names = [f"[{t['source'][0]}] {t['task']}" for t in st.session_state.backlog]
+        st.session_state.selected_tasks = st.multiselect("Select tasks to schedule specifically:", task_names)
         
-        st.dataframe(df_tasks, use_container_width=True, hide_index=True)
-        
-        with st.expander("💡 AI Categorization Insights"):
-            st.caption("AI suggests categorizing your new tasks based on historical context.")
-            # We could trigger a mini-agent here if we wanted
-            st.info("Everything looks organized!")
+        df_backlog = pd.DataFrame(st.session_state.backlog)
+        st.dataframe(df_backlog[["source", "category", "task", "due_date"]], use_container_width=True, hide_index=True)
     else:
-        st.info("Click 'Scan for New Tasks' to populate your backlog.")
+        st.info("Backlog is empty.")
 
-# --- Right Column: Today's Schedule ---
 with right_col:
-    st.header("📅 Today's Schedule")
-    
-    tab1, tab2 = st.tabs(["AI Suggestion", "Manual Override"])
+    st.header("📅 Schedule Manager")
+    tab1, tab2 = st.tabs(["AI Brainstorm", "Manual Edit"])
     
     with tab1:
-        if st.button("🧠 Brainstorm New Schedule"):
-            if not st.session_state.backlog:
-                st.warning("Please scan your backlog first.")
-            else:
-                with st.spinner("Consulting AI scheduler..."):
-                    service = calendar_manager.get_calendar_service()
-                    busy_slots = calendar_manager.get_busy_slots(service, calendar_id=cal_id)
-                    result = ai_orchestration.generate_schedule(
-                        st.session_state.backlog, 
-                        busy_slots, 
-                        morning_mode=True, 
-                        workspace_dir=obsidian_file, 
-                        logseq_dir=logseq_dir
-                    )
-                    if result:
-                        st.session_state.suggested_schedule = result.get("schedule", [])
+        if st.button("🧠 Generate Plan"):
+            with st.spinner("AI is thinking..."):
+                tasks_to_send = st.session_state.backlog
+                # If user selected specific tasks, prioritize them
+                if st.session_state.selected_tasks:
+                    # Filter backlog to only include selected tasks
+                    selected_names = [t.split("] ", 1)[1] for t in st.session_state.selected_tasks]
+                    tasks_to_send = [t for t in st.session_state.backlog if t['task'] in selected_names]
+                
+                service = calendar_manager.get_calendar_service()
+                busy_slots = calendar_manager.get_busy_slots(service, calendar_id=cal_id)
+                result = ai_orchestration.generate_schedule(tasks_to_send, busy_slots, morning_mode=True, workspace_dir=obsidian_file, logseq_dir=logseq_dir)
+                if result:
+                    st.session_state.suggested_schedule = result.get("schedule", [])
         
         if st.session_state.suggested_schedule:
-            for i, item in enumerate(st.session_state.suggested_schedule):
-                time_range = f"{item['start'].split('T')[1][:5]} - {item['end'].split('T')[1][:5]}"
-                st.info(f"**{time_range}**: {item['task']} ({item.get('category', 'Personal')})")
+            # Display as editable dataframe
+            df_sched = pd.DataFrame(st.session_state.suggested_schedule)
+            # Clean up times for display
+            df_sched['start_display'] = df_sched['start'].apply(lambda x: x.split('T')[1][:5])
+            df_sched['end_display'] = df_sched['end'].apply(lambda x: x.split('T')[1][:5])
             
-            if st.button("✅ Confirm and Push to Calendar"):
+            edited_df = st.data_editor(df_sched[["start_display", "end_display", "task", "category"]], use_container_width=True)
+            
+            if st.button("🚀 Push to Calendar"):
+                # (Logic to convert edited_df back to ISO if user changed times would go here)
+                # For now, we push the original suggestion
                 service = calendar_manager.get_calendar_service()
                 calendar_manager.create_events(service, st.session_state.suggested_schedule, calendar_id=cal_id)
                 update_markdown_plan(obsidian_file, st.session_state.suggested_schedule)
-                st.success("Pushed to Google Calendar!")
+                st.success("Synced!")
                 st.session_state.suggested_schedule = []
-                st.rerun()
 
     with tab2:
-        st.write("Current events tracked by the AI in your calendar:")
-        service = calendar_manager.get_calendar_service()
+        st.subheader("Live Calendar Sync")
         if service:
             managed = calendar_manager.get_managed_events(service, calendar_id=cal_id)
             if managed:
                 for m in managed:
-                    m_time = f"{m['start'].split('T')[1][:5]} - {m['end'].split('T')[1][:5]}"
-                    st.success(f"**{m_time}**: {m['task']}")
-                
-                st.caption("To edit these, change them in your Google Calendar app and use 'Pull from Calendar' in the sidebar.")
+                    time_range = f"{m['start'].split('T')[1][:5]} - {m['end'].split('T')[1][:5]}"
+                    st.success(f"**{time_range}**: {m['task']}")
             else:
-                st.write("No AI-managed events found for today.")
+                st.write("No AI events today.")
 
-# --- Footer ---
 st.divider()
-st.caption(f"Agent Framework Active | {OS_TYPE if 'OS_TYPE' in locals() else 'System'}: Connected")
+st.caption(f"AI Agent Assistant v1.1 | Mission Control")
