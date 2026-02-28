@@ -125,7 +125,14 @@ class TaskSyncHandler(PatternMatchingEventHandler):
         
         # 3. AI Orchestration
         print("Consulting the AI scheduler...")
-        schedule = ai_orchestration.generate_schedule(tasks, busy_slots)
+        logseq_path = get_config_value("LOGSEQ_DIR", None)
+        obsidian_path = get_config_value("WORKSPACE_DIR", ".")
+        schedule = ai_orchestration.generate_schedule(
+            tasks, 
+            busy_slots, 
+            workspace_dir=obsidian_path, 
+            logseq_dir=logseq_path
+        )
         
         if schedule:
             # 4. Sync back to Google Calendar
@@ -167,7 +174,14 @@ def handle_morning_planning(obsidian_path):
     busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
     
     print("AI is processing your backlog for today...")
-    result = ai_orchestration.generate_schedule(tasks, busy_slots, morning_mode=True)
+    logseq_path = get_config_value("LOGSEQ_DIR", None)
+    result = ai_orchestration.generate_schedule(
+        tasks, 
+        busy_slots, 
+        morning_mode=True, 
+        workspace_dir=obsidian_path, 
+        logseq_dir=logseq_path
+    )
     
     if result:
         # Suggestions for new categories
@@ -307,7 +321,13 @@ def handle_chat_mode(obsidian_path):
                     print("❌ Calendar service not available. Check credentials.")
                     continue
                 busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
-                schedule = ai_orchestration.generate_schedule(tasks, busy_slots)
+                logseq_path = get_config_value("LOGSEQ_DIR", None)
+                schedule = ai_orchestration.generate_schedule(
+                    tasks, 
+                    busy_slots, 
+                    workspace_dir=obsidian_path, 
+                    logseq_dir=logseq_path
+                )
                 if schedule:
                     calendar_manager.create_events(service, schedule, calendar_id=calendar_id)
                     update_markdown_plan(obsidian_path, schedule)

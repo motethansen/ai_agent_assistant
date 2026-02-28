@@ -13,4 +13,8 @@ streamlit
 # Apple Reminders retrieval
 pyobjc-framework-EventKit
 
+# RAG & Contextual Intelligence
+chromadb
+sentence-transformers
+
 

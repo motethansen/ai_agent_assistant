@@ -43,7 +43,13 @@ def run_sync():
     
     # 5. AI Orchestration
     print("Consulting AI scheduler...")
-    schedule = ai_orchestration.generate_schedule(tasks, busy_slots)
+    logseq_path = main.get_config_value("LOGSEQ_DIR", None)
+    schedule = ai_orchestration.generate_schedule(
+        tasks, 
+        busy_slots, 
+        workspace_dir=obsidian_path, 
+        logseq_dir=logseq_path
+    )
     
     if schedule:
         # 6. Sync to Google Calendar

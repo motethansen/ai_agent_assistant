@@ -71,6 +71,13 @@ with st.sidebar:
             st.success("Markdown updated from Calendar events!")
             st.rerun()
 
+    if st.button("🔍 Index Vault for AI Context (RAG)"):
+        from rag_agent import RAGAgent
+        with st.spinner("Indexing notes..."):
+            agent = RAGAgent(obsidian_file, logseq_dir)
+            agent.index_vault()
+            st.success("Vault indexed successfully!")
+
 # --- Header Section ---
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
@@ -84,7 +91,12 @@ with col_h2:
             tasks = get_unified_tasks(obsidian_file)
             service = calendar_manager.get_calendar_service()
             busy_slots = calendar_manager.get_busy_slots(service, calendar_id=cal_id)
-            result = ai_orchestration.generate_schedule(tasks, busy_slots)
+            result = ai_orchestration.generate_schedule(
+                tasks, 
+                busy_slots, 
+                workspace_dir=obsidian_file, 
+                logseq_dir=logseq_dir
+            )
             if result and "schedule" in result:
                 calendar_manager.create_events(service, result["schedule"], calendar_id=cal_id)
                 update_markdown_plan(obsidian_file, result["schedule"])
@@ -139,7 +151,13 @@ with right_col:
                 with st.spinner("Consulting AI scheduler..."):
                     service = calendar_manager.get_calendar_service()
                     busy_slots = calendar_manager.get_busy_slots(service, calendar_id=cal_id)
-                    result = ai_orchestration.generate_schedule(st.session_state.backlog, busy_slots, morning_mode=True)
+                    result = ai_orchestration.generate_schedule(
+                        st.session_state.backlog, 
+                        busy_slots, 
+                        morning_mode=True, 
+                        workspace_dir=obsidian_file, 
+                        logseq_dir=logseq_dir
+                    )
                     if result:
                         st.session_state.suggested_schedule = result.get("schedule", [])
         

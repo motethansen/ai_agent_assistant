@@ -16,6 +16,7 @@ VALID_CATEGORIES = [
 ]
 
 import requests
+from rag_agent import RAGAgent
 
 # Default model settings (can be overridden by .config)
 MODELS_ENABLED = {
@@ -61,16 +62,41 @@ def ollama_generate(prompt, model="llama3"):
     except Exception as e:
         return f"Error calling local Ollama: {e}"
 
-def generate_schedule(tasks, busy_slots, morning_mode=False):
+def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None, logseq_dir=None):
     """
     Sends tasks and busy slots to the AI to generate a daily schedule.
-    Routes to the configured model.
+    Includes RAG-based context from the user's notes for each task.
     """
     model_to_use = get_routing("scheduling")
     
+    # --- RAG Integration: Enhance tasks with context ---
+    rag_context = ""
+    if workspace_dir or logseq_dir:
+        try:
+            rag_agent = RAGAgent(workspace_dir, logseq_dir)
+            # We don't want to index EVERY time for performance, 
+            # but for simplicity in this turn we will ensure it's at least once.
+            if rag_agent.collection.count() == 0:
+                rag_agent.index_vault()
+            
+            # For each major task, try to find context
+            unique_contexts = []
+            # Only pull context for the first 5 tasks to avoid prompt bloat
+            for t in tasks[:5]:
+                task_name = t['task'] if isinstance(t, dict) else t
+                ctx = rag_agent.query_context(task_name, n_results=1)
+                if ctx and ctx not in unique_contexts:
+                    unique_contexts.append(ctx)
+            
+            rag_context = "\n".join(unique_contexts)
+        except Exception as e:
+            print(f"⚠️ RAG Agent error: {e}")
+
     if model_to_use == "ollama":
         print("Using local Ollama for scheduling...")
         prompt = f"Schedule these tasks: {json.dumps(tasks)} avoiding these busy slots: {json.dumps(busy_slots)}. Return JSON."
+        if rag_context:
+            prompt += f"\n\nContext for tasks: {rag_context}"
         response_text = ollama_generate(prompt)
         # (Ollama response would need careful JSON parsing here)
         try:
@@ -102,6 +128,9 @@ def generate_schedule(tasks, busy_slots, morning_mode=False):
         
         EXISTING CALENDAR COMMITMENTS:
         {json.dumps(busy_slots, indent=2)}
+        
+        CONTEXTUAL BACKGROUND (USE THIS TO DECIDE PRIORITY AND DURATION):
+        {rag_context}
         
         CAPABILITIES:
         1. SCHEDULING: Fit tasks into free slots.
