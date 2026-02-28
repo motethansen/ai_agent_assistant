@@ -35,5 +35,6 @@ APPLE_REMINDERS_LIST=Reminders
 # Example (Mac): /Users/yourname/Documents/ObsidianVault
 # Example (Linux): /home/yourname/Notes
 WORKSPACE_DIR=/path/to/your/markdown/notes
+LOGSEQ_DIR=/path/to/your/logseq/graph
 
 DEBOUNCE_SECONDS=5

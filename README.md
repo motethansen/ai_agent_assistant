@@ -11,20 +11,46 @@ An automated AI assistant that bridges local Markdown notes (Obsidian/Logseq) an
 - **Interactive CLI & Dashboard:** Manage everything via a chat-like terminal interface with `/` commands or a modern Streamlit web dashboard.
 - **Modular & Extensible:** Scaffold your own custom agents with `/create-agent` and manage them in separate Git repositories.
 
-## 🛠️ Quick Start
+## 🚀 Quick Start
 
-### 1. Installation
+### ⚡ Quick Installation (One-Click/Terminal)
+For a one-step installation on **macOS** or **Linux (Ubuntu)**, run the following command in your terminal:
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/motethansen/ai_agent_assistant/main/install.sh)"
+```
+*This will clone the repository, set up a virtual environment, install dependencies (including Ollama), and guide you through configuration.*
+
+### 🛠️ Manual Installation
+If you prefer to install manually:
 ```bash
 git clone https://github.com/motethansen/ai_agent_assistant.git
 cd ai_agent_assistant
-make install
+./install.sh
 ```
-The installation script will set up your virtual environment and guide you through creating your `.config` file.
 
-### 2. Configuration
+### 🔄 Background Sync (Cron Job)
+To set up an automated hourly sync that checks your tasks and updates your calendar:
+```bash
+./install.sh cron
+```
+
+### 🆙 Upgrading
+To pull the latest code and update dependencies at any time:
+```bash
+./install.sh upgrade
+```
+
+## 🐧 Linux (Ubuntu) Support
+This solution is fully compatible with Linux. 
+- **Apple Reminders:** The Apple Reminders sync feature is disabled on Linux (as it requires macOS `osascript`).
+- **Obsidian & LogSeq:** Full support for scanning your Markdown vaults and journals on Linux.
+- **Dependencies:** The installer automatically handles Linux-specific Python requirements.
+
+## ⚙️ Configuration
 Update your `.config` file with your specific paths and keys:
 - **`WORKSPACE_DIR`**: Path to your Obsidian vault.
-- **`CALENDAR_ID`**: Your Google Calendar ID.
+- **`LOGSEQ_DIR`**: Path to your LogSeq graph folder.
+- **`CALENDAR_ID`**: Your Google Calendar ID (usually `primary`).
 - **`GEMINI_API_KEY`**: Your Google Gemini API key.
 
 ### 3. Run the Assistant

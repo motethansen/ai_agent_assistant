@@ -7,7 +7,7 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 import calendar_manager
 import ai_orchestration
-from observer import parse_markdown_tasks
+from observer import parse_markdown_tasks, parse_logseq_tasks
 from reminders_manager import get_apple_reminders
 
 def get_config_value(key, default):
@@ -21,17 +21,32 @@ def get_config_value(key, default):
 
 def get_unified_tasks(obsidian_path):
     """
-    Merges tasks from Obsidian and Apple Reminders.
+    Merges tasks from Obsidian, LogSeq, and Apple Reminders.
     """
     # 1. Parse Obsidian tasks
     obsidian_tasks = parse_markdown_tasks(obsidian_path)
     
-    # 2. Get Apple Reminders
+    # 2. Parse LogSeq tasks if directory is provided
+    logseq_tasks = []
+    logseq_dir = get_config_value("LOGSEQ_DIR", None)
+    if logseq_dir:
+        # Scan journals and pages for pending tasks
+        for sub_dir in ["journals", "pages"]:
+            target_dir = os.path.join(logseq_dir, sub_dir)
+            if os.path.exists(target_dir):
+                for filename in os.listdir(target_dir):
+                    if filename.endswith(".md"):
+                        path = os.path.join(target_dir, filename)
+                        tasks = parse_logseq_tasks(path)
+                        logseq_tasks.extend(tasks)
+        print(f"Extracted {len(logseq_tasks)} total tasks from LogSeq (journals + pages).")
+
+    # 3. Get Apple Reminders
     reminders_list = get_config_value("APPLE_REMINDERS_LIST", "Reminders")
     apple_tasks = get_apple_reminders(reminders_list)
     
-    # 3. Combine
-    unified_backlog = obsidian_tasks + apple_tasks
+    # 4. Combine
+    unified_backlog = obsidian_tasks + logseq_tasks + apple_tasks
     return unified_backlog
 
 
@@ -449,12 +464,28 @@ if __name__ == "__main__":
     elif args.chat:
         handle_chat_mode(args.file)
     else:
-        path = "."
+        obsidian_path = get_config_value("WORKSPACE_DIR", ".")
+        logseq_path = get_config_value("LOGSEQ_DIR", None)
+        
         event_handler = TaskSyncHandler()
         observer = Observer()
-        observer.schedule(event_handler, path, recursive=False)
         
-        print(f"🚀 AI Agent Assistant is active and monitoring {os.path.abspath(path)}...")
+        # Watch Obsidian
+        if os.path.exists(obsidian_path):
+            observer.schedule(event_handler, obsidian_path, recursive=True)
+            print(f"Monitoring Obsidian vault: {os.path.abspath(obsidian_path)}")
+        else:
+            observer.schedule(event_handler, ".", recursive=False)
+            print(f"Monitoring current directory: {os.path.abspath('.')}")
+
+        # Watch LogSeq Journals
+        if logseq_path:
+            journals_path = os.path.join(logseq_path, "journals")
+            if os.path.exists(journals_path):
+                observer.schedule(event_handler, journals_path, recursive=False)
+                print(f"Monitoring LogSeq journals: {os.path.abspath(journals_path)}")
+
+        print(f"🚀 AI Agent Assistant is active and monitoring for changes...")
         observer.start()
         try:
             while True:
