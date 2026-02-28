@@ -7,6 +7,7 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 import calendar_manager
 import ai_orchestration
+import gmail_agent
 from observer import parse_markdown_tasks, parse_logseq_tasks
 from reminders_manager import get_apple_reminders
 
@@ -145,6 +146,89 @@ class TaskSyncHandler(PatternMatchingEventHandler):
             print("Failed to generate schedule from AI.")
 
 import argparse
+
+def display_stats():
+    """
+    Display statistics about models, configuration, and usage.
+    """
+    print("\n📊 === AI Agent Assistant Statistics ===")
+    
+    # Configuration Status
+    print("\n🔧 Configuration:")
+    workspace = get_config_value("WORKSPACE_DIR", ".")
+    logseq = get_config_value("LOGSEQ_DIR", None)
+    calendar_id = get_config_value("CALENDAR_ID", "primary")
+    print(f"  Workspace: {os.path.abspath(workspace)}")
+    print(f"  LogSeq: {os.path.abspath(logseq) if logseq else 'Not configured'}")
+    print(f"  Calendar ID: {calendar_id}")
+    
+    # API Key Status
+    print("\n🔑 API Configuration:")
+    api_key = os.getenv("GEMINI_API_KEY")
+    if api_key:
+        print(f"  Gemini API Key: {'✓ Configured' if api_key else '✗ Missing'}")
+        print(f"  Key Length: {len(api_key)} characters")
+    else:
+        print("  Gemini API Key: ✗ Missing")
+    
+    # Check Ollama availability
+    try:
+        import requests
+        ollama_response = requests.get("http://localhost:11434/api/version", timeout=2)
+        if ollama_response.status_code == 200:
+            print("  Ollama: ✓ Available (http://localhost:11434)")
+        else:
+            print("  Ollama: ✗ Not responding")
+    except:
+        print("  Ollama: ✗ Not available")
+    
+    # Available Models
+    print("\n🤖 Available Gemini Models:")
+    if api_key:
+        try:
+            import google.genai as genai
+            client = genai.Client(api_key=api_key)
+            models = list(client.models.list())
+            for model in models[:5]:  # Show first 5 models
+                print(f"  • {model.name}")
+            if len(models) > 5:
+                print(f"  ... and {len(models) - 5} more models")
+        except Exception as e:
+            print(f"  Error listing models: {e}")
+    else:
+        print("  Cannot list models without API key")
+    
+    # Calendar Status
+    print("\n📅 Calendar Integration:")
+    if os.path.exists('credentials.json'):
+        print("  credentials.json: ✓ Present")
+    else:
+        print("  credentials.json: ✗ Missing")
+    
+    if os.path.exists('token.json'):
+        print("  token.json: ✓ Authenticated")
+    else:
+        print("  token.json: ✗ Not authenticated")
+    
+    try:
+        service = calendar_manager.get_calendar_service()
+        if service:
+            managed_events = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
+            print(f"  Today's AI-managed events: {len(managed_events) if managed_events else 0}")
+        else:
+            print("  Calendar service: ✗ Cannot connect")
+    except Exception as e:
+        print(f"  Calendar service: ✗ Error: {e}")
+    
+    # File System Status
+    print("\n📁 File System:")
+    if os.path.exists(workspace):
+        md_files = [f for f in os.listdir(workspace) if f.endswith('.md')]
+        print(f"  Markdown files: {len(md_files)}")
+    else:
+        print(f"  Workspace directory not found")
+    
+    print("\n" + "="*45 + "\n")
 
 def display_docs():
     """
@@ -307,6 +391,8 @@ def handle_chat_mode(obsidian_path):
                 print("  /ui       - Launch the Streamlit web interface")
                 print("  /models   - Show current status of LLM models")
                 print("  /model    - Enable/disable models (e.g., /model disable gemini)")
+                print("  /gmail    - List snoozed and filtered emails from Gmail")
+                print("  /gmail-filter - Manage Gmail search filters (e.g., /gmail-filter add 'from:boss')")
                 print("  /docs     - Show project documentation")
                 print("  /create-agent - Scaffold a new custom agent")
                 print("  /list-agents  - Show available custom agents")
@@ -436,9 +522,52 @@ def handle_chat_mode(obsidian_path):
                     print(f"Run 'cd {agent_dir} && git push -u origin main' to complete.")
                 else:
                     print("Usage: /push-agent <name> <repo_url>")
-            elif command.startswith("list-agents"):
+            elif command == "list-agents":
                 agents = [f[:-3] for f in os.listdir("custom_agents") if f.endswith(".py") and f != "__init__.py"]
                 print(f"Available Agents: {', '.join(agents) if agents else 'None'}")
+            elif command == "gmail":
+                print("Checking Gmail for snoozed and filtered emails...")
+                service = gmail_agent.get_gmail_service()
+                if service:
+                    snoozed = gmail_agent.get_snoozed_emails(service)
+                    print(f"\n--- Snoozed Emails ({len(snoozed)}) ---")
+                    for e in snoozed:
+                        print(f"  💤 {e['subject']} (From: {e['from']})")
+                    
+                    filters = gmail_agent.load_filters()
+                    if filters:
+                        filtered = gmail_agent.get_filtered_emails(service, filters)
+                        print(f"\n--- Filtered Emails ({len(filtered)}) ---")
+                        for e in filtered:
+                            print(f"  🔍 [{e['filter']}] {e['subject']} (From: {e['from']})")
+                    else:
+                        print("\nNo filters set. Use /gmail-filter add <query> to add one.")
+                else:
+                    print("❌ Could not connect to Gmail. Check 'credentials.json' and 'token.json'.")
+            elif command == "gmail-filter":
+                if len(parts) >= 2:
+                    sub_cmd = parts[1].lower()
+                    if sub_cmd == "add" and len(parts) >= 3:
+                        query = " ".join(parts[2:])
+                        if gmail_agent.add_filter(query):
+                            print(f"✅ Filter added: '{query}'")
+                        else:
+                            print(f"ℹ️ Filter already exists: '{query}'")
+                    elif sub_cmd == "remove" and len(parts) >= 3:
+                        query = " ".join(parts[2:])
+                        if gmail_agent.remove_filter(query):
+                            print(f"✅ Filter removed: '{query}'")
+                        else:
+                            print(f"❌ Filter not found: '{query}'")
+                    elif sub_cmd == "list":
+                        filters = gmail_agent.load_filters()
+                        print("\n--- Gmail Search Filters ---")
+                        for i, f in enumerate(filters, 1):
+                            print(f"  {i}. {f}")
+                    else:
+                        print("Usage: /gmail-filter <add/remove/list> [query]")
+                else:
+                    print("Usage: /gmail-filter <add/remove/list> [query]")
             else:
                 print(f"Unknown command: /{command}. Type /commands for help.")
 
@@ -458,9 +587,21 @@ def handle_chat_mode(obsidian_path):
 
                 busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
                 
+                # Get Gmail context
+                gmail_service = gmail_agent.get_gmail_service()
+                snoozed_emails = []
+                filtered_emails = []
+                if gmail_service:
+                    snoozed_emails = gmail_agent.get_snoozed_emails(gmail_service)
+                    filters = gmail_agent.load_filters()
+                    if filters:
+                        filtered_emails = gmail_agent.get_filtered_emails(gmail_service, filters)
+
                 context_payload = {
                     "backlog": tasks,
                     "calendar_busy_slots": busy_slots,
+                    "gmail_snoozed": snoozed_emails,
+                    "gmail_filtered": filtered_emails,
                     "current_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                 }
                 
@@ -524,6 +665,7 @@ def handle_chat_mode(obsidian_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AI Agent Assistant: Local Markdown-Calendar-AI Bridge")
     parser.add_argument("--docs", action="store_true", help="Display project documentation in terminal")
+    parser.add_argument("--stats", action="store_true", help="Display statistics about models, configuration, and usage")
     parser.add_argument("--morning", action="store_true", help="Start morning planning mode")
     parser.add_argument("--evening", action="store_true", help="Start evening review mode")
     parser.add_argument("--chat", action="store_true", help="Start interactive chat mode")
@@ -532,6 +674,8 @@ if __name__ == "__main__":
 
     if args.docs:
         display_docs()
+    elif args.stats:
+        display_stats()
     elif args.morning:
         handle_morning_planning(args.file)
     elif args.evening:

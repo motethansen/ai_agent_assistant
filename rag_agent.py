@@ -76,19 +76,15 @@ class RAGAgent:
             n_results=n_results
         )
         
-        context_str = "
-RELEVANT CONTEXT FROM YOUR NOTES:
-"
+        context_str = "\nRELEVANT CONTEXT FROM YOUR NOTES:\n"
         documents = results.get('documents', [[]])[0]
         metadatas = results.get('metadatas', [[]])[0]
         
         for doc, meta in zip(documents, metadatas):
             filename = os.path.basename(meta['path'])
             # Take a small snippet for the prompt
-            snippet = doc[:300].replace("
-", " ")
-            context_str += f"- From '{filename}': "...{snippet}..."
-"
+            snippet = doc[:300].replace("\n", " ")
+            context_str += f"- From '{filename}': ...{snippet}...\n"
             
         return context_str
 

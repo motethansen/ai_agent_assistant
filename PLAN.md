@@ -95,6 +95,14 @@
 - [x] Add support for "Reminders-to-Obsidian" migration: Automatically create a new Obsidian note from stored local JSON reminders.
 - [x] Ensure all file operations are relative to the configured `WORKSPACE_DIR`.
 
+### Phase 15: Gmail Snooze & Filter Agent
+- [x] Implement a Gmail Agent to access the user's Gmail account via Google API.
+- [x] Add capability to identify and retrieve emails that are currently "snoozed".
+- [x] Implement a filtering mechanism based on user-defined search queries.
+- [x] Create a CLI command to add/manage these filters (e.g., `/gmail-filter add "from:boss"`).
+- [x] Store filters in a specialized skill or tool configuration file for persistence.
+- [x] Integrate the Gmail Agent into the main orchestration loop to suggest tasks or reminders based on filtered emails.
+
 ## Summary of Planned Development
 The system will act as a bridge between your local knowledge base and your schedule. 
 1. **Watchdog** will monitor your markdown files for changes. 

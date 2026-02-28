@@ -25,6 +25,10 @@ case "$1" in
         shift
         $VENV_PYTHON "$SCRIPT_DIR/cron_job.py" "$@"
         ;;
+    --stats|stats)
+        shift
+        $VENV_PYTHON "$SCRIPT_DIR/main.py" --stats "$@"
+        ;;
     *)
         $VENV_PYTHON "$SCRIPT_DIR/main.py" "$@"
         ;;

@@ -1,6 +1,6 @@
 # Makefile for AI Agent Assistant
 
-.PHONY: install test test-report clean docs run run-chat run-ui cron upgrade
+.PHONY: install test test-report clean docs run run-chat run-ui stats cron upgrade
 
 # Installation and setup
 install:
@@ -42,6 +42,10 @@ clean:
 # Display CLI-based documentation
 docs:
 	@.venv/bin/python3 main.py --docs
+
+# Display statistics and configuration
+stats:
+	@.venv/bin/python3 main.py --stats
 
 # Other management commands
 cron:
