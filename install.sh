@@ -23,33 +23,55 @@ echo ""
 OS_TYPE=$(uname -s)
 echo -e "Detected Operating System: ${GREEN}$OS_TYPE${NC}"
 
-# 1. Dependency Checks (Python & Git)
+# 1. Dependency Checks & Auto-Installation
 check_dependencies() {
     echo -e "${BLUE}[1/5] Checking System Dependencies...${NC}"
     
-    # Check Python
-    if ! command -v python3 &> /dev/null; then
-        echo -e "${RED}Error: Python 3 is not installed.${NC}"
-        if [ "$OS_TYPE" == "Darwin" ]; then
-            echo -e "Please install Python 3.11+ from ${YELLOW}https://www.python.org/downloads/macos/${NC}"
-        else
-            echo -e "Please run: ${YELLOW}sudo apt update && sudo apt install python3.11 python3.11-venv${NC}"
+    # Try to find an existing Python 3.11+
+    PYTHON_CMD=""
+    for cmd in "python3.12" "python3.11" "python3"; do
+        if command -v $cmd &> /dev/null; then
+            VER=$($cmd -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0")
+            MAJ=$(echo $VER | cut -d. -f1)
+            MIN=$(echo $VER | cut -d. -f2)
+            if [ "$MAJ" -eq 3 ] && [ "$MIN" -ge 11 ]; then
+                PYTHON_CMD=$(command -v $cmd)
+                break
+            fi
         fi
+    done
+
+    if [ -z "$PYTHON_CMD" ]; then
+        echo -e "${YELLOW}Python 3.11+ not found. Attempting to install Python 3.12...${NC}"
+        
+        if [ "$OS_TYPE" == "Darwin" ]; then
+            if ! command -v brew &> /dev/null; then
+                echo "Homebrew not found. Installing Homebrew first..."
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+                eval "$(/opt/homebrew/bin/brew shellenv)"
+            fi
+            echo "Installing Python 3.12 via Homebrew..."
+            brew install python@3.12
+            PYTHON_CMD=$(brew --prefix)/bin/python3.12
+        else
+            echo "Installing Python 3.12 via apt..."
+            sudo apt update
+            sudo apt install software-properties-common -y
+            sudo add-apt-repository ppa:deadsnakes/ppa -y
+            sudo apt update
+            sudo apt install python3.12 python3.12-venv -y
+            PYTHON_CMD="/usr/bin/python3.12"
+        fi
+    fi
+
+    if [ -z "$PYTHON_CMD" ] || ! $PYTHON_CMD --version &> /dev/null; then
+        echo -e "${RED}Error: Failed to secure a Python 3.11+ environment.${NC}"
         exit 1
     fi
 
-    # Check version 3.11 or higher
-    PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
-    MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
-
-    if [ "$MAJOR" -lt 3 ] || ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 11 ]); then
-        echo -e "${RED}Error: Python $PYTHON_VERSION detected. Minimum version 3.11 required.${NC}"
-        echo -e "Please upgrade to Python 3.11 or higher to ensure compatibility with Google AI libraries."
-        exit 1
-    fi
-    
-    echo -e "Python Version: ${GREEN}$PYTHON_VERSION${NC} (OK)"
+    echo -e "Using Python: ${GREEN}$($PYTHON_CMD --version)${NC}"
+    # Export for use in venv creation
+    export FINAL_PYTHON=$PYTHON_CMD
 
     # Check Git
     if ! command -v git &> /dev/null; then
@@ -63,8 +85,8 @@ check_dependencies() {
 setup_python_env() {
     echo -e "\n${BLUE}[2/5] Setting up Python Environment...${NC}"
     if [ ! -d ".venv" ]; then
-        echo "Creating virtual environment (this keeps your system clean)..."
-        python3 -m venv .venv
+        echo "Creating virtual environment using $FINAL_PYTHON..."
+        $FINAL_PYTHON -m venv .venv
     fi
     
     source .venv/bin/activate
