@@ -128,11 +128,28 @@ def create_events(service, schedule, calendar_id='primary'):
         return
 
     print(f"Syncing {len(schedule)} tasks to Google Calendar: {calendar_id}...")
+    
+    # Get local timezone offset (e.g., +07:00)
+    now = datetime.datetime.now().astimezone()
+    local_tz = now.strftime('%z')
+    if len(local_tz) == 5: # e.g., +0700
+        local_tz = local_tz[:3] + ':' + local_tz[3:]
+
     for item in schedule:
+        start_time = item['start']
+        end_time = item['end']
+        
+        # Simple check for missing timezone offset
+        # If it has 'T' but no 'Z' and no '+' or '-' after the time part
+        if 'T' in start_time and 'Z' not in start_time and '+' not in start_time[10:] and '-' not in start_time[10:]:
+            start_time += local_tz
+        if 'T' in end_time and 'Z' not in end_time and '+' not in end_time[10:] and '-' not in end_time[10:]:
+            end_time += local_tz
+
         event = {
             'summary': f"AI: {item['task']}",
-            'start': {'dateTime': item['start']},
-            'end': {'dateTime': item['end']},
+            'start': {'dateTime': start_time},
+            'end': {'dateTime': end_time},
         }
         try:
             event_result = service.events().insert(calendarId=calendar_id, body=event).execute()

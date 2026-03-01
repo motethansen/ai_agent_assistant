@@ -18,5 +18,6 @@ client_secret.json
 *.local
 .config
 datainput/
+vector_db/
 
 

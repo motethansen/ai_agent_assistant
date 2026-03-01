@@ -103,6 +103,14 @@
 - [x] Store filters in a specialized skill or tool configuration file for persistence.
 - [x] Integrate the Gmail Agent into the main orchestration loop to suggest tasks or reminders based on filtered emails.
 
+### Phase 16: Deep Book Indexing & RAG
+- [x] Implement a `BookAgent` to scan a user's library (`BOOKS_DIR`) for PDFs, EPUBs, and images.
+- [x] Integrate `PyPDF2` and `EbookLib` for text extraction.
+- [x] Implement a local vector database (ChromaDB) to index large books page by page.
+- [x] Enable the AI to "read" specific sections of books and "search" for topics across the entire library.
+- [x] Provide clickable (path-based) links to books within the AI's response.
+- [x] Integrate book-level context into both the CLI chat and Streamlit UI.
+
 ## Summary of Planned Development
 The system will act as a bridge between your local knowledge base and your schedule. 
 1. **Watchdog** will monitor your markdown files for changes. 

@@ -9,6 +9,7 @@ from watchdog.events import PatternMatchingEventHandler
 import calendar_manager
 import ai_orchestration
 import gmail_agent
+from book_agent import BookAgent
 from observer import parse_markdown_tasks, parse_logseq_tasks
 from reminders_manager import get_apple_reminders
 
@@ -342,6 +343,18 @@ def execute_actions(actions):
                 elif action['type'] == "write_file":
                     msg = fs_agent.write_file(action['path'], action.get('content', ''))
                     print(f"✅ {msg}")
+                elif action['type'] == "read_book":
+                    agent = BookAgent()
+                    content = agent.read_book_content(action['path'])
+                    print(f"📖 Extract from {os.path.basename(action['path'])}:\n{content}")
+                elif action['type'] == "index_book":
+                    agent = BookAgent()
+                    msg = agent.index_book(action['path'])
+                    print(f"✅ {msg}")
+                elif action['type'] == "search_books":
+                    agent = BookAgent()
+                    results = agent.search_books(action['query'])
+                    print(results)
             except Exception as e:
                 print(f"❌ Error executing {action['type']}: {e}")
     else:
@@ -602,12 +615,17 @@ def handle_chat_mode(obsidian_path):
                         if filters:
                             filtered_emails = gmail_agent.get_filtered_emails(gmail_service, filters)
 
+                    # Get Books context
+                    book_agent = BookAgent()
+                    books_summary = book_agent.get_summary()
+
                     context_payload = {
                         "backlog": tasks,
                         "calendar_busy_slots": busy_slots,
                         "gmail_snoozed": snoozed_emails,
                         "gmail_filtered": filtered_emails,
-                        "current_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        "books_library": books_summary,
+                        "current_time": datetime.datetime.now().astimezone().isoformat()
                     }
                     
                     prompt = f"User Question: '{user_input}'. Context: {json.dumps(context_payload)}. Provide a helpful answer."

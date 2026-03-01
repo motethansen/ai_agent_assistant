@@ -73,7 +73,13 @@ def get_snoozed_emails(service):
             })
         return email_list
     except HttpError as error:
-        print(f'An error occurred: {error}')
+        if error.resp.status == 403:
+            # Only print this once to avoid spamming
+            if not hasattr(get_gmail_service, '_api_disabled_warned'):
+                print("⚠️ Gmail API is not enabled or access is forbidden. Skipping Gmail context.")
+                get_gmail_service._api_disabled_warned = True
+        else:
+            print(f'An error occurred: {error}')
         return []
 
 def get_filtered_emails(service, queries):
@@ -105,7 +111,13 @@ def get_filtered_emails(service, queries):
                 })
         return all_filtered
     except HttpError as error:
-        print(f'An error occurred: {error}')
+        if error.resp.status == 403:
+            # Only print this once to avoid spamming
+            if not hasattr(get_gmail_service, '_api_disabled_warned'):
+                print("⚠️ Gmail API is not enabled or access is forbidden. Skipping Gmail context.")
+                get_gmail_service._api_disabled_warned = True
+        else:
+            print(f'An error occurred: {error}')
         return []
 
 def load_filters():

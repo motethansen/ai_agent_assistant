@@ -16,5 +16,8 @@ pyobjc-framework-EventKit
 # RAG & Contextual Intelligence
 chromadb
 sentence-transformers
+PyPDF2
+EbookLib
+beautifulsoup4
 
 

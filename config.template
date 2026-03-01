@@ -36,6 +36,7 @@ APPLE_REMINDERS_LIST=Reminders
 # Example (Linux): /home/yourname/Notes
 WORKSPACE_DIR=/path/to/your/markdown/notes
 LOGSEQ_DIR=/path/to/your/logseq/graph
+BOOKS_DIR=/path/to/your/books/folder
 
 DEBOUNCE_SECONDS=5
 

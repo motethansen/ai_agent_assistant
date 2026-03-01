@@ -17,6 +17,7 @@ VALID_CATEGORIES = [
 
 import requests
 from rag_agent import RAGAgent
+from book_agent import BookAgent
 
 # Default model settings (can be overridden by .config)
 MODELS_ENABLED = {
@@ -94,7 +95,8 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
 
     if model_to_use == "ollama":
         print("Using local Ollama for scheduling...")
-        prompt = f"Schedule these tasks: {json.dumps(tasks)} avoiding these busy slots: {json.dumps(busy_slots)}. Return JSON."
+        current_time = datetime.datetime.now().astimezone().isoformat()
+        prompt = f"Current Time: {current_time}. Schedule these tasks: {json.dumps(tasks)} avoiding these busy slots: {json.dumps(busy_slots)}. Return JSON with 'schedule' array containing 'task', 'start' (ISO8601 with timezone), and 'end' (ISO8601 with timezone)."
         if rag_context:
             prompt += f"\n\nContext for tasks: {rag_context}"
         response_text = ollama_generate(prompt)
@@ -112,7 +114,7 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
 
     try:
         client = genai.Client(api_key=api_key)
-        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        current_time = datetime.datetime.now().astimezone().isoformat()
         
         # --- User Preference Integration ---
         # Fetch preferences from .config (helper imports or local)
@@ -149,17 +151,22 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
         CAPABILITIES:
         1. SCHEDULING: Fit tasks into free slots according to the Productivity Profile.
         2. FILE SYSTEM: You have DIRECT access to create folders and files in the user's Obsidian vault.
+        3. BOOK ANALYSIS: You can analyze books in the library. 
+           - To read first pages: {{"type": "read_book", "path": "path"}}.
+           - To SEARCH deep into all indexed books: {{"type": "search_books", "query": "your query"}}.
+           - To INDEX a book for deep search (if not already indexed): {{"type": "index_book", "path": "path"}}.
         
         GOAL:
         - MANDATORY: Include 30-60m for 'exercise' and 30m for 'rest'.
         - ACTION PROPOSALS: If the user asks to "add", "create", "migrate", or "save" something to Obsidian, YOU MUST use the "actions" field.
-        - NO COPY-PASTE: Never ask the user to copy and paste text. Instead, propose a "write_file" action to do it for them.
+        - DEEP RESEARCH: If a user asks for specific details from a large book, first check if it is indexed in 'books_library'. If not, propose "index_book". If indexed, use "search_books".
 
         
         OUTPUT FORMAT:
         Return a JSON object with:
         - "response": A brief text message to the user.
         - "schedule": Array of {{"task": str, "category": str, "start": ISO8601, "end": ISO8601}}
+          IMPORTANT: Use ISO8601 format WITH timezone offset (e.g., "2026-03-01T09:00:00-07:00") for all start and end times.
         - "suggestions": Array of {{"task": str, "suggested_category": str, "reason": str}}
         - "actions": Array of {{"type": "create_folder"|"write_file", "path": str, "content": str (optional), "reason": str}}
         

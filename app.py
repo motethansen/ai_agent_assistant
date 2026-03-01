@@ -37,7 +37,7 @@ st.markdown("""
     .status-active { color: #2ecc71; font-weight: bold; }
     .status-inactive { color: #e74c3c; font-weight: bold; }
     </style>
-    """, unsafe_allow_name_is_present=True)
+    """, unsafe_allow_html=True)
 
 # --- State Management ---
 if 'backlog' not in st.session_state:
@@ -46,6 +46,8 @@ if 'suggested_schedule' not in st.session_state:
     st.session_state.suggested_schedule = []
 if 'selected_tasks' not in st.session_state:
     st.session_state.selected_tasks = []
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
 
 # --- Sidebar: System Health & Settings ---
 with st.sidebar:
@@ -141,7 +143,7 @@ with left_col:
         st.session_state.selected_tasks = st.multiselect("Select tasks to schedule specifically:", task_names)
         
         df_backlog = pd.DataFrame(st.session_state.backlog)
-        st.dataframe(df_backlog[["source", "category", "task", "due_date"]], use_container_width=True, hide_index=True)
+        st.dataframe(df_backlog[["source", "category", "task", "due_date"]], width="stretch", hide_index=True)
     else:
         st.info("Backlog is empty.")
 
@@ -172,7 +174,7 @@ with right_col:
             df_sched['start_display'] = df_sched['start'].apply(lambda x: x.split('T')[1][:5])
             df_sched['end_display'] = df_sched['end'].apply(lambda x: x.split('T')[1][:5])
             
-            edited_df = st.data_editor(df_sched[["start_display", "end_display", "task", "category"]], use_container_width=True)
+            edited_df = st.data_editor(df_sched[["start_display", "end_display", "task", "category"]], width="stretch")
             
             if st.button("🚀 Push to Calendar"):
                 # (Logic to convert edited_df back to ISO if user changed times would go here)
@@ -193,6 +195,112 @@ with right_col:
                     st.success(f"**{time_range}**: {m['task']}")
             else:
                 st.write("No AI events today.")
+
+st.divider()
+
+# --- Chat Interface ---
+st.header("🤖 AI Agent Chat")
+chat_container = st.container(height=300)
+
+with chat_container:
+    for message in st.session_state.chat_history:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+if prompt := st.chat_input("Ask me about your emails, calendar, or books..."):
+    # Display user message
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    st.session_state.chat_history.append({"role": "user", "content": prompt})
+
+    # Get AI response
+    with st.chat_message("assistant"):
+        with st.spinner("Consulting agents..."):
+            try:
+                import gmail_agent
+                from book_agent import BookAgent
+                
+                # Gather context
+                service = calendar_manager.get_calendar_service()
+                busy_slots = calendar_manager.get_busy_slots(service, calendar_id=cal_id)
+                backlog = get_unified_tasks(obsidian_file)
+                
+                gmail_service = gmail_agent.get_gmail_service()
+                snoozed = []
+                filtered = []
+                if gmail_service:
+                    snoozed = gmail_agent.get_snoozed_emails(gmail_service)
+                    filters = gmail_agent.load_filters()
+                    if filters:
+                        filtered = gmail_agent.get_filtered_emails(gmail_service, filters)
+                
+                book_agent = BookAgent()
+                books_summary = book_agent.get_summary()
+
+                context_payload = {
+                    "backlog": backlog,
+                    "calendar_busy_slots": busy_slots,
+                    "gmail_snoozed": snoozed,
+                    "gmail_filtered": filtered,
+                    "books_library": books_summary,
+                    "current_time": datetime.datetime.now().astimezone().isoformat()
+                }
+
+                ai_prompt = f"User Question: '{prompt}'. Context: {json.dumps(context_payload)}. Provide a helpful answer."
+                model_to_use = ai_orchestration.get_routing("chat")
+                
+                if model_to_use == "ollama":
+                    response_text = ai_orchestration.ollama_generate(ai_prompt)
+                else:
+                    import google.genai as genai
+                    client = genai.Client(api_key=ai_orchestration.api_key)
+                    response = client.models.generate_content(
+                        model='gemini-flash-latest',
+                        contents=ai_prompt
+                    )
+                    response_text = response.text
+
+                # Try to extract JSON for actions (like read_book)
+                try:
+                    start_idx = response_text.find('{')
+                    end_idx = response_text.rfind('}')
+                    if start_idx != -1 and end_idx != -1:
+                        data = json.loads(response_text[start_idx:end_idx+1])
+                        if "response" in data:
+                            st.markdown(data["response"])
+                            response_text = data["response"]
+                        
+                        if "actions" in data:
+                            for action in data["actions"]:
+                                if action["type"] == "read_book":
+                                    with st.status(f"Reading {os.path.basename(action['path'])}..."):
+                                        content = book_agent.read_book_content(action["path"])
+                                        st.write(f"**Findings from {os.path.basename(action['path'])}:**")
+                                        st.info(content)
+                                        # Provide a clickable link (local file link might be blocked by browser, so we show the path clearly)
+                                        st.code(f"File Path: {action['path']}")
+                                        # Append to response text for history
+                                        response_text += f"\n\nFindings: {content}\nPath: {action['path']}"
+                                elif action["type"] == "index_book":
+                                    with st.status(f"Indexing {os.path.basename(action['path'])}..."):
+                                        msg = book_agent.index_book(action["path"])
+                                        st.success(msg)
+                                        response_text += f"\n\nSystem: {msg}"
+                                elif action["type"] == "search_books":
+                                    with st.status(f"Searching library for '{action['query']}'..."):
+                                        results = book_agent.search_books(action["query"])
+                                        st.markdown(results)
+                                        response_text += f"\n\nSearch Results: {results}"
+                        else:
+                            st.markdown(response_text)
+                    else:
+                        st.markdown(response_text)
+                except:
+                    st.markdown(response_text)
+
+                st.session_state.chat_history.append({"role": "assistant", "content": response_text})
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 st.divider()
 st.caption(f"AI Agent Assistant v1.1 | Mission Control")
