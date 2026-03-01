@@ -17,6 +17,17 @@ start_ollama() {
             echo -e "${RED}Failed to start Ollama. Please start it manually.${NC}"
         fi
     fi
+
+    # Check for configured model
+    MODEL=$(grep "OLLAMA_MODEL=" .config | cut -d'=' -f2 | tr -d '\r')
+    if [ -z "$MODEL" ]; then MODEL="llama3"; fi
+    
+    if ! ollama list | grep -q "$MODEL"; then
+        echo -e "${YELLOW}Model '$MODEL' not found. Pulling now (this may take a few minutes)...${NC}"
+        ollama pull "$MODEL"
+    else
+        echo -e "${GREEN}Model '$MODEL' is ready.${NC}"
+    fi
 }
 check_services() {
     if pgrep -x "ollama" > /dev/null; then
