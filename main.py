@@ -13,8 +13,10 @@ from book_agent import BookAgent
 from travel_agent import TravelAgent
 from observer import parse_markdown_tasks, parse_logseq_tasks
 from reminders_manager import get_apple_reminders
-
 from config_utils import get_config_value
+from monitoring_agent import MonitoringAgent
+from calendar_agent import CalendarAgent, start_background_calendar_sync
+from planning_agent import PlanningAgent
 
 def get_unified_tasks(obsidian_path):
     """
@@ -118,8 +120,9 @@ class TaskSyncHandler(PatternMatchingEventHandler):
         # 2. Get Calendar context
         calendar_id = get_config_value("CALENDAR_ID", "primary")
         service = calendar_manager.get_calendar_service()
-        # Fetch busy slots from BOTH primary and AI calendar
-        busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", calendar_id])
+        # Fetch busy slots from YAML cache
+        calendar_agent = CalendarAgent()
+        busy_slots = calendar_agent.get_busy_slots_from_yml()
         
         # 3. AI Orchestration
         print("Consulting the AI scheduler...")
@@ -133,11 +136,9 @@ class TaskSyncHandler(PatternMatchingEventHandler):
         )
         
         if schedule:
-            # 4. Sync back to Google Calendar
-            calendar_manager.create_events(service, schedule, calendar_id=calendar_id)
-            
-            # 5. Write back to Markdown
-            update_markdown_plan(event.src_path, schedule)
+            # 4. Sync back to Google Calendar and Obsidian via Planning Agent
+            planning_agent = PlanningAgent(service, calendar_id)
+            planning_agent.execute_plan(schedule, event.src_path)
             print("--- Sync Complete ---\n")
         else:
             print("Failed to generate schedule from AI.")
@@ -252,7 +253,8 @@ def handle_morning_planning(obsidian_path):
     tasks = get_unified_tasks(obsidian_path)
     calendar_id = get_config_value("CALENDAR_ID", "primary")
     service = calendar_manager.get_calendar_service()
-    busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", calendar_id])
+    calendar_agent = CalendarAgent()
+    busy_slots = calendar_agent.get_busy_slots_from_yml()
     
     print("AI is processing your backlog for today...")
     logseq_path = get_config_value("LOGSEQ_DIR", None)
@@ -280,8 +282,8 @@ def handle_morning_planning(obsidian_path):
             
             confirm = input("\nAdd these items to your calendar? (y/n/skip): ").strip().lower()
             if confirm == 'y':
-                calendar_manager.create_events(service, schedule, calendar_id=calendar_id)
-                update_markdown_plan(obsidian_path, schedule)
+                planning_agent = PlanningAgent(service, calendar_id)
+                planning_agent.execute_plan(schedule, obsidian_path)
             else:
                 print("Skipped calendar sync.")
     else:
@@ -424,7 +426,8 @@ def handle_chat_mode(obsidian_path):
                     if not service:
                         print("❌ Calendar service not available. Check credentials.")
                         continue
-                    busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", calendar_id])
+                    calendar_agent = CalendarAgent()
+                    busy_slots = calendar_agent.get_busy_slots_from_yml()
                     logseq_path = get_config_value("LOGSEQ_DIR", None)
                     schedule = ai_orchestration.generate_schedule(
                         tasks, 
@@ -432,10 +435,10 @@ def handle_chat_mode(obsidian_path):
                         workspace_dir=obsidian_path, 
                         logseq_dir=logseq_path
                     )
-                    if schedule:
-                        calendar_manager.create_events(service, schedule, calendar_id=calendar_id)
-                        update_markdown_plan(obsidian_path, schedule)
-                        print("Sync complete.")
+                    if confirm == 'y':
+                        planning_agent = PlanningAgent(service, calendar_id)
+                        planning_agent.execute_plan(schedule, obsidian_path)
+                        print("✅ Scheduled!")
                     else:
                         print("Failed to generate schedule.")
                 elif command == "pull":
@@ -602,7 +605,8 @@ def handle_chat_mode(obsidian_path):
                         print("⚠️ AI: I cannot access your calendar. Please check 'token.json' and 'credentials.json'.")
                         continue
 
-                    busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", calendar_id])
+                    calendar_agent = CalendarAgent()
+                    busy_slots = calendar_agent.get_busy_slots_from_yml()
                     
                     # Get Gmail context
                     gmail_service = gmail_agent.get_gmail_service()
@@ -684,7 +688,8 @@ def handle_chat_mode(obsidian_path):
                                         print(f"📅 AI is proposing to book {len(data['schedule'])} event(s) to your calendar.")
                                         confirm = input("Book these events? (y/n): ").strip().lower()
                                         if confirm == 'y':
-                                            calendar_manager.create_events(service, data["schedule"], calendar_id=calendar_id)
+                                            planning_agent = PlanningAgent(service, calendar_id)
+                                            planning_agent.execute_plan(data["schedule"], obsidian_path)
                                     
                                     # Process Actions (File System, etc.)
                                     if "actions" in data:
@@ -764,6 +769,9 @@ if __name__ == "__main__":
                 print(f"Monitoring LogSeq journals: {os.path.abspath(journals_path)}")
 
         print(f"🚀 AI Agent Assistant is active and monitoring for changes...")
+        # Start calendar background sync
+        start_background_calendar_sync()
+        
         observer.start()
         try:
             while True:

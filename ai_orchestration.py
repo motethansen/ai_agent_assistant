@@ -21,7 +21,9 @@ from travel_agent import TravelAgent
 
 # Load model activation from .config
 MODELS_ENABLED = {
-    "gemini": get_config_value("ENABLE_GEMINI", "true").lower() == "true",
+    "gemini": get_config_value("ENABLE_GEMINI", "false").lower() == "true",
+    "openai": get_config_value("ENABLE_OPENAI", "false").lower() == "true",
+    "claude": get_config_value("ENABLE_CLAUDE", "false").lower() == "true",
     "ollama": get_config_value("ENABLE_OLLAMA", "true").lower() == "true",
     "openclaw": get_config_value("ENABLE_OPENCLAW", "true").lower() == "true"
 }
@@ -40,7 +42,7 @@ def get_routing(task_type="scheduling"):
     """
     # 1. Get requested model for this task type from config
     config_key = f"ROUTING_{task_type.upper()}"
-    requested_model = get_config_value(config_key, "gemini").lower()
+    requested_model = get_config_value(config_key, "openclaw").lower()
     
     # 2. Check if requested model is enabled and available
     if requested_model == "gemini" and MODELS_ENABLED["gemini"] and api_key and "your_gemini_api_key" not in api_key:
@@ -48,18 +50,13 @@ def get_routing(task_type="scheduling"):
     
     if requested_model == "ollama" and MODELS_ENABLED["ollama"] and is_ollama_running():
         return "ollama"
+
+    if requested_model == "openclaw" and MODELS_ENABLED["openclaw"]:
+        return "openclaw"
         
     # 3. FALLBACK LOGIC
-    # If requested was ollama but it's down, try Gemini
-    if requested_model == "ollama" and MODELS_ENABLED["gemini"] and api_key and "your_gemini_api_key" not in api_key:
-        print(f"⚠️ Warning: Ollama is requested for {task_type} but not running. Falling back to Gemini.")
-        return "gemini"
-        
-    # If requested was gemini but it's disabled/missing key, try Ollama
-    if requested_model == "gemini" and MODELS_ENABLED["ollama"] and is_ollama_running():
+    if is_ollama_running():
         return "ollama"
-        
-    # Last resort
     if MODELS_ENABLED["openclaw"]:
         return "openclaw"
         

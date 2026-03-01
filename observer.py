@@ -55,8 +55,7 @@ def parse_markdown_tasks(file_path):
 def parse_logseq_tasks(file_path):
     """
     Parses a LogSeq markdown file to extract tasks.
-    LogSeq often uses TODO/LATER and the structure: - TODO Task Description
-    Or even: - -[ ] Task Description
+    User specifies: "I will mark tasks with LATER on each line to identify a task."
     """
     tasks = []
     try:
@@ -65,9 +64,8 @@ def parse_logseq_tasks(file_path):
             
         with open(file_path, 'r') as f:
             for line in f:
-                # Support both LogSeq-style TODO/LATER and checkboxes
-                # Check for: - TODO, - LATER, - NOW, - DOING, - WAITING, - [ ], - -[ ]
-                match = re.search(r"^\s*-\s+(?:TODO|LATER|NOW|DOING|WAITING|(?:\s*-\s*|)\s*\[ \])\s+(.*)", line)
+                # Support LogSeq-style LATER and checkboxes
+                match = re.search(r"^\s*-\s+LATER\s+(.*)", line)
                 if match:
                     raw_task = match.group(1).strip()
                     # Clean up LogSeq properties if they exist on the same line (unlikely but safe)

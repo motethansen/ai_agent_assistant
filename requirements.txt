@@ -19,5 +19,7 @@ sentence-transformers
 PyPDF2
 EbookLib
 beautifulsoup4
+pyyaml
+
 
 

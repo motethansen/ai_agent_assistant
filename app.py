@@ -7,6 +7,8 @@ import ai_orchestration
 import pandas as pd
 from main import get_unified_tasks, update_markdown_plan, sync_calendar_to_markdown
 from config_utils import get_config_value
+from calendar_agent import CalendarAgent
+from planning_agent import PlanningAgent
 
 # Load HF_TOKEN into environment if present
 get_config_value("HF_TOKEN", None)
@@ -115,11 +117,12 @@ with col_h2:
         with st.spinner("Syncing..."):
             tasks = get_unified_tasks(obsidian_file)
             service = calendar_manager.get_calendar_service()
-            busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", cal_id])
+            calendar_agent = CalendarAgent()
+            busy_slots = calendar_agent.get_busy_slots_from_yml()
             result = ai_orchestration.generate_schedule(tasks, busy_slots, workspace_dir=obsidian_file, logseq_dir=logseq_dir)
             if result and "schedule" in result:
-                calendar_manager.create_events(service, result["schedule"], calendar_id=cal_id)
-                update_markdown_plan(obsidian_file, result["schedule"])
+                planning_agent = PlanningAgent(service, cal_id)
+                planning_agent.execute_plan(result["schedule"], obsidian_file)
                 st.success("Sync complete!")
                 st.rerun()
 
@@ -182,7 +185,8 @@ with right_col:
                     tasks_to_send = [t for t in st.session_state.backlog if t['task'] in selected_names]
                 
                 service = calendar_manager.get_calendar_service()
-                busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", cal_id])
+                calendar_agent = CalendarAgent()
+                busy_slots = calendar_agent.get_busy_slots_from_yml()
                 result = ai_orchestration.generate_schedule(tasks_to_send, busy_slots, morning_mode=True, workspace_dir=obsidian_file, logseq_dir=logseq_dir)
                 if result:
                     st.session_state.suggested_schedule = result.get("schedule", [])
@@ -195,14 +199,14 @@ with right_col:
             df_sched['end_display'] = df_sched['end'].apply(lambda x: x.split('T')[1][:5])
             
             edited_df = st.data_editor(df_sched[["start_display", "end_display", "task", "category"]], width="stretch")
-            
             if st.button("🚀 Push to Calendar"):
-                # (Logic to convert edited_df back to ISO if user changed times would go here)
                 # For now, we push the original suggestion
                 service = calendar_manager.get_calendar_service()
-                calendar_manager.create_events(service, st.session_state.suggested_schedule, calendar_id=cal_id)
-                update_markdown_plan(obsidian_file, st.session_state.suggested_schedule)
-                st.success("Synced!")
+                if service:
+                    planning_agent = PlanningAgent(service, cal_id)
+                    planning_agent.execute_plan(st.session_state.suggested_schedule, obsidian_file)
+                    st.success("Plan pushed to calendar and markdown!")
+
                 st.session_state.suggested_schedule = []
 
     with tab2:
@@ -243,7 +247,8 @@ if prompt := st.chat_input("Ask me about your emails, calendar, or books..."):
                 
                 # Gather context
                 service = calendar_manager.get_calendar_service()
-                busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", cal_id])
+                calendar_agent = CalendarAgent()
+                busy_slots = calendar_agent.get_busy_slots_from_yml()
                 backlog = get_unified_tasks(obsidian_file)
                 
                 gmail_service = gmail_agent.get_gmail_service()
@@ -319,10 +324,9 @@ if prompt := st.chat_input("Ask me about your emails, calendar, or books..."):
                                 if st.button("✅ Confirm Booking"):
                                     with st.spinner("Booking..."):
                                         service = calendar_manager.get_calendar_service()
-                                        calendar_manager.create_events(service, data["schedule"], calendar_id=cal_id)
+                                        planning_agent = PlanningAgent(service, cal_id)
+                                        planning_agent.execute_plan(data["schedule"], obsidian_file)
                                         st.success("Events booked!")
-                                        # Also sync to markdown
-                                        update_markdown_plan(obsidian_file, data["schedule"])
                                         response_text += f"\n\n(Booked: {len(data['schedule'])} events)"
 
                         if "actions" in data:
