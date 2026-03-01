@@ -71,5 +71,13 @@ def run_sync():
     else:
         print("Failed to generate schedule.")
 
+    # 8. Run Update and Health Checks
+    print("Running system update and health checks...")
+    try:
+        import update_manager
+        update_manager.run_all_checks()
+    except Exception as e:
+        print(f"Error running health checks: {e}")
+
 if __name__ == "__main__":
     run_sync()

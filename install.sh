@@ -23,9 +23,40 @@ echo ""
 OS_TYPE=$(uname -s)
 echo -e "Detected Operating System: ${GREEN}$OS_TYPE${NC}"
 
+# Progress Tracking
+TOTAL_STEPS=6
+CURRENT_STEP=0
+
+show_progress() {
+    CURRENT_STEP=$((CURRENT_STEP + 1))
+    PERCENT=$((CURRENT_STEP * 100 / TOTAL_STEPS))
+    echo -e "${YELLOW}[Step $CURRENT_STEP/$TOTAL_STEPS - $PERCENT%] $1${NC}"
+}
+
+# 0. Upgrade Check
+check_upgrade() {
+    show_progress "Checking for updates..."
+    if [ -d ".git" ]; then
+        echo -e "${BLUE}Git repository detected. Checking for remote updates...${NC}"
+        git fetch origin --quiet
+        LOCAL=$(git rev-parse HEAD)
+        REMOTE=$(git rev-parse @{u})
+        if [ "$LOCAL" != "$REMOTE" ]; then
+            echo -e "${YELLOW}New updates available!${NC}"
+            read -p "Would you like to upgrade to the latest version? (y/n): " do_upgrade
+            if [[ "$do_upgrade" == "y"* ]]; then
+                git pull origin main --quiet
+                echo -e "${GREEN}Project updated successfully.${NC}"
+            fi
+        else
+            echo -e "${GREEN}Project is already up to date.${NC}"
+        fi
+    fi
+}
+
 # 1. Dependency Checks & Auto-Installation
 check_dependencies() {
-    echo -e "${BLUE}[1/5] Checking System Dependencies...${NC}"
+    show_progress "Checking System Dependencies..."
     
     # Try to find an existing Python 3.11+
     PYTHON_CMD=""
@@ -83,7 +114,7 @@ check_dependencies() {
 
 # 2. Virtual Environment & Requirements
 setup_python_env() {
-    echo -e "\n${BLUE}[2/5] Setting up Python Environment...${NC}"
+    show_progress "Setting up Python Environment..."
     if [ ! -d ".venv" ]; then
         echo "Creating virtual environment using $FINAL_PYTHON..."
         $FINAL_PYTHON -m venv .venv
@@ -106,7 +137,7 @@ setup_python_env() {
 
 # 3. Ollama Installation (Local AI)
 setup_ollama() {
-    echo -e "\n${BLUE}[3/5] Checking Local AI (Ollama)...${NC}"
+    show_progress "Checking Local AI (Ollama)..."
     if ! command -v ollama &> /dev/null; then
         echo "Ollama not found. It allows you to run AI models privately on your machine."
         read -p "Would you like to install Ollama now? (y/n): " install_ollama
@@ -129,7 +160,7 @@ setup_ollama() {
 
 # 4. Configuration (Web Wizard or CLI)
 setup_configuration() {
-    echo -e "\n${BLUE}[4/5] System Configuration...${NC}"
+    show_progress "System Configuration..."
     
     if [ ! -f ".config" ]; then
         echo "I will now help you configure your API keys and folder paths."
@@ -154,8 +185,21 @@ setup_configuration() {
 
 # 5. Background Automation (Cron)
 setup_automation() {
-    echo -e "\n${BLUE}[5/5] Automation (Optional)...${NC}"
-    if ! crontab -l 2>/dev/null | grep -q "cron_job.py"; then
+    show_progress "Automation & Cron Job Setup..."
+    EXISTING_CRON=$(crontab -l 2>/dev/null | grep "cron_job.py" || true)
+    
+    if [ -n "$EXISTING_CRON" ]; then
+        echo -e "${YELLOW}An existing cron job for this project was found:${NC}"
+        echo -e "${BLUE}$EXISTING_CRON${NC}"
+        read -p "Is this cron job still okay? (y/n): " cron_ok
+        if [[ "$cron_ok" != "y"* ]]; then
+            echo "Removing old cron job..."
+            crontab -l | grep -v "cron_job.py" | crontab -
+            EXISTING_CRON=""
+        fi
+    fi
+
+    if [ -z "$EXISTING_CRON" ]; then
         echo "I can set up a 'Cron Job' to automatically sync your tasks every hour."
         read -p "Enable hourly background sync? (y/n): " enable_cron
         if [[ "$enable_cron" == "y"* ]]; then
@@ -170,6 +214,17 @@ setup_automation() {
 }
 
 # Main Execution
+if [[ "$1" == "upgrade" ]]; then
+    check_upgrade
+    setup_python_env
+    echo -e "${GREEN}Upgrade complete.${NC}"
+    exit 0
+elif [[ "$1" == "cron" ]]; then
+    setup_automation
+    exit 0
+fi
+
+check_upgrade
 check_dependencies
 setup_python_env
 setup_ollama

@@ -67,6 +67,36 @@ with st.sidebar:
     cal_id = get_config_value("CALENDAR_ID", "primary")
     st.write(f"Gemini AI: {gemini_ok}")
     st.write(f"Google Calendar: ✅ ({cal_id})")
+
+    # --- System Health & Updates ---
+    if os.path.exists("logs/system_status.json"):
+        with open("logs/system_status.json", "r") as f:
+            status = json.load(f)
+            
+        st.divider()
+        st.subheader("🖥️ System Health")
+        
+        # Git Updates
+        git_stat = status.get("git", {})
+        if git_stat.get("status") == "update_available":
+            st.warning("🆕 Update Available!")
+            if st.button("Update Now"):
+                with st.spinner("Updating..."):
+                    os.system("git pull origin main")
+                    st.success("Updated! Please restart.")
+        elif git_stat.get("status") == "up_to_date":
+            st.write("Git: ✅ Up to date")
+        else:
+            st.write(f"Git: ⚠️ {git_stat.get('message', 'Unknown')}")
+
+        # Ollama
+        ollama_stat = status.get("ollama", {})
+        if ollama_stat.get("status") == "ok":
+            st.write("Ollama: ✅ Running")
+        else:
+            st.error("Ollama: ❌ Offline")
+
+        st.caption(f"Last checked: {status.get('last_check', 'Never')[:16].replace('T', ' ')}")
     
     st.divider()
     st.subheader("⚡ Productivity Profile")
