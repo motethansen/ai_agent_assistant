@@ -38,26 +38,47 @@ def is_ollama_running():
 
 def get_routing(task_type="scheduling"):
     """
-    Determines which model should handle the given task type based on config and availability.
+    Determines the best available model based on user priority and health.
     """
+    # 1. Check for an explicit override for this specific task
     config_key = f"ROUTING_{task_type.upper()}"
-    requested_model = get_config_value(config_key, "openclaw").lower()
+    explicit_model = get_config_value(config_key, None)
     
-    if requested_model == "gemini" and MODELS_ENABLED["gemini"] and api_key and "your_gemini_api_key" not in api_key:
-        return "gemini"
+    # 2. Get the global priority list
+    priority_str = get_config_value("LLM_PRIORITY", "ollama,openclaw,gemini")
+    priority_list = [m.strip().lower() for m in priority_str.split(",")]
     
-    if requested_model == "ollama" and MODELS_ENABLED["ollama"] and is_ollama_running():
-        return "ollama"
+    # If there's an explicit override, put it at the front of the line
+    if explicit_model:
+        priority_list = [explicit_model.lower()] + [m for m in priority_list if m != explicit_model.lower()]
 
-    if requested_model == "openclaw" and MODELS_ENABLED["openclaw"]:
-        return "openclaw"
+    # 3. Iterate through models in priority order and return the first one that is "Ready"
+    for model in priority_list:
+        if model == "gemini":
+            if MODELS_ENABLED["gemini"] and api_key and "your_gemini_api_key" not in api_key:
+                return "gemini"
         
+        elif model == "ollama":
+            if MODELS_ENABLED["ollama"] and is_ollama_running():
+                return "ollama"
+        
+        elif model == "openclaw":
+            if MODELS_ENABLED["openclaw"]:
+                # We assume OpenClaw is ready if enabled, as it's an API
+                return "openclaw"
+
+        elif model == "openai":
+            if MODELS_ENABLED.get("openai") and get_config_value("OPENAI_API_KEY", None):
+                return "openai"
+
+        elif model == "claude":
+            if MODELS_ENABLED.get("claude") and get_config_value("CLAUDE_API_KEY", None):
+                return "claude"
+
+    # 4. Absolute Final Fallback
     if is_ollama_running():
         return "ollama"
-    if MODELS_ENABLED["openclaw"]:
-        return "openclaw"
-        
-    return "gemini"
+    return "openclaw" # Assumed available as an API
 
 def ollama_generate(prompt, model="llama3"):
     """
