@@ -21,6 +21,7 @@ graph TD
         AIOrcAgent["AI Orchestrator (Gemini/Ollama)"]
         FSAgent["File System Agent"]
         BookAgent["Book Agent (RAG)"]
+        TravelAgent["Travel Agent (Search)"]
         GmailAgent["Gmail Agent"]
         RAGAgent["Notes RAG Agent"]
     end
@@ -46,6 +47,7 @@ graph TD
     CalendarAgent -->|Busy Slots| AIOrcAgent
     GmailAgent -->|Snoozed/Filtered| AIOrcAgent
     BookAgent -->|Deep Search/Extracts| AIOrcAgent
+    TravelAgent -->|Flight/Holiday Research| AIOrcAgent
     RAGAgent -->|Notes Context| AIOrcAgent
     
     %% Flow: AI Processing
@@ -100,6 +102,10 @@ Monitors snoozed and filtered emails to provide additional task context.
 ### 8. RAG Agent (The Context Retriever)
 Indexes and retrieves relevant snippets from local markdown notes to ground AI responses.
 - **Code Files:** `rag_agent.py`.
+
+### 9. Travel Agent (The Researcher)
+Uses Google Search grounding to find real-time flights, itineraries, and travel links.
+- **Code Files:** `travel_agent.py`.
 
 ---
 

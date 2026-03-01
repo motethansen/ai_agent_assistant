@@ -18,6 +18,7 @@ VALID_CATEGORIES = [
 import requests
 from rag_agent import RAGAgent
 from book_agent import BookAgent
+from travel_agent import TravelAgent
 
 # Default model settings (can be overridden by .config)
 MODELS_ENABLED = {
@@ -155,11 +156,14 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
            - To read first pages: {{"type": "read_book", "path": "path"}}.
            - To SEARCH deep into all indexed books: {{"type": "search_books", "query": "your query"}}.
            - To INDEX a book for deep search (if not already indexed): {{"type": "index_book", "path": "path"}}.
+        4. TRAVEL PLANNING: You can browse the internet for flights, holiday plans, and travel details.
+           - To plan travel: {{"type": "plan_travel", "query": "your travel query"}}.
         
         GOAL:
         - MANDATORY: Include 30-60m for 'exercise' and 30m for 'rest'.
         - ACTION PROPOSALS: If the user asks to "add", "create", "migrate", or "save" something to Obsidian, YOU MUST use the "actions" field.
         - DEEP RESEARCH: If a user asks for specific details from a large book, first check if it is indexed in 'books_library'. If not, propose "index_book". If indexed, use "search_books".
+        - TRAVEL RESEARCH: If a user asks about flights or holiday plans, use the "plan_travel" action.
 
         
         OUTPUT FORMAT:

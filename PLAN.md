@@ -111,6 +111,13 @@
 - [x] Provide clickable (path-based) links to books within the AI's response.
 - [x] Integrate book-level context into both the CLI chat and Streamlit UI.
 
+### Phase 17: Travel Planning Agent
+- [x] Implement a `TravelAgent` that utilizes Gemini's Google Search grounding.
+- [x] Enable real-time search for flights, connecting flights, and holiday itineraries.
+- [x] Provide direct URLs to booking sites for user reference.
+- [x] Integrate travel planning into the AI Orchestrator as a tool-based action.
+- [x] Support travel research in both CLI and Streamlit Mission Control.
+
 ## Summary of Planned Development
 The system will act as a bridge between your local knowledge base and your schedule. 
 1. **Watchdog** will monitor your markdown files for changes. 

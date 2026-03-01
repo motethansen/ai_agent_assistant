@@ -19,6 +19,7 @@ This project is an automated "AI Assistant" that synchronizes tasks from local M
     - **RAG Agent (`rag_agent.py`)**: Retrieves context from local markdown notes.
     - **Gmail Agent (`gmail_agent.py`)**: Monitors snoozed and filtered emails.
     - **Book Agent (`book_agent.py`)**: Manages and deep-searches local book libraries (PDF/EPUB).
+    - **Travel Agent (`travel_agent.py`)**: Researches flights and holiday plans via Google Search grounding.
     - **File System Agent (`file_system_agent.py`)**: Safely performs I/O operations.
 4. **Calendar Manager (`calendar_manager.py`)**: Fetches appointments to identify "Busy" blocks and syncs AI-generated schedules.
 5. **Sync Engine (`main.py` & `cron_job.py`)**: 

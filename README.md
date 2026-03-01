@@ -9,6 +9,7 @@ An automated AI assistant that bridges local Markdown notes (Obsidian/Logseq) an
 - **File System Agency:** The AI can create folders, move files, and migrate tasks directly within your Obsidian vault (upon your confirmation).
 - **Multi-Source Backlog:** Unifies tasks from local `.md` files, LogSeq journals, and Apple Reminders into a single, deduplicated backlog.
 - **Gmail Integration:** Monitors snoozed and filtered emails to suggest follow-up tasks.
+- **Travel Planning:** Browse the internet for real-time flights, holiday plans, and itineraries using Google Search grounding.
 - **Multi-LLM Routing:** Toggle between Google Gemini (for complex reasoning) and Ollama (for local, private processing).
 - **Interactive CLI & Dashboard:** Manage everything via a chat-like terminal interface with `/` commands or a modern Streamlit web dashboard ("Mission Control").
 - **Modular & Extensible:** Scaffold your own custom agents with `/create-agent` and manage them in separate Git repositories.

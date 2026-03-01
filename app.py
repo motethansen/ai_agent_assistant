@@ -223,6 +223,7 @@ if prompt := st.chat_input("Ask me about your emails, calendar, or books..."):
             try:
                 import gmail_agent
                 from book_agent import BookAgent
+                from travel_agent import TravelAgent
                 
                 # Gather context
                 service = calendar_manager.get_calendar_service()
@@ -295,6 +296,12 @@ if prompt := st.chat_input("Ask me about your emails, calendar, or books..."):
                                         results = book_agent.search_books(action["query"])
                                         st.markdown(results)
                                         response_text += f"\n\nSearch Results: {results}"
+                                elif action["type"] == "plan_travel":
+                                    with st.status(f"Searching flights and travel for '{action['query']}'..."):
+                                        travel_agent = TravelAgent()
+                                        result = travel_agent.plan_travel(action["query"])
+                                        st.markdown(result)
+                                        response_text += f"\n\nTravel Plan: {result}"
                         else:
                             st.markdown(response_text)
                     else:

@@ -10,6 +10,7 @@ import calendar_manager
 import ai_orchestration
 import gmail_agent
 from book_agent import BookAgent
+from travel_agent import TravelAgent
 from observer import parse_markdown_tasks, parse_logseq_tasks
 from reminders_manager import get_apple_reminders
 
@@ -349,6 +350,10 @@ def execute_actions(actions):
                     agent = BookAgent()
                     results = agent.search_books(action['query'])
                     print(results)
+                elif action['type'] == "plan_travel":
+                    agent = TravelAgent()
+                    result = agent.plan_travel(action['query'])
+                    print(f"\n✈️ TRAVEL PLAN FOUND:\n{result}")
             except Exception as e:
                 print(f"❌ Error executing {action['type']}: {e}")
     else:
