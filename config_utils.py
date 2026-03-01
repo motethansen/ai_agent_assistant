@@ -6,5 +6,9 @@ def get_config_value(key, default):
         with open(".config", "r") as f:
             for line in f:
                 if f"{key}=" in line:
-                    return line.split("=")[1].strip()
+                    val = line.split("=")[1].strip()
+                    # Automatically set HF_TOKEN in environment for HuggingFace Hub
+                    if key == "HF_TOKEN" and val and "your_huggingface_token" not in val:
+                        os.environ["HF_TOKEN"] = val
+                    return val
     return default

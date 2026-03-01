@@ -26,6 +26,10 @@ OPENCLAW_ENDPOINT=https://api.openclaw.ai/v1
 OLLAMA_MODEL=llama3
 OLLAMA_HOST=http://localhost:11434
 
+# RAG & Book Agent Settings
+# HF_TOKEN: Hugging Face token for faster model downloads and higher rate limits.
+HF_TOKEN=your_huggingface_token_here
+
 # Apple Reminders Settings
 APPLE_REMINDERS_LIST=Reminders
 

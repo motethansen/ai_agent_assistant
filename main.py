@@ -685,6 +685,9 @@ def handle_chat_mode(obsidian_path):
 
 
 if __name__ == "__main__":
+    # Load HF_TOKEN into environment if present globally at startup
+    get_config_value("HF_TOKEN", None)
+    
     parser = argparse.ArgumentParser(description="AI Agent Assistant: Local Markdown-Calendar-AI Bridge")
     parser.add_argument("--docs", action="store_true", help="Display project documentation in terminal")
     parser.add_argument("--stats", action="store_true", help="Display statistics about models, configuration, and usage")

@@ -8,6 +8,9 @@ import pandas as pd
 from main import get_unified_tasks, update_markdown_plan, sync_calendar_to_markdown
 from config_utils import get_config_value
 
+# Load HF_TOKEN into environment if present
+get_config_value("HF_TOKEN", None)
+
 # --- Page Configuration ---
 st.set_page_config(
     page_title="AI Agent Assistant | Mission Control",
