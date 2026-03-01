@@ -5,6 +5,8 @@ An automated, multi-agent AI assistant that bridges local Markdown notes (Obsidi
 ## 🚀 Key Features
 
 - **Local-First AI:** Built-in support for **Ollama** and **OpenClaw** to keep your data on your machine.
+- **Bulk Task Management:** Select multiple tasks in the UI to batch-edit dates or re-categorize them.
+- **Custom AI Commands:** Give specific instructions to the AI for selected tasks (e.g., "move all dev tasks to next Tuesday").
 - **Intelligent Scheduling:** Automatically slots tasks from your notes into free gaps in your calendar.
 - **Real-Time Search:** Research flights, itineraries, and travel plans with the **Travel Agent**.
 - **Deep Research (RAG):** Index your entire note vault and book library (PDF/EPUB) for instant semantic search.
@@ -13,6 +15,7 @@ An automated, multi-agent AI assistant that bridges local Markdown notes (Obsidi
 - **Mission Control UI:** A modern Streamlit dashboard to manage your backlog, analytics, and chat history.
 
 ## 📈 Latest Updates (Progress Log)
+- **2026-03-01:** Added **Bulk Task Management** and **Custom AI Commands** to the Mission Control.
 - **2026-03-01:** Redesigned architecture to prioritize **Ollama/OpenClaw** with a **Monitoring Agent**.
 - **2026-03-01:** Implemented **Priority-Based LLM Routing** (Ollama > OpenClaw > Cloud).
 - **2026-03-01:** Added **Self-Repairing Installation** script with automatic model pulling.
