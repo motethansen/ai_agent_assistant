@@ -195,6 +195,54 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
         print(f"Raw response: {response_text[:200]}...")
         return None
 
+def suggest_task_organization(tasks):
+    """
+    Asks the AI to categorize a list of tasks and suggest optimal dates.
+    """
+    model_to_use = get_routing("scheduling")
+    current_time = datetime.datetime.now().astimezone().isoformat()
+    
+    prompt = f"""
+    Current Date: {current_time}
+    You are an expert productivity consultant. Organize the following tasks:
+    {json.dumps(tasks)}
+    
+    INSTRUCTIONS:
+    1. Categorize each task into one of these: {", ".join(VALID_CATEGORIES)}.
+    2. Suggest a 'target_date' (YYYY-MM-DD) for each task, distributing them logically across the next 7 days.
+    
+    OUTPUT FORMAT:
+    Return a JSON object with a "suggestions" array. Each item MUST have:
+    "task", "category", "target_date", "reason".
+    
+    Do not include any other text.
+    """
+    
+    response_text = ""
+    if model_to_use == "ollama":
+        response_text = ollama_generate(prompt)
+    elif model_to_use == "openclaw":
+        response_text = openclaw_generate(prompt)
+    else:
+        if not api_key or "your_gemini_api_key" in api_key:
+            response_text = ollama_generate(prompt)
+        else:
+            try:
+                client = genai.Client(api_key=api_key)
+                response = client.models.generate_content(model='gemini-flash-latest', contents=prompt)
+                response_text = response.text
+            except Exception:
+                response_text = ollama_generate(prompt)
+
+    try:
+        content = response_text.strip()
+        start_idx = content.find('{')
+        end_idx = content.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            return json.loads(content[start_idx:end_idx+1])
+    except:
+        return None
+
 if __name__ == "__main__":
     test_tasks = [{"task": "Review WineDragons wireframes", "source": "Obsidian"}]
     test_busy = []

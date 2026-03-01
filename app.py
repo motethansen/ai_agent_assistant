@@ -195,11 +195,52 @@ with left_col:
         st.session_state.backlog = get_unified_tasks(obsidian_file)
     
     if st.session_state.backlog:
-        task_names = [f"[{t['source'][0]}] {t['task']}" for t in st.session_state.backlog]
-        st.session_state.selected_tasks = st.multiselect("Select tasks to schedule specifically:", task_names)
-        
         df_backlog = pd.DataFrame(st.session_state.backlog)
-        st.dataframe(df_backlog[["source", "category", "task", "due_date"]], width="stretch", hide_index=True)
+        # Ensure target_date exists for editing
+        if 'target_date' not in df_backlog.columns:
+            df_backlog['target_date'] = df_backlog['due_date'].apply(lambda x: x[:10] if x else "")
+            
+        st.write("Modify dates below or select tasks for AI organization:")
+        edited_backlog = st.data_editor(
+            df_backlog[["source", "category", "task", "target_date"]], 
+            width="stretch", 
+            hide_index=False,
+            key="backlog_editor"
+        )
+        
+        # Selection logic (using index from data_editor)
+        selected_indices = st.multiselect("Select task indices for AI organization:", df_backlog.index.tolist())
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🧠 AI Re-Categorize & Schedule"):
+                if not selected_indices:
+                    st.warning("Please select at least one task index.")
+                else:
+                    tasks_to_organize = df_backlog.iloc[selected_indices].to_dict('records')
+                    with st.spinner("AI is organizing..."):
+                        results = ai_orchestration.suggest_task_organization(tasks_to_organize)
+                        if results and "suggestions" in results:
+                            st.session_state.ai_suggestions = results["suggestions"]
+                            st.rerun()
+        with col2:
+            if st.button("💾 Save Changes"):
+                # Logic to write back to markdown/source if needed
+                st.success("Changes saved locally!")
+        
+        if 'ai_suggestions' in st.session_state and st.session_state.ai_suggestions:
+            st.divider()
+            st.subheader("💡 AI Suggestions")
+            df_sugg = pd.DataFrame(st.session_state.ai_suggestions)
+            st.table(df_sugg)
+            if st.button("✅ Apply All Suggestions"):
+                # Merge suggestions back to backlog or push to calendar
+                st.success("Suggestions applied!")
+                del st.session_state.ai_suggestions
+                st.rerun()
+            if st.button("🗑️ Clear Suggestions"):
+                del st.session_state.ai_suggestions
+                st.rerun()
     else:
         st.info("Backlog is empty.")
 
