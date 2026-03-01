@@ -1,31 +1,28 @@
 # GEMINI.md: AI-Powered Markdown-Calendar-AI Bridge
 
 ## Project Overview
-This project is an automated "AI Assistant" that synchronizes tasks from local Markdown files (like Obsidian or Logseq) with a Google Calendar. It uses the Gemini AI model to intelligently schedule these tasks into the user's available free time slots.
+This project is an automated "AI Assistant" that synchronizes tasks from local Markdown files (Obsidian/Logseq) and Apple Reminders with a Google Calendar. It features a multi-agent architecture designed for privacy and performance, prioritizing local LLMs (Ollama/OpenClaw).
 
 ### Main Technologies
-- **Python 3**: Core programming language.
-- **Watchdog**: For real-time monitoring of Markdown file changes.
-- **Google Calendar API**: To read busy slots and create new events.
-- **Google GenAI SDK**: Interfaces with Gemini (specifically `gemini-flash-latest`) for scheduling and chat.
-- **Chromadb**: Local vector database for RAG-based context retrieval from notes and books.
-- **Streamlit**: Web-based "Mission Control" dashboard with interactive chat.
-- **Regex (re)**: For parsing and updating specific headers within Markdown files.
+- **Python 3.11+**: Core programming language.
+- **Watchdog**: Real-time monitoring of Markdown file changes.
+- **Google Calendar API**: Syncing schedules and events.
+- **Chromadb**: Local vector database for RAG-based context retrieval.
+- **Streamlit**: Web-based "Mission Control" dashboard.
+- **Local LLMs**: Ollama and OpenClaw for private task processing.
+- **Cloud LLMs**: Gemini, OpenAI, and Claude (Optional).
 
 ## Architecture
-1. **Observer Layer (`observer.py` & `main.py`)**: Listens for modifications to `.md` files in Obsidian vaults and LogSeq journals.
-2. **Parser (`observer.py`)**: Extracts tasks from a `## Tasks` section (Obsidian) or from LogSeq's block-based `TODO/LATER` structure.
-3. **Multi-Agent Orchestrator (`ai_orchestration.py`)**: Coordinates multiple specialized agents:
-    - **RAG Agent (`rag_agent.py`)**: Retrieves context from local markdown notes.
-    - **Gmail Agent (`gmail_agent.py`)**: Monitors snoozed and filtered emails.
-    - **Book Agent (`book_agent.py`)**: Manages and deep-searches local book libraries (PDF/EPUB).
-    - **Travel Agent (`travel_agent.py`)**: Researches flights and holiday plans via Google Search grounding.
-    - **File System Agent (`file_system_agent.py`)**: Safely performs I/O operations.
-4. **Calendar Manager (`calendar_manager.py`)**: Fetches appointments to identify "Busy" blocks and syncs AI-generated schedules.
-5. **Sync Engine (`main.py` & `cron_job.py`)**: 
-    - Pushes scheduled tasks to Google Calendar.
-    - Updates the Markdown file's `## Today's Plan` section.
-    - Manages the interactive CLI and Web UI chat loops.
+1. **Observer Layer (`observer.py`)**: Listens for modifications to Obsidian and LogSeq files. Specifically extracts LogSeq tasks marked with `LATER`.
+2. **Multi-Agent Orchestrator (`ai_orchestration.py`)**: Routes requests between local and cloud models based on task complexity and server health.
+3. **Core Specialized Agents**:
+    - **Monitoring Agent (`monitoring_agent.py`)**: Tracks the pulse of local AI servers.
+    - **Calendar Agent (`calendar_agent.py`)**: Periodically caches calendar data to `datainput/googlecalendar.yml`.
+    - **Planning Agent (`planning_agent.py`)**: Finalizes schedules and updates local notes.
+    - **RAG Agent (`rag_agent.py`)**: Retrieves deep context from your "Second Brain".
+    - **Book Agent (`book_agent.py`)**: Indexes and searches PDF/EPUB libraries.
+    - **Travel Agent (`travel_agent.py`)**: Researches trips via Google Search grounding.
+    - **Gmail Agent (`gmail_agent.py`)**: Integrates email context into daily plans.
 
 ## Building and Running
 
@@ -36,40 +33,36 @@ This project is an automated "AI Assistant" that synchronizes tasks from local M
 
 ### Setup & Management
 ```bash
-# Unified installation script (macOS/Linux)
-./install.sh
+# Guided one-click installation
+./install.command  # (Mac)
+./install.sh       # (Linux)
 
-# Setup automated hourly sync (cron)
-./install.sh cron
-
-# Upgrade to latest code and dependencies
-./install.sh upgrade
+# Automated configuration wizard
+make setup
 ```
 
 ### Running the Project
 ```bash
-# Run the main automation loop
-python3 main.py
+# Start background observer and calendar sync
+make run
 
-# Run interactive chat mode
-python3 main.py --chat
+# Start interactive chat mode
+make run-chat
 
 # Launch the Web Mission Control
 make run-ui
 ```
 
 ## Development Conventions
-- **Action Loops**: The AI can propose actions (create file, index book, etc.) which require user confirmation in the CLI or UI.
-- **RAG Support**: Large documents and book libraries are indexed page-by-page into a local `vector_db` for semantic search.
-- **Timezone Safety**: All calendar operations are timezone-aware to prevent scheduling shifts.
-- **Security**: API keys and tokens are stored in `.env`, `credentials.json`, and `token.json`, all of which are ignored by Git.
+- **Local-First**: The system defaults to Ollama/OpenClaw to protect user data.
+- **Cached Context**: Google Calendar data is cached locally to speed up AI interactions.
+- **Confirmed Actions**: Any file system change or booking requires human confirmation.
+- **Timezone Aware**: All timestamps include local offsets to prevent scheduling shifts.
 
 ## Key Files
 - `main.py`: Entry point and CLI orchestration.
-- `app.py`: Streamlit Web UI and Mission Control.
-- `ai_orchestration.py`: Multi-agent coordination and prompt engineering.
-- `calendar_manager.py`: Google Calendar API wrapper.
-- `book_agent.py`: PDF/EPUB indexing and deep search.
-- `gmail_agent.py`: Gmail integration.
-- `rag_agent.py`: Notes indexing and context retrieval.
-- `BLOG_POST.md`: Narrated documentation of the project's development journey.
+- `app.py`: Streamlit Web UI.
+- `setup_wizard.py`: Visual configuration tool.
+- `calendar_agent.py` / `planning_agent.py`: Calendar synchronization logic.
+- `ai_orchestration.py`: Routing and prompt engineering.
+- `monitoring_agent.py`: Server health monitoring.

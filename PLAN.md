@@ -118,6 +118,14 @@
 - [x] Integrate travel planning into the AI Orchestrator as a tool-based action.
 - [x] Support travel research in both CLI and Streamlit Mission Control.
 
+### Phase 18: Local-First Refactor & Agent Specialisation
+- [x] Implement `MonitoringAgent` to track health of local AI servers (Ollama/OpenClaw).
+- [x] Create `CalendarAgent` for background sync to local YAML (`googlecalendar.yml`).
+- [x] Implement `PlanningAgent` for atomic updates to Calendar and Obsidian.
+- [x] Refine LogSeq parser to specifically target `LATER` tasks.
+- [x] Add optional support for OpenAI and Claude APIs.
+- [x] Update routing logic to prioritize local models with intelligent fallback.
+
 ## Summary of Planned Development
 The system will act as a bridge between your local knowledge base and your schedule. 
 1. **Watchdog** will monitor your markdown files for changes. 
