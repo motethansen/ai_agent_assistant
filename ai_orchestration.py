@@ -91,7 +91,7 @@ def ollama_generate(prompt, model="llama3"):
         "stream": False
     }
     try:
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, json=payload, timeout=120)
         return response.json().get("response", "")
     except Exception as e:
         return f"Error calling local Ollama: {e}"

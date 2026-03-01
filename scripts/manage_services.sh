@@ -28,6 +28,12 @@ start_ollama() {
     else
         echo -e "${GREEN}Model '$MODEL' is ready.${NC}"
     fi
+
+    # --- Warm the model ---
+    echo -e "${YELLOW}Warming model '$MODEL' (first-time load into memory)...${NC}"
+    # Simple prompt to force loading
+    curl -s -X POST http://localhost:11434/api/generate -d "{\"model\":\"$MODEL\", \"prompt\":\"hi\", \"stream\":false}" -m 10 > /dev/null
+    echo -e "${GREEN}Model warmed and ready.${NC}"
 }
 check_services() {
     if pgrep -x "ollama" > /dev/null; then
