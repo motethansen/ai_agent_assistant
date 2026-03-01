@@ -7,6 +7,10 @@ install:
 	@chmod +x install.sh
 	@./install.sh
 
+setup:
+	@echo "Launching Setup Wizard..."
+	@.venv/bin/streamlit run setup_wizard.py
+
 # Background observer (Main loop)
 run:
 	@echo "Starting AI Agent Assistant background observer..."

@@ -88,6 +88,22 @@ with st.sidebar:
             agent.index_vault()
             st.success("Vault indexed!")
 
+    st.divider()
+    with st.expander("❓ Help & Guide"):
+        st.markdown("""
+        **Getting Started:**
+        1. **Sync Backlog:** Use 'Pull from Calendar' to get latest events.
+        2. **Generate Plan:** Go to 'Schedule Manager' and click 'Generate Plan'.
+        3. **Refine:** Edit the times in the table if needed.
+        4. **Push:** Click 'Push to Calendar' to save.
+        
+        **Chat Agent:**
+        Ask questions like "What are my snoozed emails?" or "Find flights to Paris".
+        
+        **Missing Keys?**
+        Run `make setup` in your terminal to re-run the wizard.
+        """)
+
 # --- Header ---
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:

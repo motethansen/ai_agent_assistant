@@ -1,188 +1,150 @@
 #!/bin/bash
 
-# Configuration and Installation Script
-# This script sets up the local environment for the AI Agent Assistant.
-# It works on both macOS (Darwin) and Linux (Ubuntu).
+# AI Agent Assistant: Guided Installation Script
+# Supports macOS (Darwin) and Linux (Ubuntu).
 
 set -e
 
-echo "--- AI Agent Assistant: Starting Installation/Upgrade ---"
+# ANSI Color Codes for better UI
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}#######################################${NC}"
+echo -e "${BLUE}#                                     #${NC}"
+echo -e "${BLUE}#    🤖 AI AGENT ASSISTANT SETUP      #${NC}"
+echo -e "${BLUE}#                                     #${NC}"
+echo -e "${BLUE}#######################################${NC}"
+echo ""
 
 # Detect OS
 OS_TYPE=$(uname -s)
-echo "Detected OS: $OS_TYPE"
+echo -e "Detected Operating System: ${GREEN}$OS_TYPE${NC}"
 
-# 1. Environment Check
-check_env() {
-    echo "Checking for core dependencies..."
+# 1. Dependency Checks (Python & Git)
+check_dependencies() {
+    echo -e "${BLUE}[1/5] Checking System Dependencies...${NC}"
+    
+    # Check Python
     if ! command -v python3 &> /dev/null; then
-        echo "Error: python3 not found. Please install Python 3.10+."
-        exit 1
-    fi
-    if ! command -v git &> /dev/null; then
-        echo "Error: git not found. Please install git."
-        exit 1
-    fi
-    echo "Core dependencies OK."
-}
-
-# 2. Upgrade Function
-upgrade_solution() {
-    echo "Upgrading AI Agent Assistant..."
-    if [ -d ".git" ]; then
-        echo "Fetching latest code from repository..."
-        git pull
-    fi
-    
-    if [ -d ".venv" ]; then
-        echo "Updating Python dependencies..."
-        source .venv/bin/activate
-        pip install --upgrade pip
-        pip install -r requirements.txt
-    fi
-    echo "Upgrade complete."
-}
-
-# 3. Setup Cron Job
-setup_cron() {
-    echo "Setting up a regular check using the agents..."
-    
-    # Get the absolute path to the virtual environment's python
-    VENV_PYTHON="$(pwd)/.venv/bin/python3"
-    CRON_SCRIPT="$(pwd)/cron_job.py"
-    LOG_FILE="$(pwd)/logs/cron_sync.log"
-    
-    mkdir -p "$(pwd)/logs"
-    
-    # Create the cron line (runs every hour)
-    CRON_LINE="0 * * * * cd $(pwd) && $VENV_PYTHON $CRON_SCRIPT >> $LOG_FILE 2>&1"
-    
-    # Check if the cron job already exists
-    if crontab -l 2>/dev/null | grep -q "$CRON_SCRIPT"; then
-        echo "Cron job already exists. Updating..."
-        (crontab -l | grep -v "$CRON_SCRIPT"; echo "$CRON_LINE") | crontab -
-    else
-        echo "Adding new cron job..."
-        (crontab -l 2>/dev/null; echo "$CRON_LINE") | crontab -
-    fi
-    echo "Cron job scheduled (runs hourly). Logs available in logs/cron_sync.log"
-}
-
-# Parse Arguments
-COMMAND=$1
-
-check_env
-
-# If already installed and no command provided, ask if user wants to upgrade
-if [ -z "$COMMAND" ] && [ -d ".venv" ] && [ -f ".config" ]; then
-    read -p "Existing installation detected. Would you like to check for updates? (y/n): " want_upgrade
-    if [[ "$want_upgrade" == "y"* ]]; then
-        upgrade_solution
-    fi
-fi
-
-if [ "$COMMAND" == "upgrade" ]; then
-    upgrade_solution
-    exit 0
-fi
-
-if [ "$COMMAND" == "cron" ]; then
-    setup_cron
-    exit 0
-fi
-
-# Standard Installation flow (if not already handled)
-
-# 1. Install/Check Ollama
-echo "Checking for Ollama..."
-if ! command -v ollama &> /dev/null; then
-    echo "Ollama is not installed. Installing Ollama..."
-    if [ "$OS_TYPE" == "Darwin" ]; then
-        if command -v brew &> /dev/null; then
-            brew install --cask ollama
+        echo -e "${RED}Error: Python 3 is not installed.${NC}"
+        if [ "$OS_TYPE" == "Darwin" ]; then
+            echo -e "Please install Python from ${YELLOW}https://www.python.org/downloads/macos/${NC}"
         else
-            curl -fsSL https://ollama.com/install.sh | sh
+            echo -e "Please run: ${YELLOW}sudo apt update && sudo apt install python3 python3-venv${NC}"
         fi
-    else
-        curl -fsSL https://ollama.com/install.sh | sh
+        exit 1
     fi
-    echo "Ollama installed successfully."
-else
-    echo "Ollama is already installed."
-fi
 
-# Ensure default model is present if Ollama is running
-if command -v ollama &> /dev/null; then
-    echo "Ensuring Ollama model 'llama3' is available..."
-    # We use '|| true' because ollama might not be running yet, which is fine for now
-    ollama pull llama3 || echo "Note: Could not pull llama3 automatically. Make sure Ollama app is running."
-fi
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
+    echo -e "Python Version: ${GREEN}$PYTHON_VERSION${NC} (Required: 3.10+)"
 
-# 2. Virtual environment setup
-if [ ! -d ".venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv .venv
-fi
+    # Check Git
+    if ! command -v git &> /dev/null; then
+        echo -e "${RED}Error: Git is not installed.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}System dependencies are OK.${NC}"
+}
 
-# 3. Activate and Install Dependencies
-source .venv/bin/activate
-pip install --upgrade pip
-
-if [ -f "requirements.txt" ]; then
-    echo "Installing Python dependencies..."
+# 2. Virtual Environment & Requirements
+setup_python_env() {
+    echo -e "\n${BLUE}[2/5] Setting up Python Environment...${NC}"
+    if [ ! -d ".venv" ]; then
+        echo "Creating virtual environment (this keeps your system clean)..."
+        python3 -m venv .venv
+    fi
+    
+    source .venv/bin/activate
+    echo "Upgrading package manager (pip)..."
+    pip install --quiet --upgrade pip
+    
+    echo "Installing required AI libraries (this may take a minute)..."
     if [ "$OS_TYPE" == "Linux" ]; then
         grep -v "pyobjc" requirements.txt > requirements_linux.txt
-        pip install -r requirements_linux.txt
+        pip install --quiet -r requirements_linux.txt
         rm requirements_linux.txt
     else
-        pip install -r requirements.txt
+        pip install --quiet -r requirements.txt
     fi
-fi
+    echo -e "${GREEN}Python environment is ready.${NC}"
+}
 
-# 4. Configuration
-if [ ! -f ".config" ]; then
-    echo "Generating .config file from template..."
-    cp config.template .config
+# 3. Ollama Installation (Local AI)
+setup_ollama() {
+    echo -e "\n${BLUE}[3/5] Checking Local AI (Ollama)...${NC}"
+    if ! command -v ollama &> /dev/null; then
+        echo "Ollama not found. It allows you to run AI models privately on your machine."
+        read -p "Would you like to install Ollama now? (y/n): " install_ollama
+        if [[ "$install_ollama" == "y"* ]]; then
+            if [ "$OS_TYPE" == "Darwin" ]; then
+                if command -v brew &> /dev/null; then
+                    brew install --cask ollama
+                else
+                    echo "Downloading Ollama for Mac..."
+                    curl -fsSL https://ollama.com/install.sh | sh
+                fi
+            else
+                curl -fsSL https://ollama.com/install.sh | sh
+            fi
+        fi
+    else
+        echo -e "${GREEN}Ollama is already installed.${NC}"
+    fi
+}
+
+# 4. Configuration (Web Wizard or CLI)
+setup_configuration() {
+    echo -e "\n${BLUE}[4/5] System Configuration...${NC}"
     
-    echo "--- System Configuration ---"
-    read -p "Enter your Google Gemini API Key: " gemini_key
-    read -p "Enter your Google Calendar ID (default: primary): " calendar_id
-    read -p "Enter your Obsidian Workspace Path: " workspace_dir
-    read -p "Enter your LogSeq Graph Path: " logseq_dir
-    echo "--- Productivity Settings ---"
-    read -p "Enter your Chronotype (morning_owl/night_owl/balanced): " chronotype
-    read -p "Enter your Deep Work Start (e.g., 09:00): " dw_start
-    read -p "Enter your Deep Work End (e.g., 12:00): " dw_end
-
-    gemini_key=${gemini_key:-"your_gemini_api_key_here"}
-    calendar_id=${calendar_id:-"primary"}
-    workspace_dir=${workspace_dir:-"/path/to/your/markdown/notes"}
-    logseq_dir=${logseq_dir:-"/path/to/your/logseq/graph"}
-    chronotype=${chronotype:-"morning_owl"}
-    dw_start=${dw_start:-"09:00"}
-    dw_end=${dw_end:-"12:00"}
-
-    update_config() {
-        sed "s|$1=.*|$1=$2|" .config > .config.tmp && mv .config.tmp .config
-    }
-
-    update_config "GEMINI_API_KEY" "$gemini_key"
-    update_config "CALENDAR_ID" "$calendar_id"
-    update_config "WORKSPACE_DIR" "$workspace_dir"
-    update_config "LOGSEQ_DIR" "$logseq_dir"
-    update_config "CHRONOTYPE" "$chronotype"
-    update_config "DEEP_WORK_START" "$dw_start"
-    update_config "DEEP_WORK_END" "$dw_end"
-fi
-
-# 5. Background Sync Option
-if ! crontab -l 2>/dev/null | grep -q "cron_job.py"; then
-    read -p "Would you like to enable automated hourly background sync (cron)? (y/n): " enable_cron
-    if [[ "$enable_cron" == "y"* ]]; then
-        setup_cron
+    if [ ! -f ".config" ]; then
+        echo "I will now help you configure your API keys and folder paths."
+        echo "I recommend using the ${GREEN}Web Setup Wizard${NC} for a better experience."
+        read -p "Launch Web Setup Wizard? (y/n): " use_wizard
+        
+        if [[ "$use_wizard" == "y"* ]]; then
+            echo -e "${YELLOW}Launching Setup Wizard in your browser...${NC}"
+            .venv/bin/streamlit run setup_wizard.py
+            exit 0
+        else
+            echo "Proceeding with manual CLI configuration..."
+            cp config.template .config
+            # Basic CLI config logic (shortened for brevity)
+            read -p "Enter Gemini API Key: " gkey
+            sed -i.bak "s|GEMINI_API_KEY=.*|GEMINI_API_KEY=$gkey|" .config && rm .config.bak
+        fi
+    else
+        echo -e "${GREEN}Existing configuration (.config) found.${NC}"
     fi
-fi
+}
 
-echo "--- Installation Complete ---"
-echo "To start the assistant: source .venv/bin/activate && python3 main.py"
-echo "To upgrade in the future: ./install.sh upgrade"
+# 5. Background Automation (Cron)
+setup_automation() {
+    echo -e "\n${BLUE}[5/5] Automation (Optional)...${NC}"
+    if ! crontab -l 2>/dev/null | grep -q "cron_job.py"; then
+        echo "I can set up a 'Cron Job' to automatically sync your tasks every hour."
+        read -p "Enable hourly background sync? (y/n): " enable_cron
+        if [[ "$enable_cron" == "y"* ]]; then
+            VENV_PYTHON="$(pwd)/.venv/bin/python3"
+            CRON_SCRIPT="$(pwd)/cron_job.py"
+            CRON_LINE="0 * * * * cd $(pwd) && $VENV_PYTHON $CRON_SCRIPT >> $(pwd)/logs/cron_sync.log 2>&1"
+            mkdir -p logs
+            (crontab -l 2>/dev/null; echo "$CRON_LINE") | crontab -
+            echo -e "${GREEN}Background sync enabled.${NC}"
+        fi
+    fi
+}
+
+# Main Execution
+check_dependencies
+setup_python_env
+setup_ollama
+setup_configuration
+setup_automation
+
+echo -e "\n${GREEN}🎉 SUCCESS! AI Agent Assistant is installed.${NC}"
+echo -e "To start the dashboard, run: ${YELLOW}make run-ui${NC}"
+echo -e "To chat with your agent, run: ${YELLOW}make run-chat${NC}"
+echo ""

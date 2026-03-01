@@ -15,6 +15,7 @@ An automated AI assistant that bridges local Markdown notes (Obsidian/Logseq) an
 - **Modular & Extensible:** Scaffold your own custom agents with `/create-agent` and manage them in separate Git repositories.
 
 ## 📈 Latest Updates (Progress Log)
+- **2026-03-01:** Added **Web Setup Wizard** to help non-technical users configure API keys and folder paths easily.
 - **2026-03-01:** Added **Travel Planning Agent** with real-time Google Search grounding.
 - **2026-03-01:** Implemented **Deep Book Research (RAG)** with page-level indexing for PDFs/EPUBs.
 - **2026-03-01:** Launched **Streamlit Mission Control** dashboard with real-time interactive chat.
@@ -28,7 +29,7 @@ For a one-step installation on **macOS** or **Linux (Ubuntu)**, run the followin
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/motethansen/ai_agent_assistant/main/install.sh)"
 ```
-*This will clone the repository, set up a virtual environment, install dependencies (including Ollama), and guide you through configuration.*
+*This will clone the repository, set up a virtual environment, install dependencies, and launch the **Web Setup Wizard** to guide you through the rest.*
 
 ### 🛠️ Manual Installation
 If you prefer to install manually:
