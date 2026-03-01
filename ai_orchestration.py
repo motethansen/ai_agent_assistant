@@ -180,12 +180,19 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
 
     try:
         content = response_text.strip()
-        if content.startswith("```json"):
-            content = content[7:].rsplit("```", 1)[0].strip()
-        elif content.startswith("```"):
-            content = content[3:].rsplit("```", 1)[0].strip()
-        return json.loads(content)
-    except Exception:
+        # Find first { and last } to extract JSON
+        start_idx = content.find('{')
+        end_idx = content.rfind('}')
+        
+        if start_idx != -1 and end_idx != -1:
+            json_str = content[start_idx:end_idx+1]
+            return json.loads(json_str)
+        else:
+            print(f"⚠️ No JSON found in response: {content[:100]}...")
+            return None
+    except Exception as e:
+        print(f"Error parsing JSON from AI: {e}")
+        print(f"Raw response: {response_text[:200]}...")
         return None
 
 if __name__ == "__main__":
