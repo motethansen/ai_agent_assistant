@@ -195,26 +195,49 @@ with left_col:
         st.session_state.backlog = get_unified_tasks(obsidian_file)
     
     if st.session_state.backlog:
+        # Convert backlog to DataFrame for easier manipulation
         df_backlog = pd.DataFrame(st.session_state.backlog)
-        # Ensure target_date and Select exist for editing
+        
+        # Initialize helper columns if they don't exist
         if 'target_date' not in df_backlog.columns:
             df_backlog['target_date'] = df_backlog['due_date'].apply(lambda x: x[:10] if x else "")
         if 'Select' not in df_backlog.columns:
             df_backlog['Select'] = False
-            
+
+        # --- Select All / Deselect All ---
+        sel_col1, sel_col2 = st.columns(2)
+        with sel_col1:
+            if st.button("☑️ Select All"):
+                df_backlog['Select'] = True
+                st.session_state.backlog = df_backlog.to_dict('records')
+                st.rerun()
+        with sel_col2:
+            if st.button("⬜ Deselect All"):
+                df_backlog['Select'] = False
+                st.session_state.backlog = df_backlog.to_dict('records')
+                st.rerun()
+
         st.write("Modify dates below or check 'Select' for AI organization:")
-        edited_backlog = st.data_editor(
+        
+        # Use st.data_editor and capture changes
+        edited_df = st.data_editor(
             df_backlog[["Select", "source", "category", "task", "target_date"]], 
             width="stretch", 
             hide_index=True,
-            key="backlog_editor"
+            key="backlog_editor_v2"
         )
         
+        # Sync changes back to session_state if the editor was touched
+        if not edited_df.equals(df_backlog[["Select", "source", "category", "task", "target_date"]]):
+            # Update the hidden session state with the new values
+            for col in ["Select", "target_date"]:
+                df_backlog[col] = edited_df[col]
+            st.session_state.backlog = df_backlog.to_dict('records')
+
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🧠 AI Re-Categorize & Schedule"):
-                # Filter rows where Select is True
-                selected_tasks_df = edited_backlog[edited_backlog['Select'] == True]
+                selected_tasks_df = edited_df[edited_df['Select'] == True]
                 
                 if selected_tasks_df.empty:
                     st.warning("Please check the 'Select' box for at least one task.")
