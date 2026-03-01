@@ -35,7 +35,7 @@ For a one-step installation on **macOS** or **Linux (Ubuntu)**, run the followin
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/motethansen/ai_agent_assistant/main/install.sh)"
 ```
-*This will clone the repository, set up a virtual environment, install dependencies, and launch the **Web Setup Wizard** to guide you through the rest.*
+*This will clone the repository, set up a virtual environment (Python 3.11+), install dependencies, and launch the **Web Setup Wizard** to guide you through the rest.*
 
 ### 🛠️ Manual Installation
 If you prefer to install manually:

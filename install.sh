@@ -31,15 +31,25 @@ check_dependencies() {
     if ! command -v python3 &> /dev/null; then
         echo -e "${RED}Error: Python 3 is not installed.${NC}"
         if [ "$OS_TYPE" == "Darwin" ]; then
-            echo -e "Please install Python from ${YELLOW}https://www.python.org/downloads/macos/${NC}"
+            echo -e "Please install Python 3.11+ from ${YELLOW}https://www.python.org/downloads/macos/${NC}"
         else
-            echo -e "Please run: ${YELLOW}sudo apt update && sudo apt install python3 python3-venv${NC}"
+            echo -e "Please run: ${YELLOW}sudo apt update && sudo apt install python3.11 python3.11-venv${NC}"
         fi
         exit 1
     fi
 
-    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
-    echo -e "Python Version: ${GREEN}$PYTHON_VERSION${NC} (Required: 3.10+)"
+    # Check version 3.11 or higher
+    PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
+    MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
+
+    if [ "$MAJOR" -lt 3 ] || ([ "$MAJOR" -eq 3 ] && [ "$MINOR" -lt 11 ]); then
+        echo -e "${RED}Error: Python $PYTHON_VERSION detected. Minimum version 3.11 required.${NC}"
+        echo -e "Please upgrade to Python 3.11 or higher to ensure compatibility with Google AI libraries."
+        exit 1
+    fi
+    
+    echo -e "Python Version: ${GREEN}$PYTHON_VERSION${NC} (OK)"
 
     # Check Git
     if ! command -v git &> /dev/null; then
