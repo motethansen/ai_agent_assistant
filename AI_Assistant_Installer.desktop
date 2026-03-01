@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AI Assistant Installer
+Comment=Install and Configure the AI Agent Assistant
+Exec=/Users/michaelhansen/Projects/github/ai_agent_assistant/install.sh
+Icon=system-software-install
+Terminal=true
+Categories=System;Setup;
+Keywords=AI;Assistant;Install;
+

@@ -24,7 +24,13 @@ An automated AI assistant that bridges local Markdown notes (Obsidian/Logseq) an
 
 ## 🚀 Quick Start
 
-### ⚡ Quick Installation (One-Click/Terminal)
+### 🖱️ One-Click Installer (Recommended)
+If you have downloaded the project folder, simply double-click the installer:
+- **Mac:** Double-click the `install.command` file.
+- **Linux:** Double-click the `AI Assistant Installer` icon.
+*This will open a terminal, set up the environment, and launch the **Web Setup Wizard** in your browser.*
+
+### ⚡ Quick Installation (Terminal)
 For a one-step installation on **macOS** or **Linux (Ubuntu)**, run the following command in your terminal:
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/motethansen/ai_agent_assistant/main/install.sh)"
