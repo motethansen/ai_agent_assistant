@@ -234,7 +234,7 @@ setup_configuration
 setup_automation
 
 echo -e "\n${BLUE}[6/6] Verifying AI Assistant...${NC}"
-.venv/bin/python3 scripts/check_ai_working.py || echo -e "${RED}Verification failed. Check your config and service status.${NC}"
+PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py || echo -e "${RED}Verification failed. Check your config and service status.${NC}"
 
 echo -e "\n${GREEN}🎉 SUCCESS! AI Agent Assistant is installed.${NC}"
 echo -e "To start the dashboard, run: ${YELLOW}make run-ui${NC}"

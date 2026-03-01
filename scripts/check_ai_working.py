@@ -1,6 +1,11 @@
-import ai_orchestration
-import json
 import os
+import sys
+import json
+
+# Ensure the root directory is in sys.path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import ai_orchestration
 
 def test_ai_functioning():
     print("--- 🤖 Testing AI Assistant Capabilities ---")
