@@ -658,6 +658,15 @@ def handle_chat_mode(obsidian_path):
                                 if isinstance(data, dict):
                                     if "response" in data:
                                         print(f"🤖 AI: {data['response']}")
+                                    
+                                    # Process Schedule (Calendar)
+                                    if "schedule" in data and data["schedule"]:
+                                        print(f"📅 AI is proposing to book {len(data['schedule'])} event(s) to your calendar.")
+                                        confirm = input("Book these events? (y/n): ").strip().lower()
+                                        if confirm == 'y':
+                                            calendar_manager.create_events(service, data["schedule"], calendar_id=calendar_id)
+                                    
+                                    # Process Actions (File System, etc.)
                                     if "actions" in data:
                                         execute_actions(data["actions"])
                                     continue # Successfully handled JSON

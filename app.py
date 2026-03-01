@@ -275,6 +275,20 @@ if prompt := st.chat_input("Ask me about your emails, calendar, or books..."):
                             st.markdown(data["response"])
                             response_text = data["response"]
                         
+                        # Process Schedule (Calendar)
+                        if "schedule" in data and data["schedule"]:
+                            with st.expander(f"📅 Proposed Calendar Events ({len(data['schedule'])})", expanded=True):
+                                for item in data["schedule"]:
+                                    st.write(f"- **{item['task']}**: {item['start'].split('T')[1][:5]} to {item['end'].split('T')[1][:5]}")
+                                if st.button("✅ Confirm Booking"):
+                                    with st.spinner("Booking..."):
+                                        service = calendar_manager.get_calendar_service()
+                                        calendar_manager.create_events(service, data["schedule"], calendar_id=cal_id)
+                                        st.success("Events booked!")
+                                        # Also sync to markdown
+                                        update_markdown_plan(obsidian_file, data["schedule"])
+                                        response_text += f"\n\n(Booked: {len(data['schedule'])} events)"
+
                         if "actions" in data:
                             for action in data["actions"]:
                                 if action["type"] == "read_book":
