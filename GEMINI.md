@@ -61,8 +61,9 @@ make run-ui
 
 ## Key Files
 - `main.py`: Entry point and CLI orchestration.
-- `app.py`: Streamlit Web UI.
-- `setup_wizard.py`: Visual configuration tool.
-- `calendar_agent.py` / `planning_agent.py`: Calendar synchronization logic.
-- `ai_orchestration.py`: Routing and prompt engineering.
-- `monitoring_agent.py`: Server health monitoring.
+- `app.py`: Streamlit Web UI and Mission Control.
+- `install.sh`: Self-repairing installation and verification script.
+- `scripts/manage_services.sh`: Local AI service manager (Ollama/OpenClaw).
+- `scripts/check_ai_working.py`: Automated AI functionality verification.
+- `update_manager.py`: Health monitoring and background update tracking.
+- `ai_orchestration.py`: Priority-based LLM routing and RAG context retrieval.

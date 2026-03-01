@@ -14,10 +14,9 @@ An automated, multi-agent AI assistant that bridges local Markdown notes (Obsidi
 
 ## 📈 Latest Updates (Progress Log)
 - **2026-03-01:** Redesigned architecture to prioritize **Ollama/OpenClaw** with a **Monitoring Agent**.
-- **2026-03-01:** Implemented **Background Calendar Sync** to `datainput/googlecalendar.yml`.
-- **2026-03-01:** Added **Planning Agent** to handle atomic updates to Calendar and Obsidian.
-- **2026-03-01:** Enhanced **LogSeq Agent** to pull tasks specifically marked with `LATER`.
-- **2026-03-01:** Launched **Web Setup Wizard** for seamless, non-technical configuration.
+- **2026-03-01:** Implemented **Priority-Based LLM Routing** (Ollama > OpenClaw > Cloud).
+- **2026-03-01:** Added **Self-Repairing Installation** script with automatic model pulling.
+- **2026-03-01:** Integrated **System Health & Update Tracking** in the Mission Control UI.
 
 ## 🚀 Quick Start
 
@@ -25,18 +24,19 @@ An automated, multi-agent AI assistant that bridges local Markdown notes (Obsidi
 If you have downloaded the project folder, simply double-click the installer:
 - **Mac:** Double-click the `install.command` file.
 - **Linux:** Double-click the `AI Assistant Installer` icon.
-*This will prepare the environment (Python 3.11+) and launch the **Web Setup Wizard**.*
+*This script will now automatically start local services (Ollama), pull missing models, and verify AI functionality.*
 
 ### ⚡ Quick Installation (Terminal)
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/motethansen/ai_agent_assistant/main/install.sh)"
+./install.sh
 ```
 
 ## ⚙️ Configuration
 The assistant is managed via the `.config` file or the `make setup` wizard:
-- **`ROUTING_SCHEDULING`**: Default model for planning (e.g., `openclaw`).
-- **`ROUTING_CHAT`**: Default model for chat (e.g., `ollama`).
-- **`ENABLE_GEMINI/OPENAI/CLAUDE`**: Optional cloud fallback flags.
+- **`LLM_PRIORITY`**: Order of preference for models (e.g., `ollama, openclaw, gemini`).
+- **`ROUTING_SCHEDULING`**: Task-specific override (e.g., `ollama`).
+- **`ROUTING_CHAT`**: Task-specific override (e.g., `ollama`).
+- **`OLLAMA_MODEL`**: The specific model to use (default: `llama3`).
 
 ## 3. Run the Assistant
 - **Background Observer:** `make run`
