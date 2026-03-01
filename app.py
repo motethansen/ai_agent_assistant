@@ -196,28 +196,30 @@ with left_col:
     
     if st.session_state.backlog:
         df_backlog = pd.DataFrame(st.session_state.backlog)
-        # Ensure target_date exists for editing
+        # Ensure target_date and Select exist for editing
         if 'target_date' not in df_backlog.columns:
             df_backlog['target_date'] = df_backlog['due_date'].apply(lambda x: x[:10] if x else "")
+        if 'Select' not in df_backlog.columns:
+            df_backlog['Select'] = False
             
-        st.write("Modify dates below or select tasks for AI organization:")
+        st.write("Modify dates below or check 'Select' for AI organization:")
         edited_backlog = st.data_editor(
-            df_backlog[["source", "category", "task", "target_date"]], 
+            df_backlog[["Select", "source", "category", "task", "target_date"]], 
             width="stretch", 
-            hide_index=False,
+            hide_index=True,
             key="backlog_editor"
         )
-        
-        # Selection logic (using index from data_editor)
-        selected_indices = st.multiselect("Select task indices for AI organization:", df_backlog.index.tolist())
         
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🧠 AI Re-Categorize & Schedule"):
-                if not selected_indices:
-                    st.warning("Please select at least one task index.")
+                # Filter rows where Select is True
+                selected_tasks_df = edited_backlog[edited_backlog['Select'] == True]
+                
+                if selected_tasks_df.empty:
+                    st.warning("Please check the 'Select' box for at least one task.")
                 else:
-                    tasks_to_organize = df_backlog.iloc[selected_indices].to_dict('records')
+                    tasks_to_organize = selected_tasks_df.to_dict('records')
                     with st.spinner("AI is organizing..."):
                         results = ai_orchestration.suggest_task_organization(tasks_to_organize)
                         if results and "suggestions" in results:
