@@ -627,7 +627,27 @@ def handle_chat_mode(obsidian_path):
                         "current_time": datetime.datetime.now().astimezone().isoformat()
                     }
                     
-                    prompt = f"User Question: '{user_input}'. Context: {json.dumps(context_payload)}. Provide a helpful answer."
+                    prompt = f"""
+                    User Question: '{user_input}'
+                    
+                    CONTEXT:
+                    {json.dumps(context_payload)}
+                    
+                    INSTRUCTIONS:
+                    You are a professional AI Assistant with access to the user's calendar, emails, and files.
+                    
+                    1. If the user wants to book an event, you MUST include a "schedule" array in your JSON.
+                    2. If the user asks a question, answer it in the "response" field.
+                    3. Use the "actions" field for system tasks (read_book, search_books, index_book, plan_travel).
+                    
+                    OUTPUT FORMAT:
+                    You MUST return a JSON object (optionally wrapped in markdown code blocks) with:
+                    - "response": "Your conversational answer here"
+                    - "schedule": [{{ "task": "Event Name", "start": "ISO8601", "end": "ISO8601", "category": "Category" }}]
+                    - "actions": [{{ "type": "action_type", ... }}]
+                    
+                    Ensure all dates use the correct year (2026) and include the timezone offset provided in 'current_time'.
+                    """
                     
                     # Determine model to use
                     model_to_use = ai_orchestration.get_routing("chat")
