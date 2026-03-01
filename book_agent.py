@@ -1,7 +1,7 @@
 import os
 import json
 import datetime
-from main import get_config_value
+from config_utils import get_config_value
 
 try:
     import PyPDF2

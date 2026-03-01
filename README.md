@@ -14,6 +14,13 @@ An automated AI assistant that bridges local Markdown notes (Obsidian/Logseq) an
 - **Interactive CLI & Dashboard:** Manage everything via a chat-like terminal interface with `/` commands or a modern Streamlit web dashboard ("Mission Control").
 - **Modular & Extensible:** Scaffold your own custom agents with `/create-agent` and manage them in separate Git repositories.
 
+## 📈 Latest Updates (Progress Log)
+- **2026-03-01:** Added **Travel Planning Agent** with real-time Google Search grounding.
+- **2026-03-01:** Implemented **Deep Book Research (RAG)** with page-level indexing for PDFs/EPUBs.
+- **2026-03-01:** Launched **Streamlit Mission Control** dashboard with real-time interactive chat.
+- **2026-03-01:** Enabled **Multi-Calendar Sync** (check primary + AI-specific calendars).
+- **2026-03-01:** Added **Gmail snoozed/filtered email** integration for task suggestions.
+
 ## 🚀 Quick Start
 
 ### ⚡ Quick Installation (One-Click/Terminal)
