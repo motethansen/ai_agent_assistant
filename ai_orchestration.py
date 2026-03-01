@@ -2,11 +2,11 @@ from google import genai
 import os
 import json
 import datetime
-from dotenv import load_dotenv
+import requests
+from config_utils import get_config_value
 
-# Load API key from .env file
-load_dotenv()
-api_key = os.getenv("GEMINI_API_KEY")
+# Load API key from .config or environment
+api_key = get_config_value("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
 
 # Allowed categories for the backlog
 VALID_CATEGORIES = [
@@ -15,37 +15,55 @@ VALID_CATEGORIES = [
     "learning Thai", "writing academic papers", "budgeting app", "Personal"
 ]
 
-import requests
 from rag_agent import RAGAgent
 from book_agent import BookAgent
 from travel_agent import TravelAgent
 
-# Default model settings (can be overridden by .config)
+# Load model activation from .config
 MODELS_ENABLED = {
-    "gemini": True,
-    "ollama": True,
-    "openclaw": True
+    "gemini": get_config_value("ENABLE_GEMINI", "true").lower() == "true",
+    "ollama": get_config_value("ENABLE_OLLAMA", "true").lower() == "true",
+    "openclaw": get_config_value("ENABLE_OPENCLAW", "true").lower() == "true"
 }
+
+def is_ollama_running():
+    """Checks if the local Ollama server is responding."""
+    try:
+        response = requests.get("http://localhost:11434/api/tags", timeout=2)
+        return response.status_code == 200
+    except:
+        return False
 
 def get_routing(task_type="scheduling"):
     """
-    Determines which model should handle the given task type.
-    Pulls from MODELS_ENABLED and defaults to Ollama if Gemini is disabled.
+    Determines which model should handle the given task type based on config and availability.
     """
-    # 1. Check if Gemini is enabled and we have an API key
-    if MODELS_ENABLED.get("gemini") and api_key:
-        # Check if specific task routing is set to gemini
+    # 1. Get requested model for this task type from config
+    config_key = f"ROUTING_{task_type.upper()}"
+    requested_model = get_config_value(config_key, "gemini").lower()
+    
+    # 2. Check if requested model is enabled and available
+    if requested_model == "gemini" and MODELS_ENABLED["gemini"] and api_key and "your_gemini_api_key" not in api_key:
         return "gemini"
-        
-    # 2. Fallback to Ollama if enabled
-    if MODELS_ENABLED.get("ollama"):
+    
+    if requested_model == "ollama" and MODELS_ENABLED["ollama"] and is_ollama_running():
         return "ollama"
         
-    # 3. Last resort - OpenClaw
-    if MODELS_ENABLED.get("openclaw"):
+    # 3. FALLBACK LOGIC
+    # If requested was ollama but it's down, try Gemini
+    if requested_model == "ollama" and MODELS_ENABLED["gemini"] and api_key and "your_gemini_api_key" not in api_key:
+        print(f"⚠️ Warning: Ollama is requested for {task_type} but not running. Falling back to Gemini.")
+        return "gemini"
+        
+    # If requested was gemini but it's disabled/missing key, try Ollama
+    if requested_model == "gemini" and MODELS_ENABLED["ollama"] and is_ollama_running():
+        return "ollama"
+        
+    # Last resort
+    if MODELS_ENABLED["openclaw"]:
         return "openclaw"
         
-    return "ollama" # Default fallback
+    return "gemini" # Final default
 
 
 def ollama_generate(prompt, model="llama3"):
@@ -62,7 +80,7 @@ def ollama_generate(prompt, model="llama3"):
         response = requests.post(url, json=payload, timeout=30)
         return response.json().get("response", "")
     except Exception as e:
-        return f"Error calling local Ollama: {e}"
+        return f"Error calling local Ollama: {e}. Please ensure Ollama is running (try opening the Ollama app)."
 
 def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None, logseq_dir=None):
     """
