@@ -5,7 +5,8 @@ import datetime
 import calendar_manager
 import ai_orchestration
 import pandas as pd
-from main import get_unified_tasks, get_config_value, update_markdown_plan, sync_calendar_to_markdown
+from main import get_unified_tasks, update_markdown_plan, sync_calendar_to_markdown
+from config_utils import get_config_value
 
 # --- Page Configuration ---
 st.set_page_config(

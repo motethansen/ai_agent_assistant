@@ -13,14 +13,7 @@ from book_agent import BookAgent
 from observer import parse_markdown_tasks, parse_logseq_tasks
 from reminders_manager import get_apple_reminders
 
-def get_config_value(key, default):
-    """Retrieves a value from .config if it exists."""
-    if os.path.exists(".config"):
-        with open(".config", "r") as f:
-            for line in f:
-                if f"{key}=" in line:
-                    return line.split("=")[1].strip()
-    return default
+from config_utils import get_config_value
 
 def get_unified_tasks(obsidian_path):
     """

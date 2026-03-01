@@ -118,7 +118,7 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
         
         # --- User Preference Integration ---
         # Fetch preferences from .config (helper imports or local)
-        from main import get_config_value
+        from config_utils import get_config_value
         chronotype = get_config_value("CHRONOTYPE", "balanced")
         dw_start = get_config_value("DEEP_WORK_START", "09:00")
         dw_end = get_config_value("DEEP_WORK_END", "12:00")
