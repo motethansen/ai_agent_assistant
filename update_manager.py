@@ -41,6 +41,10 @@ def check_venv_health():
     return {"status": "ok", "message": "Environment looks good"}
 
 def run_all_checks():
+    # Attempt to start services if they are down
+    if os.path.exists("scripts/manage_services.sh"):
+        subprocess.run(["bash", "scripts/manage_services.sh", "check"], capture_output=True)
+
     status = {
         "last_check": datetime.datetime.now().isoformat(),
         "git": check_git_updates(),

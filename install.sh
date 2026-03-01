@@ -138,6 +138,7 @@ setup_python_env() {
 # 3. Ollama Installation (Local AI)
 setup_ollama() {
     show_progress "Checking Local AI (Ollama)..."
+    chmod +x scripts/manage_services.sh
     if ! command -v ollama &> /dev/null; then
         echo "Ollama not found. It allows you to run AI models privately on your machine."
         read -p "Would you like to install Ollama now? (y/n): " install_ollama
@@ -156,6 +157,7 @@ setup_ollama() {
     else
         echo -e "${GREEN}Ollama is already installed.${NC}"
     fi
+    ./scripts/manage_services.sh start
 }
 
 # 4. Configuration (Web Wizard or CLI)
@@ -230,6 +232,9 @@ setup_python_env
 setup_ollama
 setup_configuration
 setup_automation
+
+echo -e "\n${BLUE}[6/6] Verifying AI Assistant...${NC}"
+.venv/bin/python3 scripts/check_ai_working.py || echo -e "${RED}Verification failed. Check your config and service status.${NC}"
 
 echo -e "\n${GREEN}🎉 SUCCESS! AI Agent Assistant is installed.${NC}"
 echo -e "To start the dashboard, run: ${YELLOW}make run-ui${NC}"
