@@ -15,7 +15,7 @@ class MonitoringAgent:
             # Check the /api/tags endpoint which indicates the server is running
             response = requests.get(f"{self.ollama_host}/api/tags", timeout=3)
             return response.status_code == 200
-        except requests.RequestException:
+        except Exception:
             return False
 
     def check_openclaw(self):
@@ -26,7 +26,7 @@ class MonitoringAgent:
             try:
                 response = requests.get(self.openclaw_endpoint, timeout=3)
                 return response.status_code < 500
-            except requests.RequestException:
+            except Exception:
                 return False
         return True # Assume external API is available if we don't know the exact health endpoint
 

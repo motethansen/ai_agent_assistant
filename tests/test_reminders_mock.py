@@ -18,7 +18,8 @@ def test_unified_backlog_merges_sources(tmp_path):
         {"task": "Buy milk", "source": "Apple Reminders", "category": "Personal"}
     ]
     
-    with patch("main.get_apple_reminders", return_value=mock_reminders):
+    with patch("main.get_apple_reminders", return_value=mock_reminders), \
+         patch("main.get_config_value", return_value=None):
         backlog = get_unified_tasks(str(p))
         
         # Verify both sources are merged
