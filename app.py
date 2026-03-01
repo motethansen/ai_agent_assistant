@@ -248,6 +248,24 @@ with left_col:
                         if results and "suggestions" in results:
                             st.session_state.ai_suggestions = results["suggestions"]
                             st.rerun()
+        
+        # --- Custom Command on Selection ---
+        st.divider()
+        custom_cmd = st.text_input("🤖 Ask AI to do something with selected tasks:", placeholder="e.g., 'Move these to next Monday' or 'Label as high priority'")
+        if st.button("🪄 Run Custom Command"):
+            selected_tasks_df = edited_df[edited_df['Select'] == True]
+            if selected_tasks_df.empty:
+                st.warning("Please select at least one task first.")
+            elif not custom_cmd:
+                st.warning("Please enter a command.")
+            else:
+                tasks_to_process = selected_tasks_df.to_dict('records')
+                with st.spinner("Executing custom command..."):
+                    results = ai_orchestration.process_tasks_with_command(tasks_to_process, custom_cmd)
+                    if results and "suggestions" in results:
+                        st.session_state.ai_suggestions = results["suggestions"]
+                        st.rerun()
+
         with col2:
             if st.button("💾 Save Changes"):
                 # Logic to write back to markdown/source if needed
