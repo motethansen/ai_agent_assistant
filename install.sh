@@ -219,6 +219,9 @@ setup_automation() {
 if [[ "$1" == "upgrade" ]]; then
     check_upgrade
     setup_python_env
+    setup_ollama
+    echo -e "\n${BLUE}Verifying AI Assistant...${NC}"
+    PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py
     echo -e "${GREEN}Upgrade complete.${NC}"
     exit 0
 elif [[ "$1" == "cron" ]]; then
@@ -234,7 +237,12 @@ setup_configuration
 setup_automation
 
 echo -e "\n${BLUE}[6/6] Verifying AI Assistant...${NC}"
-PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py || echo -e "${RED}Verification failed. Check your config and service status.${NC}"
+if ! PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py; then
+    echo -e "${YELLOW}Verification failed. Attempting to repair services...${NC}"
+    ./scripts/manage_services.sh start
+    echo -e "${BLUE}Re-verifying...${NC}"
+    PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py || echo -e "${RED}Verification failed again. Please check Ollama logs or your .config.${NC}"
+fi
 
 echo -e "\n${GREEN}🎉 SUCCESS! AI Agent Assistant is installed.${NC}"
 echo -e "To start the dashboard, run: ${YELLOW}make run-ui${NC}"
