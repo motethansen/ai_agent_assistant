@@ -95,7 +95,7 @@ with col_h2:
         with st.spinner("Syncing..."):
             tasks = get_unified_tasks(obsidian_file)
             service = calendar_manager.get_calendar_service()
-            busy_slots = calendar_manager.get_busy_slots(service, calendar_id=cal_id)
+            busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", cal_id])
             result = ai_orchestration.generate_schedule(tasks, busy_slots, workspace_dir=obsidian_file, logseq_dir=logseq_dir)
             if result and "schedule" in result:
                 calendar_manager.create_events(service, result["schedule"], calendar_id=cal_id)
@@ -162,7 +162,7 @@ with right_col:
                     tasks_to_send = [t for t in st.session_state.backlog if t['task'] in selected_names]
                 
                 service = calendar_manager.get_calendar_service()
-                busy_slots = calendar_manager.get_busy_slots(service, calendar_id=cal_id)
+                busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", cal_id])
                 result = ai_orchestration.generate_schedule(tasks_to_send, busy_slots, morning_mode=True, workspace_dir=obsidian_file, logseq_dir=logseq_dir)
                 if result:
                     st.session_state.suggested_schedule = result.get("schedule", [])
@@ -222,7 +222,7 @@ if prompt := st.chat_input("Ask me about your emails, calendar, or books..."):
                 
                 # Gather context
                 service = calendar_manager.get_calendar_service()
-                busy_slots = calendar_manager.get_busy_slots(service, calendar_id=cal_id)
+                busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", cal_id])
                 backlog = get_unified_tasks(obsidian_file)
                 
                 gmail_service = gmail_agent.get_gmail_service()

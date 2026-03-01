@@ -124,7 +124,8 @@ class TaskSyncHandler(PatternMatchingEventHandler):
         # 2. Get Calendar context
         calendar_id = get_config_value("CALENDAR_ID", "primary")
         service = calendar_manager.get_calendar_service()
-        busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
+        # Fetch busy slots from BOTH primary and AI calendar
+        busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", calendar_id])
         
         # 3. AI Orchestration
         print("Consulting the AI scheduler...")
@@ -257,7 +258,7 @@ def handle_morning_planning(obsidian_path):
     tasks = get_unified_tasks(obsidian_path)
     calendar_id = get_config_value("CALENDAR_ID", "primary")
     service = calendar_manager.get_calendar_service()
-    busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
+    busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", calendar_id])
     
     print("AI is processing your backlog for today...")
     logseq_path = get_config_value("LOGSEQ_DIR", None)
@@ -425,7 +426,7 @@ def handle_chat_mode(obsidian_path):
                     if not service:
                         print("❌ Calendar service not available. Check credentials.")
                         continue
-                    busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
+                    busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", calendar_id])
                     logseq_path = get_config_value("LOGSEQ_DIR", None)
                     schedule = ai_orchestration.generate_schedule(
                         tasks, 
@@ -603,7 +604,7 @@ def handle_chat_mode(obsidian_path):
                         print("⚠️ AI: I cannot access your calendar. Please check 'token.json' and 'credentials.json'.")
                         continue
 
-                    busy_slots = calendar_manager.get_busy_slots(service, calendar_id=calendar_id)
+                    busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=["primary", calendar_id])
                     
                     # Get Gmail context
                     gmail_service = gmail_agent.get_gmail_service()

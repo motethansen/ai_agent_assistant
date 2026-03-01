@@ -47,10 +47,10 @@ def get_calendar_service():
         return None
 
 
-def get_busy_slots(service, calendar_id='primary', date_str=None):
+def get_busy_slots(service, calendar_ids=['primary'], date_str=None):
     """
-    Fetches events for the specified date and returns a list of busy time slots.
-    date_str should be in 'YYYY-MM-DD' format. Defaults to today.
+    Fetches events for the specified date and returns a list of busy time slots from multiple calendars.
+    calendar_ids should be a list of calendar IDs.
     """
     if not service:
         return []
@@ -64,26 +64,34 @@ def get_busy_slots(service, calendar_id='primary', date_str=None):
     start_of_day = day.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z'
     end_of_day = day.replace(hour=23, minute=59, second=59, microsecond=0).isoformat() + 'Z'
 
-    print(f"Fetching busy slots for {day.date()} from calendar: {calendar_id}...")
+    all_busy_slots = []
     
-    events_result = service.events().list(calendarId=calendar_id, timeMin=start_of_day,
-                                        timeMax=end_of_day, singleEvents=True,
-                                        orderBy='startTime').execute()
-    events = events_result.get('items', [])
+    if isinstance(calendar_ids, str):
+        calendar_ids = [calendar_ids]
 
-    busy_slots = []
-    for event in events:
-        start = event['start'].get('dateTime', event['start'].get('date'))
-        end = event['end'].get('dateTime', event['end'].get('date'))
-        # Filter out all-day events or format them properly if needed
-        if 'T' in start:  # It's a dateTime event
-            busy_slots.append({
-                'summary': event.get('summary', 'No Title'),
-                'start': start,
-                'end': end
-            })
+    for calendar_id in calendar_ids:
+        print(f"Fetching busy slots for {day.date()} from calendar: {calendar_id}...")
+        try:
+            events_result = service.events().list(calendarId=calendar_id, timeMin=start_of_day,
+                                                timeMax=end_of_day, singleEvents=True,
+                                                orderBy='startTime').execute()
+            events = events_result.get('items', [])
+
+            for event in events:
+                start = event['start'].get('dateTime', event['start'].get('date'))
+                end = event['end'].get('dateTime', event['end'].get('date'))
+                # Filter out all-day events or format them properly if needed
+                if 'T' in start:  # It's a dateTime event
+                    all_busy_slots.append({
+                        'summary': event.get('summary', 'No Title'),
+                        'start': start,
+                        'end': end,
+                        'source_calendar': calendar_id
+                    })
+        except Exception as e:
+            print(f"Error fetching slots from {calendar_id}: {e}")
     
-    return busy_slots
+    return all_busy_slots
 
 def get_managed_events(service, calendar_id='primary', date_str=None):
     """
