@@ -15,7 +15,10 @@ def get_config_value(key, default):
                     if k.strip() == key:
                         val = v.strip()
                         # Automatically set HF_TOKEN in environment for HuggingFace Hub
-                        if key == "HF_TOKEN" and val and "your_huggingface_token" not in val:
+                        if key == "HF_TOKEN" and val:
                             os.environ["HF_TOKEN"] = val
                         return val
     return default
+
+# Auto-load HF_TOKEN on import to ensure it's available for other modules
+get_config_value("HF_TOKEN", None)

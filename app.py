@@ -8,11 +8,13 @@ import pandas as pd
 from main import get_unified_tasks, sync_calendar_to_markdown
 from observer import update_markdown_plan
 from config_utils import get_config_value
-from calendar_agent import CalendarAgent
+from calendar_agent import CalendarAgent, start_background_calendar_sync
 from planning_agent import PlanningAgent
 
-# Load HF_TOKEN into environment if present
-get_config_value("HF_TOKEN", None)
+# --- Background Services ---
+if 'services_started' not in st.session_state:
+    start_background_calendar_sync(interval=600) # Every 5 minutes
+    st.session_state.services_started = True
 
 # --- Page Configuration ---
 st.set_page_config(
