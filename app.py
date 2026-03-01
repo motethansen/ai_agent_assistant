@@ -5,7 +5,8 @@ import datetime
 import calendar_manager
 import ai_orchestration
 import pandas as pd
-from main import get_unified_tasks, update_markdown_plan, sync_calendar_to_markdown
+from main import get_unified_tasks, sync_calendar_to_markdown
+from observer import update_markdown_plan
 from config_utils import get_config_value
 from calendar_agent import CalendarAgent
 from planning_agent import PlanningAgent
@@ -54,6 +55,8 @@ if 'selected_tasks' not in st.session_state:
     st.session_state.selected_tasks = []
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
+if 'pending_booking' not in st.session_state:
+    st.session_state.pending_booking = None
 
 # --- Sidebar: System Health & Settings ---
 with st.sidebar:
@@ -318,17 +321,8 @@ if prompt := st.chat_input("Ask me about your emails, calendar, or books..."):
                         
                         # Process Schedule (Calendar)
                         if "schedule" in data and data["schedule"]:
-                            with st.expander(f"📅 Proposed Calendar Events ({len(data['schedule'])})", expanded=True):
-                                for item in data["schedule"]:
-                                    st.write(f"- **{item['task']}**: {item['start'].split('T')[1][:5]} to {item['end'].split('T')[1][:5]}")
-                                if st.button("✅ Confirm Booking"):
-                                    with st.spinner("Booking..."):
-                                        service = calendar_manager.get_calendar_service()
-                                        planning_agent = PlanningAgent(service, cal_id)
-                                        planning_agent.execute_plan(data["schedule"], obsidian_file)
-                                        st.success("Events booked!")
-                                        response_text += f"\n\n(Booked: {len(data['schedule'])} events)"
-
+                            st.session_state.pending_booking = data["schedule"]
+                        
                         if "actions" in data:
                             for action in data["actions"]:
                                 if action["type"] == "read_book":
@@ -366,6 +360,28 @@ if prompt := st.chat_input("Ask me about your emails, calendar, or books..."):
                 st.session_state.chat_history.append({"role": "assistant", "content": response_text})
             except Exception as e:
                 st.error(f"Error: {e}")
+
+# --- Pending Booking Confirmation ---
+if st.session_state.pending_booking:
+    with st.chat_message("assistant"):
+        st.write("📅 I'm ready to book these events:")
+        for item in st.session_state.pending_booking:
+            st.write(f"- **{item['task']}**: {item['start'].split('T')[1][:5]} to {item['end'].split('T')[1][:5]}")
+        
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.button("✅ Confirm"):
+                with st.spinner("Booking..."):
+                    service = calendar_manager.get_calendar_service()
+                    planning_agent = PlanningAgent(service, cal_id)
+                    planning_agent.execute_plan(st.session_state.pending_booking, obsidian_file)
+                    st.success("Events booked!")
+                    st.session_state.pending_booking = None
+                    st.rerun()
+        with col2:
+            if st.button("❌ Cancel"):
+                st.session_state.pending_booking = None
+                st.rerun()
 
 st.divider()
 st.caption(f"AI Agent Assistant v1.1 | Mission Control")

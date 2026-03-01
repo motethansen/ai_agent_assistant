@@ -11,7 +11,7 @@ import ai_orchestration
 import gmail_agent
 from book_agent import BookAgent
 from travel_agent import TravelAgent
-from observer import parse_markdown_tasks, parse_logseq_tasks
+from observer import parse_markdown_tasks, parse_logseq_tasks, update_markdown_plan
 from reminders_manager import get_apple_reminders
 from config_utils import get_config_value
 from monitoring_agent import MonitoringAgent
@@ -48,37 +48,6 @@ def get_unified_tasks(obsidian_path):
     unified_backlog = obsidian_tasks + logseq_tasks + apple_tasks
     return unified_backlog
 
-
-def update_markdown_plan(file_path, schedule):
-    """
-    Overwrites the '## Today's Plan' section with the AI-generated schedule.
-    """
-    if not schedule:
-        return
-
-    try:
-        # Sort schedule by start time
-        schedule = sorted(schedule, key=lambda x: x['start'])
-
-        with open(file_path, 'r') as f:
-            content = f.read()
-
-        plan_text = "## Today's Plan\n"
-        for item in schedule:
-            # Clean up the ISO time for better readability
-            start_time = item['start'].split('T')[1][:5]
-            end_time = item['end'].split('T')[1][:5]
-            plan_text += f"- **{start_time} - {end_time}**: {item['task']}\n"
-        
-        # Replace the section using regex
-        pattern = r"## Today's Plan.*?(?=\n##|$)"
-        new_content = re.sub(pattern, plan_text, content, flags=re.DOTALL)
-
-        with open(file_path, 'w') as f:
-            f.write(new_content)
-        print(f"Updated {os.path.basename(file_path)} with Today's Plan.")
-    except Exception as e:
-        print(f"Error updating markdown file: {e}")
 
 def sync_calendar_to_markdown(obsidian_path):
     """

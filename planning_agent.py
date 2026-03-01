@@ -1,6 +1,6 @@
 import os
 import calendar_manager
-from main import update_markdown_plan
+from observer import update_markdown_plan
 
 class PlanningAgent:
     """

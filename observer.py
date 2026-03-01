@@ -141,3 +141,38 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         observer.stop()
     observer.join()
+
+def update_markdown_plan(file_path, schedule):
+    """
+    Overwrites the '## Today's Plan' section with the AI-generated schedule.
+    """
+    if not schedule:
+        return
+
+    try:
+        # Sort schedule by start time
+        schedule = sorted(schedule, key=lambda x: x['start'])
+
+        with open(file_path, 'r') as f:
+            content = f.read()
+
+        plan_text = "## Today's Plan\n"
+        for item in schedule:
+            # Clean up the ISO time for better readability
+            start_time = item['start'].split('T')[1][:5]
+            end_time = item['end'].split('T')[1][:5]
+            plan_text += f"- **{start_time} - {end_time}**: {item['task']}\n"
+        
+        # Replace the section using regex
+        pattern = r"## Today's Plan.*?(?=\n##|$)"
+        new_content = re.sub(pattern, plan_text, content, flags=re.DOTALL)
+
+        # If ## Today's Plan doesn't exist, append it
+        if new_content == content:
+            new_content = content + "\n\n" + plan_text
+
+        with open(file_path, 'w') as f:
+            f.write(new_content)
+        print(f"Updated {os.path.basename(file_path)} with Today's Plan.")
+    except Exception as e:
+        print(f"Error updating markdown file: {e}")
