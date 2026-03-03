@@ -135,10 +135,12 @@ setup_python_env() {
     echo -e "${GREEN}Python environment is ready.${NC}"
 }
 
-# 3. Ollama Installation (Local AI)
-setup_ollama() {
-    show_progress "Checking Local AI (Ollama)..."
+# 3. Ollama & OpenClaw Installation (Local AI)
+setup_local_ai() {
+    show_progress "Checking Local AI (Ollama & OpenClaw)..."
     chmod +x scripts/manage_services.sh
+    
+    # Ollama
     if ! command -v ollama &> /dev/null; then
         echo "Ollama not found. It allows you to run AI models privately on your machine."
         read -p "Would you like to install Ollama now? (y/n): " install_ollama
@@ -157,6 +159,23 @@ setup_ollama() {
     else
         echo -e "${GREEN}Ollama is already installed.${NC}"
     fi
+
+    # OpenClaw
+    if ! command -v docker &> /dev/null; then
+        echo -e "${YELLOW}Docker not found. Docker is required to run OpenClaw locally.${NC}"
+        echo "Please install Docker from https://www.docker.com/products/docker-desktop/"
+    else
+        if ! docker ps | grep -q "openclaw"; then
+            echo "OpenClaw allows for more advanced agentic reasoning."
+            read -p "Would you like to start OpenClaw via Docker now? (y/n): " start_oc
+            if [[ "$start_oc" == "y"* ]]; then
+                ./scripts/manage_services.sh start
+            fi
+        else
+            echo -e "${GREEN}OpenClaw is already running in Docker.${NC}"
+        fi
+    fi
+    
     ./scripts/manage_services.sh start
 }
 
@@ -219,7 +238,7 @@ setup_automation() {
 if [[ "$1" == "upgrade" ]]; then
     check_upgrade
     setup_python_env
-    setup_ollama
+    setup_local_ai
     echo -e "\n${BLUE}Verifying AI Assistant...${NC}"
     PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py
     echo -e "${GREEN}Upgrade complete.${NC}"
@@ -232,7 +251,7 @@ fi
 check_upgrade
 check_dependencies
 setup_python_env
-setup_ollama
+setup_local_ai
 setup_configuration
 setup_automation
 

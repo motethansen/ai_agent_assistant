@@ -8,6 +8,7 @@ This project requires setting up a few local and cloud components to function as
 - Google Cloud Project with Calendar API enabled.
 - `credentials.json` (OAuth Client ID) from Google Cloud Console.
 - [Ollama](https://ollama.com/) installed locally.
+- [Docker](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev/) (Required for OpenClaw).
 - [OpenClaw](https://openclaw.ai/) for enhanced agentic capabilities.
 
 ## Setup Instructions
@@ -33,6 +34,7 @@ This project requires setting up a few local and cloud components to function as
 
 3.  **Local Services (Ollama & OpenClaw):**
     - The system is **Local-First**. It will always try to use your local machine before hitting cloud APIs.
+    - **OpenClaw** requires **Docker** or **OrbStack** to be running on your machine.
     - You can manually manage services using: `./scripts/manage_services.sh {start|check}`.
 
 4.  **Configure `.config`:**

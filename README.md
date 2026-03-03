@@ -27,7 +27,9 @@ An automated, multi-agent AI assistant that bridges local Markdown notes (Obsidi
 If you have downloaded the project folder, simply double-click the installer:
 - **Mac:** Double-click the `install.command` file.
 - **Linux:** Double-click the `AI Assistant Installer` icon.
-*This script will now automatically start local services (Ollama), pull missing models, and verify AI functionality.*
+*This script will now automatically start local services (Ollama and OpenClaw via Docker), pull missing models, and verify AI functionality.*
+
+**Note:** Ensure [Docker](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev/) is running before installation if you plan to use OpenClaw locally.
 
 ### ⚡ Quick Installation (Terminal)
 ```bash

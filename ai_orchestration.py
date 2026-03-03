@@ -3,6 +3,7 @@ import os
 import json
 import datetime
 import requests
+import re
 from config_utils import get_config_value
 
 # Load API key from .config or environment
@@ -36,6 +37,26 @@ def is_ollama_running():
     except:
         return False
 
+def is_openclaw_running():
+    """Checks if the OpenClaw endpoint is responding."""
+    endpoint = get_config_value('OPENCLAW_ENDPOINT', 'https://api.openclaw.ai/v1')
+    try:
+        # Check the base endpoint or a version/health path
+        # For OpenAI-compatible APIs, we can just try to get models or check the base URL
+        response = requests.get(f"{endpoint}/models", timeout=2)
+        return response.status_code in [200, 401] # 401 means it's there but needs auth
+    except:
+        # Fallback: check if we can at least reach the host
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(endpoint)
+            import socket
+            port = parsed.port if parsed.port else (443 if parsed.scheme == 'https' else 80)
+            socket.create_connection((parsed.hostname, port), timeout=2)
+            return True
+        except:
+            return False
+
 def get_routing(task_type="scheduling"):
     """
     Determines the best available model based on user priority and health.
@@ -63,8 +84,7 @@ def get_routing(task_type="scheduling"):
                 return "ollama"
         
         elif model == "openclaw":
-            if MODELS_ENABLED["openclaw"]:
-                # We assume OpenClaw is ready if enabled, as it's an API
+            if MODELS_ENABLED["openclaw"] and is_openclaw_running():
                 return "openclaw"
 
         elif model == "openai":
@@ -78,12 +98,17 @@ def get_routing(task_type="scheduling"):
     # 4. Absolute Final Fallback
     if is_ollama_running():
         return "ollama"
-    return "openclaw" # Assumed available as an API
+    if is_openclaw_running():
+        return "openclaw"
+    return "gemini" if api_key and "your_gemini_api_key" not in api_key else "ollama"
 
-def ollama_generate(prompt, model="llama3"):
+def ollama_generate(prompt, model=None):
     """
     Calls a local Ollama instance for generation.
     """
+    if model is None:
+        model = get_config_value("OLLAMA_MODEL", "llama3")
+        
     url = "http://localhost:11434/api/generate"
     payload = {
         "model": model,
@@ -91,7 +116,7 @@ def ollama_generate(prompt, model="llama3"):
         "stream": False
     }
     try:
-        response = requests.post(url, json=payload, timeout=120)
+        response = requests.post(url, json=payload, timeout=300)
         return response.json().get("response", "")
     except Exception as e:
         return f"Error calling local Ollama: {e}"
@@ -100,7 +125,7 @@ def openclaw_generate(prompt, model="gpt-3.5-turbo"):
     """
     Calls an OpenClaw (OpenAI-compatible) endpoint for generation.
     """
-    url = f"{get_config_value('OPENCLAW_ENDPOINT', 'https://api.openclaw.ai/v1')}/chat/completions"
+    url = f"{get_config_value('OPENCLAW_ENDPOINT', 'http://localhost:18789/v1')}/chat/completions"
     headers = {
         "Authorization": f"Bearer {get_config_value('OPENCLAW_API_KEY', '')}",
         "Content-Type": "application/json"
@@ -110,10 +135,11 @@ def openclaw_generate(prompt, model="gpt-3.5-turbo"):
         "messages": [{"role": "user", "content": prompt}]
     }
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        return f"Error calling OpenClaw: {e}"
+        raise Exception(f"OpenClaw error: {e}")
 
 def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None, logseq_dir=None):
     """
@@ -186,12 +212,23 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
         
         if start_idx != -1 and end_idx != -1:
             json_str = content[start_idx:end_idx+1]
+            # Strip potential markdown code block markers from the extracted string
+            json_str = re.sub(r'^```(?:json)?\s*', '', json_str)
+            json_str = re.sub(r'\s*```$', '', json_str)
             return json.loads(json_str)
         else:
             print(f"⚠️ No JSON found in response: {content[:100]}...")
             return None
     except Exception as e:
         print(f"Error parsing JSON from AI: {e}")
+        # Try a more aggressive search if first attempt fails
+        try:
+            # Look for ANY valid JSON-like structure
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+        except:
+            pass
         print(f"Raw response: {response_text[:200]}...")
         return None
 

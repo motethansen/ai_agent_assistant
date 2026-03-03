@@ -19,6 +19,13 @@ class FileSystemAgent:
         os.makedirs(path, exist_ok=True)
         return f"Created folder: {folder_name}"
 
+    def read_file(self, file_name):
+        path = self._safe_path(file_name)
+        if not os.path.exists(path):
+            return f"Error: File {file_name} not found."
+        with open(path, "r") as f:
+            return f.read()
+
     def write_file(self, file_name, content):
         path = self._safe_path(file_name)
         # Ensure directory exists

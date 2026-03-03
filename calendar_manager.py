@@ -70,7 +70,6 @@ def get_busy_slots(service, calendar_ids=['primary'], date_str=None):
         calendar_ids = [calendar_ids]
 
     for calendar_id in calendar_ids:
-        print(f"Fetching busy slots for {day.date()} from calendar: {calendar_id}...")
         try:
             events_result = service.events().list(calendarId=calendar_id, timeMin=start_of_day,
                                                 timeMax=end_of_day, singleEvents=True,

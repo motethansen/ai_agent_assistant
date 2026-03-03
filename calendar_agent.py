@@ -34,14 +34,26 @@ class CalendarAgent:
         print(f"CalendarAgent: Saved calendar data to {self.yml_path}")
 
     def get_busy_slots_from_yml(self):
-        """Reads the busy slots from the YAML file."""
+        """Reads the busy slots from the YAML file. Fetches if not found."""
         if not os.path.exists(self.yml_path):
-            print("CalendarAgent: YAML file not found, returning empty slots.")
-            return []
+            print("CalendarAgent: YAML file not found. Attempting to fetch...")
+            try:
+                self.fetch_and_store_calendar()
+            except Exception as e:
+                print(f"CalendarAgent: Failed to fetch calendar: {e}")
+                return []
         
+        if not os.path.exists(self.yml_path):
+            print("CalendarAgent: YAML still not found after fetch, returning empty slots.")
+            return []
+            
         with open(self.yml_path, 'r') as f:
-            data = yaml.safe_load(f)
-            return data.get("busy_slots", [])
+            try:
+                data = yaml.safe_load(f)
+                return data.get("busy_slots", [])
+            except Exception as e:
+                print(f"CalendarAgent: Error reading YAML: {e}")
+                return []
 
 def start_background_calendar_sync(interval=300):
     """Starts a background thread to periodically fetch calendar data."""

@@ -3,6 +3,9 @@ import chromadb
 from chromadb.utils import embedding_functions
 import datetime
 
+import sys
+import contextlib
+
 class RAGAgent:
     def __init__(self, workspace_dir, logseq_dir=None, db_path="vector_db"):
         self.workspace_dir = workspace_dir
@@ -12,8 +15,14 @@ class RAGAgent:
         # Initialize Chromadb (Local)
         self.client = chromadb.PersistentClient(path=self.db_path)
         
-        # Use a lightweight embedding function
-        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+        # Use a lightweight embedding function, silencing its noisy initialization
+        with contextlib.redirect_stdout(None), contextlib.redirect_stderr(None):
+            try:
+                self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+            except Exception:
+                # Fallback if initialization fails (e.g., first run without internet)
+                # Chromadb will handle its own error if it truly can't find a model
+                self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
         
         # Collection for notes
         self.collection = self.client.get_or_create_collection(

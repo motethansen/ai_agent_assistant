@@ -8,27 +8,29 @@ def parse_markdown_tasks(file_path):
     """
     Parses a markdown file to extract tasks with categories and dates.
     Format example: - [ ] #winedragons Review wireframes ^2026-02-24
+    This improved version looks at the entire file but gives context to where tasks are found.
     """
     tasks = []
+    if not file_path or not os.path.exists(file_path) or os.path.isdir(file_path):
+        return []
     try:
         with open(file_path, 'r') as f:
-            content = f.read()
+            lines = f.readlines()
         
-        # Regex to find the ## Tasks section and its content
-        pattern = r"## Tasks\s*(.*?)(?=##|$)"
-        match = re.search(pattern, content, re.DOTALL)
-        
-        if match:
-            tasks_content = match.group(1).strip()
-            # Extract individual task lines with metadata
-            # - [ ] #category Task Description ^YYYY-MM-DD
-            task_lines = re.findall(r"- \[[ xX]\] (.*)", tasks_content)
-            for raw_task in task_lines:
+        for line in lines:
+            # Match any task line: - [ ] Task description
+            match = re.search(r"^\s*-\s+\[([ xX])\]\s+(.*)", line)
+            if match:
+                is_completed = match.group(1).lower() == 'x'
+                if is_completed: continue # Skip completed tasks for the backlog
+                
+                raw_task = match.group(2).strip()
                 task_data = {
                     "task": raw_task,
                     "category": "Uncategorized",
                     "due_date": None,
-                    "source": "Obsidian"
+                    "source": "Obsidian",
+                    "file": os.path.basename(file_path)
                 }
                 
                 # Extract #category
@@ -36,13 +38,12 @@ def parse_markdown_tasks(file_path):
                 if cat_match:
                     task_data["category"] = cat_match.group(1)
                     # Remove the tag from the task description
-                    task_data["task"] = raw_task.replace(f"#{task_data['category']}", "").strip()
+                    task_data["task"] = task_data["task"].replace(f"#{task_data['category']}", "").strip()
                 
-                # Extract ^YYYY-MM-DD (Obsidian/Logseq convention)
+                # Extract ^YYYY-MM-DD
                 date_match = re.search(r"\^(\d{4}-\d{2}-\d{2})", task_data["task"])
                 if date_match:
                     task_data["due_date"] = date_match.group(1)
-                    # Clean up the task description
                     task_data["task"] = task_data["task"].replace(f"^{task_data['due_date']}", "").strip()
                 
                 tasks.append(task_data)
@@ -56,6 +57,7 @@ def parse_logseq_tasks(file_path):
     """
     Parses a LogSeq markdown file to extract tasks.
     User specifies: "I will mark tasks with LATER on each line to identify a task."
+    This improved version captures block properties (like URLs) on subsequent lines.
     """
     tasks = []
     try:
@@ -63,46 +65,82 @@ def parse_logseq_tasks(file_path):
             return []
             
         with open(file_path, 'r') as f:
-            for line in f:
-                # Support LogSeq-style LATER and checkboxes
-                match = re.search(r"^\s*-\s+LATER\s+(.*)", line)
-                if match:
-                    raw_task = match.group(1).strip()
-                    # Clean up LogSeq properties if they exist on the same line (unlikely but safe)
-                    raw_task = re.sub(r"\s+\{\{.*\}\}", "", raw_task)
-                    
-                    task_data = {
-                        "task": raw_task,
-                        "category": "Uncategorized",
-                        "due_date": None,
-                        "source": "Logseq"
-                    }
+            lines = f.readlines()
+            
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            # Support LogSeq-style LATER
+            match = re.search(r"^\s*-\s+LATER\s+(.*)", line)
+            if match:
+                raw_task = match.group(1).strip()
+                # Clean up LogSeq macros but try to keep URLs
+                # Only strip if it's a known macro like {{renderer ...}} or {{query ...}}
+                # But if it's a simple {{url}}, keep it or handle it.
+                # For now, let's just be less aggressive.
+                raw_task = re.sub(r"\{\{(?:renderer|query|clojure|embed|include)\s+.*?\}\}", "", raw_task).strip()
+                
+                task_data = {
+                    "task": raw_task,
+                    "category": "Uncategorized",
+                    "due_date": None,
+                    "source": "Logseq",
+                    "properties": {}
+                }
 
-                    # Extract #category
-                    cat_match = re.search(r"#([\w.]+)", raw_task)
-                    if cat_match:
-                        task_data["category"] = cat_match.group(1)
-                        # Remove the tag from the task description
-                        task_data["task"] = raw_task.replace(f"#{task_data['category']}", "").strip()
-                    
-                    # LogSeq scheduled/deadline parsing: SCHEDULED: <2026-02-28 Sat>
-                    # Sometimes on the next line, but sometimes the AI can see the context.
-                    # For simplicity, if it's on the same line or we find it in the file.
-                    # Actually LogSeq tasks usually have metadata on the line below.
-                    # We'll skip complex multiline for now and look for same-line or ^ date.
-                    
-                    date_match = re.search(r"(?:SCHEDULED|DEADLINE):\s*<(\d{4}-\d{2}-\d{2})", line)
-                    if date_match:
-                        task_data["due_date"] = date_match.group(1)
-                    
-                    # Also support Obsidian/Logseq ^YYYY-MM-DD
-                    if not task_data["due_date"]:
-                        obsidian_date = re.search(r"\^(\d{4}-\d{2}-\d{2})", raw_task)
-                        if obsidian_date:
-                            task_data["due_date"] = obsidian_date.group(1)
-                            task_data["task"] = raw_task.replace(f"^{task_data['due_date']}", "").strip()
+                # Look ahead for properties (indented lines below)
+                j = i + 1
+                while j < len(lines):
+                    next_line = lines[j]
+                    # If line is indented and contains a property :key: value
+                    prop_match = re.search(r"^\s+:(.*?):\s*(.*)", next_line)
+                    if prop_match:
+                        prop_key = prop_match.group(1).lower()
+                        prop_val = prop_match.group(2).strip()
+                        task_data["properties"][prop_key] = prop_val
+                        # If it's a URL property, append it to the task description if not already there
+                        if prop_key == "url" and prop_val not in task_data["task"]:
+                            task_data["task"] += f" ({prop_val})"
+                        j += 1
+                    elif next_line.strip() == "" or next_line.strip().startswith("- "):
+                        # End of current block
+                        break
+                    else:
+                        # Some other content in the block, maybe part of the description
+                        # If it's indented, it might be a sub-bullet or note
+                        if next_line.startswith("  "):
+                             # If it's not a property, it's just a note. We can append it.
+                             clean_note = next_line.strip()
+                             if clean_note and not clean_note.startswith(":"):
+                                 # Skip metadata lines like SCHEDULED: or DEADLINE: as they are handled later
+                                 if not any(x in clean_note for x in ["SCHEDULED:", "DEADLINE:"]):
+                                     task_data["task"] += " | " + clean_note
+                        j += 1
+                
+                # Extract #category from the task or properties
+                cat_match = re.search(r"#([\w.]+)", task_data["task"])
+                if cat_match:
+                    task_data["category"] = cat_match.group(1)
+                    # Remove the tag from the task description
+                    task_data["task"] = task_data["task"].replace(f"#{task_data['category']}", "").strip()
+                
+                # LogSeq scheduled/deadline parsing: SCHEDULED: <2026-02-28 Sat>
+                # Check current line and next few lines for scheduling
+                block_text = "".join(lines[i:j])
+                date_match = re.search(r"(?:SCHEDULED|DEADLINE):\s*<(\d{4}-\d{2}-\d{2})", block_text)
+                if date_match:
+                    task_data["due_date"] = date_match.group(1)
+                
+                # Also support Obsidian/Logseq ^YYYY-MM-DD
+                if not task_data["due_date"]:
+                    obsidian_date = re.search(r"\^(\d{4}-\d{2}-\d{2})", task_data["task"])
+                    if obsidian_date:
+                        task_data["due_date"] = obsidian_date.group(1)
+                        task_data["task"] = task_data["task"].replace(f"^{task_data['due_date']}", "").strip()
 
-                    tasks.append(task_data)
+                tasks.append(task_data)
+                i = j - 1 # Skip the lines we already processed
+            i += 1
         return tasks
     except Exception as e:
         print(f"Error reading Logseq file {file_path}: {e}")

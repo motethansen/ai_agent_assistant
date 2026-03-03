@@ -23,7 +23,16 @@ def get_unified_tasks(obsidian_path):
     Merges tasks from Obsidian, LogSeq, and Apple Reminders.
     """
     # 1. Parse Obsidian tasks
-    obsidian_tasks = parse_markdown_tasks(obsidian_path)
+    obsidian_tasks = []
+    if os.path.isdir(obsidian_path):
+        for root, _, files in os.walk(obsidian_path):
+            for file in files:
+                if file.endswith(".md"):
+                    path = os.path.join(root, file)
+                    tasks = parse_markdown_tasks(path)
+                    obsidian_tasks.extend(tasks)
+    else:
+        obsidian_tasks = parse_markdown_tasks(obsidian_path)
     
     # 2. Parse LogSeq tasks if directory is provided
     logseq_tasks = []
@@ -38,7 +47,8 @@ def get_unified_tasks(obsidian_path):
                         path = os.path.join(target_dir, filename)
                         tasks = parse_logseq_tasks(path)
                         logseq_tasks.extend(tasks)
-        print(f"Extracted {len(logseq_tasks)} total tasks from LogSeq (journals + pages).")
+        if logseq_tasks:
+            print(f"Extracted {len(logseq_tasks)} total tasks from LogSeq (journals + pages).")
 
     # 3. Get Apple Reminders
     reminders_list = get_config_value("APPLE_REMINDERS_LIST", "Reminders")
@@ -306,6 +316,12 @@ def execute_actions(actions):
                 if action['type'] == "create_folder":
                     msg = fs_agent.create_folder(action['path'])
                     print(f"✅ {msg}")
+                elif action['type'] == "read_file":
+                    content = fs_agent.read_file(action['path'])
+                    print(f"📄 Read content from {action['path']} ({len(content)} chars)")
+                    # This might need to be fed back to the AI in a real scenario
+                    # For now, let's just show it.
+                    print(f"\n--- CONTENT FROM {action['path']} ---\n{content[:500]}...\n")
                 elif action['type'] == "write_file":
                     msg = fs_agent.write_file(action['path'], action.get('content', ''))
                     print(f"✅ {msg}")
@@ -342,10 +358,13 @@ def print_banner():
     """
     print(banner)
 
-def handle_chat_mode(obsidian_path):
+def handle_chat_mode(obsidian_file):
     """
     Starts an interactive CLI chat loop with slash commands.
     """
+    obsidian_path = get_config_value("WORKSPACE_DIR", ".")
+    logseq_path = get_config_value("LOGSEQ_DIR", None)
+    
     print_banner()
     print("🤖 AI Agent Assistant: Interactive Chat Mode")
     print("Type /commands to see available slash commands or type your question.")
@@ -593,6 +612,8 @@ def handle_chat_mode(obsidian_path):
 
                     context_payload = {
                         "backlog": tasks,
+                        "workspace_dir": obsidian_path,
+                        "logseq_dir": logseq_path,
                         "calendar_busy_slots": busy_slots,
                         "gmail_snoozed": snoozed_emails,
                         "gmail_filtered": filtered_emails,
@@ -604,72 +625,78 @@ def handle_chat_mode(obsidian_path):
                     User Question: '{user_input}'
                     
                     CONTEXT:
-                    {json.dumps(context_payload)}
+                    - BACKLOG (Tasks): {json.dumps(tasks)}
+                    - WORKSPACE: {obsidian_path}
+                    - LOGSEQ: {logseq_path}
+                    - CALENDAR BUSY: {json.dumps(busy_slots)}
+                    - BOOKS: {books_summary}
+                    - TIME: {datetime.datetime.now().astimezone().isoformat()}
                     
                     INSTRUCTIONS:
-                    You are a professional AI Assistant with access to the user's calendar, emails, and files.
+                    You are a professional AI Assistant.
                     
-                    1. If the user wants to book an event, you MUST include a "schedule" array in your JSON.
-                    2. If the user asks a question, answer it in the "response" field.
-                    3. Use the "actions" field for system tasks (read_book, search_books, index_book, plan_travel).
+                    1. When asked to 'list' tasks from LogSeq, filter the 'BACKLOG' for items where "source": "Logseq".
+                    2. Use the 'response' field to provide a readable, bulleted list of these tasks, including their URLs or notes if present.
+                    3. If asked to 'move' tasks, suggest a 'write_file' action to the appropriate file in the workspace.
+                    4. ALWAYS return a JSON object with "response", "schedule" (list), and "actions" (list).
                     
-                    OUTPUT FORMAT:
-                    You MUST return a JSON object (optionally wrapped in markdown code blocks) with:
-                    - "response": "Your conversational answer here"
-                    - "schedule": [{{ "task": "Event Name", "start": "ISO8601", "end": "ISO8601", "category": "Category" }}]
-                    - "actions": [{{ "type": "action_type", ... }}]
-                    
-                    Ensure all dates use the correct year (2026) and include the timezone offset provided in 'current_time'.
+                    IMPORTANT:
+                    - Do not hallucinate. Use the provided BACKLOG data.
+                    - If you see "source": "Logseq", those are the LogSeq tasks.
+                    - Be concise and friendly.
                     """
                     
                     # Determine model to use
                     model_to_use = ai_orchestration.get_routing("chat")
-                    
+                    response_text = ""
+
                     if model_to_use == "ollama":
                         print(" (Routing to local Ollama...)")
                         response_text = ai_orchestration.ollama_generate(prompt)
-                        print(f"🤖 AI (Ollama): {response_text}")
                     else:
-                        client = ai_orchestration.genai.Client(api_key=ai_orchestration.api_key)
-                        response = client.models.generate_content(
-                            model='gemini-flash-latest',
-                            contents=prompt
-                        )
-                        
-                        # Try to parse actions if the AI returned JSON
                         try:
-                            text_content = response.text.strip()
-                            
-                            # Find the first { and last } to extract JSON from conversational text
-                            start_idx = text_content.find('{')
-                            end_idx = text_content.rfind('}')
-                            
-                            if start_idx != -1 and end_idx != -1:
-                                json_str = text_content[start_idx:end_idx+1]
-                                data = json.loads(json_str)
-                                
-                                if isinstance(data, dict):
-                                    if "response" in data:
-                                        print(f"🤖 AI: {data['response']}")
-                                    
-                                    # Process Schedule (Calendar)
-                                    if "schedule" in data and data["schedule"]:
-                                        print(f"📅 AI is proposing to book {len(data['schedule'])} event(s) to your calendar.")
-                                        confirm = input("Book these events? (y/n): ").strip().lower()
-                                        if confirm == 'y':
-                                            planning_agent = PlanningAgent(service, calendar_id)
-                                            planning_agent.execute_plan(data["schedule"], obsidian_path)
-                                    
-                                    # Process Actions (File System, etc.)
-                                    if "actions" in data:
-                                        execute_actions(data["actions"])
-                                    continue # Successfully handled JSON
-                            
-                            # Fallback if no JSON found or parsing failed
-                            print(f"🤖 AI: {response.text}")
+                            client = ai_orchestration.genai.Client(api_key=ai_orchestration.api_key)
+                            response = client.models.generate_content(model='gemini-flash-latest', contents=prompt)
+                            response_text = response.text
                         except Exception as e:
-                            # Fallback to plain text if not JSON
-                            print(f"🤖 AI (Gemini): {response.text}")
+                            print(f"⚠️ Gemini Error: {e}. Falling back to Ollama.")
+                            response_text = ai_orchestration.ollama_generate(prompt)
+                    
+                    # Unified JSON Parsing and Execution
+                    try:
+                        text_content = response_text.strip()
+                        start_idx = text_content.find('{')
+                        end_idx = text_content.rfind('}')
+                        
+                        if start_idx != -1 and end_idx != -1:
+                            json_str = text_content[start_idx:end_idx+1]
+                            data = json.loads(json_str)
+                            
+                            if isinstance(data, dict):
+                                if "response" in data:
+                                    print(f"\n🤖 AI: {data['response']}")
+                                
+                                # Process Schedule (Calendar)
+                                if "schedule" in data and data["schedule"]:
+                                    print(f"📅 AI is proposing to book {len(data['schedule'])} event(s).")
+                                    confirm = input("Book these events? (y/n): ").strip().lower()
+                                    if confirm == 'y':
+                                        planning_agent = PlanningAgent(service, calendar_id)
+                                        planning_agent.execute_plan(data["schedule"], obsidian_path)
+                                
+                                # Process Actions (File System, etc.)
+                                if "actions" in data:
+                                    execute_actions(data["actions"])
+                            else:
+                                # Not a dict, just print raw
+                                print(f"\n🤖 AI: {text_content}")
+                        else:
+                            # No JSON found, print raw response
+                            print(f"\n🤖 AI: {text_content}")
+
+                    except Exception as e:
+                        # Fallback for parsing errors
+                        print(f"\n🤖 AI: {response_text}")
 
                 except Exception as e:
                     error_str = str(e).lower()
@@ -714,6 +741,7 @@ if __name__ == "__main__":
     elif args.evening:
         handle_evening_review(args.file)
     elif args.chat:
+        start_background_calendar_sync()
         handle_chat_mode(args.file)
     else:
         obsidian_path = get_config_value("WORKSPACE_DIR", ".")

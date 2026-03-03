@@ -30,6 +30,7 @@ This project is an automated "AI Assistant" that synchronizes tasks from local M
 - Python 3.11+ (Recommended for Google GenAI compatibility)
 - Google Cloud Project with Calendar and Gmail APIs enabled.
 - `credentials.json` (OAuth Client ID) in the root directory.
+- **Docker/OrbStack**: Required to run the local OpenClaw server.
 
 ### Setup & Management
 ```bash
