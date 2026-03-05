@@ -188,17 +188,28 @@ def update_markdown_plan(file_path, schedule):
         return
 
     try:
+        # Try to use ObsidianAgent for better integration with the app
+        try:
+            from obsidian_agent import ObsidianAgent
+            agent = ObsidianAgent()
+            content = agent.read_file(file_path)
+            use_agent = True if content is not None else False
+        except ImportError:
+            use_agent = False
+            content = None
+
         # Sort schedule by start time
         schedule = sorted(schedule, key=lambda x: x['start'])
 
-        with open(file_path, 'r') as f:
-            content = f.read()
+        if not content:
+            with open(file_path, 'r') as f:
+                content = f.read()
 
         plan_text = "## Today's Plan\n"
         for item in schedule:
             # Clean up the ISO time for better readability
-            start_time = item['start'].split('T')[1][:5]
-            end_time = item['end'].split('T')[1][:5]
+            start_time = item['start'].split('T')[1][:5] if 'T' in item['start'] else item['start']
+            end_time = item['end'].split('T')[1][:5] if 'T' in item['end'] else item['end']
             plan_text += f"- **{start_time} - {end_time}**: {item['task']}\n"
         
         # Replace the section using regex
@@ -209,8 +220,15 @@ def update_markdown_plan(file_path, schedule):
         if new_content == content:
             new_content = content + "\n\n" + plan_text
 
-        with open(file_path, 'w') as f:
-            f.write(new_content)
+        if use_agent:
+            # Use CLI to overwrite - handles app sync better
+            # Note: We don't need to manually escape for subprocess.run(list)
+            agent.create_file(file_path, content=new_content, overwrite=True)
+        else:
+            with open(file_path, 'w') as f:
+                f.write(new_content)
+        
         print(f"Updated {os.path.basename(file_path)} with Today's Plan.")
     except Exception as e:
         print(f"Error updating markdown file: {e}")
+

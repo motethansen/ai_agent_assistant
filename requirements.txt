@@ -4,22 +4,33 @@ google-auth-oauthlib
 google-auth-httplib2
 google-genai
 python-dotenv
+
+# LangChain & Ollama Integration
+langchain
+langchain-community
+langchain-core
+langchain-ollama
+langchain-text-splitters
+ollama
+
 # Testing & Reporting
 pytest
 pytest-mock
 pytest-html
+
 # Frontend
 streamlit
+
 # Apple Reminders retrieval
 pyobjc-framework-EventKit
 
 # RAG & Contextual Intelligence
 chromadb
 sentence-transformers
-PyPDF2
+pypdf
+unstructured[pdf]
+tiktoken
 EbookLib
 beautifulsoup4
 pyyaml
-
-
-
+requests

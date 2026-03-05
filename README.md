@@ -18,6 +18,7 @@ An automated, multi-agent AI assistant that bridges local Markdown notes (Obsidi
 - **2026-03-01:** Added **Bulk Task Management** and **Custom AI Commands** to the Mission Control.
 - **2026-03-01:** Redesigned architecture to prioritize **Ollama/OpenClaw** with a **Monitoring Agent**.
 - **2026-03-01:** Implemented **Priority-Based LLM Routing** (Ollama > OpenClaw > Cloud).
+- **2026-03-04:** Added support for **Qwen 3.5-9B** and integrated **LangChain (ChatOllama)** for better agentic reasoning.
 - **2026-03-01:** Added **Self-Repairing Installation** script with automatic model pulling.
 - **2026-03-01:** Integrated **System Health & Update Tracking** in the Mission Control UI.
 

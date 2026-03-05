@@ -6,6 +6,11 @@ import requests
 import re
 from config_utils import get_config_value
 
+try:
+    from langchain_ollama import ChatOllama
+except ImportError:
+    ChatOllama = None
+
 # Load API key from .config or environment
 api_key = get_config_value("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
 
@@ -109,6 +114,23 @@ def ollama_generate(prompt, model=None):
     if model is None:
         model = get_config_value("OLLAMA_MODEL", "llama3")
         
+    if ChatOllama:
+        try:
+            # Use LangChain's ChatOllama for better handling of newer models
+            host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
+            llm = ChatOllama(model=model, base_url=host)
+            response = llm.invoke(prompt)
+            content = response.content
+            
+            # If it's a thinking model, the output might contain <thought> or similar markers.
+            # Usually, the final response is what we want.
+            if "...done thinking." in content:
+                content = content.split("...done thinking.")[-1].strip()
+            
+            return content
+        except Exception as e:
+            print(f"⚠️ LangChain Ollama Error: {e}. Falling back to requests.")
+
     url = "http://localhost:11434/api/generate"
     payload = {
         "model": model,

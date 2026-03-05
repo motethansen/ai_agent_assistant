@@ -9,7 +9,8 @@ This project is an automated "AI Assistant" that synchronizes tasks from local M
 - **Google Calendar API**: Syncing schedules and events.
 - **Chromadb**: Local vector database for RAG-based context retrieval.
 - **Streamlit**: Web-based "Mission Control" dashboard.
-- **Local LLMs**: Ollama and OpenClaw for private task processing.
+- **LangChain & Ollama**: Integration for advanced agentic workflows and local LLMs.
+- **Local LLMs**: Qwen 3.5 (9B), Ollama, and OpenClaw for private task processing.
 - **Cloud LLMs**: Gemini, OpenAI, and Claude (Optional).
 
 ## Architecture

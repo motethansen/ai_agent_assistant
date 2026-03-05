@@ -17,6 +17,7 @@ from config_utils import get_config_value
 from monitoring_agent import MonitoringAgent
 from calendar_agent import CalendarAgent, start_background_calendar_sync
 from planning_agent import PlanningAgent
+from obsidian_agent import ObsidianAgent
 
 def get_unified_tasks(obsidian_path):
     """
@@ -24,15 +25,75 @@ def get_unified_tasks(obsidian_path):
     """
     # 1. Parse Obsidian tasks
     obsidian_tasks = []
-    if os.path.isdir(obsidian_path):
-        for root, _, files in os.walk(obsidian_path):
-            for file in files:
-                if file.endswith(".md"):
-                    path = os.path.join(root, file)
-                    tasks = parse_markdown_tasks(path)
-                    obsidian_tasks.extend(tasks)
-    else:
-        obsidian_tasks = parse_markdown_tasks(obsidian_path)
+    
+    # Try using Obsidian Agent first (CLI)
+    try:
+        agent = ObsidianAgent()
+        # If obsidian_path is a file, we filter by that file
+        raw_obs_tasks = []
+        if os.path.isfile(obsidian_path):
+            file_name = os.path.basename(obsidian_path)
+            raw_obs_tasks = agent.get_tasks(todo=True, format="json")
+            # Filter by file name if we have many tasks
+            if raw_obs_tasks:
+                raw_obs_tasks = [t for t in raw_obs_tasks if t.get("file") == file_name or t.get("file").endswith("/" + file_name)]
+        else:
+            raw_obs_tasks = agent.get_tasks(todo=True, format="json")
+
+        if raw_obs_tasks:
+            for t in raw_obs_tasks:
+                text = t.get("text", "")
+                # Clean up "- [ ] "
+                clean_text = re.sub(r"^-\s+\[[ xX]\]\s+", "", text).strip()
+                
+                task_data = {
+                    "task": clean_text,
+                    "category": "Uncategorized",
+                    "due_date": None,
+                    "source": "Obsidian",
+                    "file": t.get("file", ""),
+                    "line": t.get("line", "")
+                }
+                
+                # Extract #category
+                cat_match = re.search(r"#([\w./-]+)", task_data["task"])
+                if cat_match:
+                    task_data["category"] = cat_match.group(1)
+                    task_data["task"] = task_data["task"].replace(f"#{task_data['category']}", "").strip()
+                
+                # Extract 📅 YYYY-MM-DD
+                date_match = re.search(r"📅\s*(\d{4}-\d{2}-\d{2})", task_data["task"])
+                if date_match:
+                    task_data["due_date"] = date_match.group(1)
+                    task_data["task"] = task_data["task"].replace(f"📅 {task_data['due_date']}", "").strip()
+                    task_data["task"] = task_data["task"].replace(f"📅{task_data['due_date']}", "").strip()
+                
+                # Also support ^YYYY-MM-DD
+                if not task_data["due_date"]:
+                    date_match = re.search(r"\^(\d{4}-\d{2}-\d{2})", task_data["task"])
+                    if date_match:
+                        task_data["due_date"] = date_match.group(1)
+                        task_data["task"] = task_data["task"].replace(f"^{task_data['due_date']}", "").strip()
+                
+                obsidian_tasks.append(task_data)
+            
+            if obsidian_tasks:
+                print(f"Extracted {len(obsidian_tasks)} tasks from Obsidian via CLI.")
+    except Exception as e:
+        print(f"⚠️ Obsidian CLI error or not available, falling back to file parsing: {e}")
+        obsidian_tasks = []
+
+    # Fallback to file parsing if CLI failed or returned nothing
+    if not obsidian_tasks:
+        if os.path.isdir(obsidian_path):
+            for root, _, files in os.walk(obsidian_path):
+                for file in files:
+                    if file.endswith(".md"):
+                        path = os.path.join(root, file)
+                        tasks = parse_markdown_tasks(path)
+                        obsidian_tasks.extend(tasks)
+        else:
+            obsidian_tasks = parse_markdown_tasks(obsidian_path)
     
     # 2. Parse LogSeq tasks if directory is provided
     logseq_tasks = []
@@ -274,15 +335,28 @@ def handle_evening_review(obsidian_path):
     """
     print("🌙 --- Evening Review Session ---")
     tasks = get_unified_tasks(obsidian_path)
+
+    # Try to use ObsidianAgent
+    agent = None
+    try:
+        agent = ObsidianAgent()
+    except:
+        pass
+
     # Check for completions
     print("Checking which tasks from today's plan were completed...")
+    today_str = datetime.datetime.now().strftime("%Y-%m-%d")
     for t in tasks:
         # We'll just ask for status for now as part of the loop
-        if t.get("source") == "Obsidian" and t.get("due_date") == datetime.datetime.now().strftime("%Y-%m-%d"):
+        if t.get("source") == "Obsidian" and t.get("due_date") == today_str:
              status = input(f"Did you complete: '{t['task']}'? (y/n): ").strip().lower()
              if status == 'y':
                  print(f"Great work on {t['task']}!")
-    
+                 if agent and t.get("file") and t.get("line"):
+                     # Mark as done via CLI
+                     agent.update_task(path=t["file"], line=t["line"], action="done")
+                     print(f"✅ Marked as DONE in Obsidian: {t['file']}:{t['line']}")
+
     print("\nBacklog summary for tomorrow:")
 
     # Future logic for moving incomplete tasks to the next day
