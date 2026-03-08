@@ -315,58 +315,52 @@ def run_agent_query(user_input, context_data=None):
         return f"Agent Error: {e}", model_used
 
 def _get_file_context(user_input):
-    """Try to get relevant file context from LogSeq/Obsidian based on user query."""
+    """
+    Fetch relevant context from LogSeq (journals + pages) and Obsidian
+    based on the user's query. Returns a formatted string for the LLM system prompt.
+    """
+    from logseq_agent import LogSeqAgent, parse_date_from_text
     context_parts = []
-    months = {
-        'january': '01', 'february': '02', 'march': '03', 'april': '04',
-        'may': '05', 'june': '06', 'july': '07', 'august': '08',
-        'september': '09', 'october': '10', 'november': '11', 'december': '12'
-    }
+    input_lower = user_input.lower()
 
     logseq_dir = get_config_value("LOGSEQ_DIR", None)
-    if logseq_dir:
-        # Match "March 6 2026", "March 6, 2026", "2026-03-06", "2026/03/06"
-        numeric_match = re.search(r'\b(\d{4})[/-](\d{1,2})[/-](\d{1,2})\b', user_input)
-        word_match = re.search(
-            r'\b(january|february|march|april|may|june|july|august|september|october|november|december)'
-            r'\s+(\d{1,2})[,\s]+(\d{4})\b',
-            user_input.lower()
-        )
-        found_date = None
-        if numeric_match:
-            y, m, d = numeric_match.group(1), numeric_match.group(2).zfill(2), numeric_match.group(3).zfill(2)
-            found_date = f"{y}_{m}_{d}"
-        elif word_match:
-            m = months.get(word_match.group(1), '01')
-            d = word_match.group(2).zfill(2)
-            y = word_match.group(3)
-            found_date = f"{y}_{m}_{d}"
+    if logseq_dir and os.path.exists(logseq_dir):
+        agent = LogSeqAgent(logseq_dir)
 
-        if found_date:
-            journals_dir = os.path.join(logseq_dir, "journals")
-            journal_file = os.path.join(journals_dir, f"{found_date}.md")
-            if os.path.exists(journal_file):
-                try:
-                    with open(journal_file, 'r') as f:
-                        content = f.read()
-                    context_parts.append(f"=== LogSeq Journal ({found_date}) ===\n{content}")
-                except Exception:
-                    pass
-        elif any(kw in user_input.lower() for kw in ['logseq', 'journal', 'task', 'todo', 'later']):
-            # No specific date — return today's journal if it exists
-            today = datetime.datetime.now().strftime("%Y_%m_%d")
-            journal_file = os.path.join(logseq_dir, "journals", f"{today}.md")
-            if os.path.exists(journal_file):
-                try:
-                    with open(journal_file, 'r') as f:
-                        content = f.read()
-                    context_parts.append(f"=== LogSeq Journal (today: {today}) ===\n{content}")
-                except Exception:
-                    pass
+        # ── Journal: specific date ────────────────────────────────────────
+        date_key = parse_date_from_text(user_input)
+        if date_key:
+            raw_text, tasks = agent.get_tasks_for_date(date_key)
+            if raw_text is None:
+                context_parts.append(
+                    f"LogSeq journal {date_key}: file not found."
+                )
+            else:
+                context_parts.append(agent.context_for_date(date_key))
 
-    # Inject Obsidian context via RAG for note-related queries
-    note_keywords = ['obsidian', 'note', 'vault', 'project', 'plan', 'page']
-    if any(kw in user_input.lower() for kw in note_keywords):
+        # ── Journal: recent tasks (no date specified) ─────────────────────
+        elif any(kw in input_lower for kw in ['logseq', 'journal', 'task', 'todo', 'later', 'recent']):
+            context_parts.append(agent.context_for_recent(days=7))
+
+        # ── Pages: tasks ──────────────────────────────────────────────────
+        if any(kw in input_lower for kw in ['page', 'pages', 'todo', 'task', 'all tasks']):
+            page_ctx = agent.context_for_all_page_tasks()
+            if "0 found" not in page_ctx:
+                context_parts.append(page_ctx)
+
+        # ── Pages: keyword search ─────────────────────────────────────────
+        if any(kw in input_lower for kw in ['page', 'pages', 'note', 'find', 'search', 'about']):
+            results = agent.search_pages(user_input)
+            if results:
+                lines = ["LogSeq pages — matching content:"]
+                for page_name, hits in results:
+                    lines.append(f"\n**{page_name}**")
+                    lines.extend(f"  • {h}" for h in hits)
+                context_parts.append("\n".join(lines))
+
+    # ── Obsidian: RAG search ──────────────────────────────────────────────
+    obsidian_keywords = ['obsidian', 'vault', 'project', 'plan', 'note', 'notes']
+    if any(kw in input_lower for kw in obsidian_keywords):
         try:
             rag = RAGAgent(
                 get_config_value("WORKSPACE_DIR", None),
@@ -374,7 +368,7 @@ def _get_file_context(user_input):
             )
             rag_context = rag.query_context(user_input)
             if rag_context:
-                context_parts.append(f"=== Notes Context ===\n{rag_context}")
+                context_parts.append(f"Obsidian notes — relevant context:\n{rag_context}")
         except Exception:
             pass
 
