@@ -10,8 +10,12 @@ langchain
 langchain-community
 langchain-core
 langchain-ollama
+langchain-openai
+langchain-google-genai
+langchain-chroma
 langchain-text-splitters
 ollama
+
 
 # Testing & Reporting
 pytest

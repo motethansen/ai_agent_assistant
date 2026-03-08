@@ -5,6 +5,8 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+OS_TYPE=$(uname -s)
+
 start_ollama() {
     if pgrep -x "ollama" > /dev/null; then
         echo -e "${GREEN}Ollama is already running.${NC}"
@@ -41,58 +43,44 @@ start_ollama() {
 }
 
 start_openclaw() {
-    if ! command -v docker &> /dev/null; then
-        echo -e "${RED}Error: Docker not found. Cannot start OpenClaw locally.${NC}"
-        return 1
-    fi
-
-    # Check if Docker daemon is running
-    if ! docker info > /dev/null 2>&1; then
-        echo -e "${RED}Error: Docker daemon is not running.${NC}"
-        echo -e "${YELLOW}Please start OrbStack or Docker Desktop and try again.${NC}"
-        return 1
-    fi
-
-    if docker ps | grep -q "openclaw"; then
-        echo -e "${GREEN}OpenClaw is already running (Docker).${NC}"
-    else
-        echo -e "${YELLOW}Starting OpenClaw via Docker...${NC}"
-        
-        # Check if the openclaw repo exists
-        if [ ! -d "openclaw" ]; then
-            echo "Cloning OpenClaw repository..."
-            git clone https://github.com/openclaw/openclaw.git
-        fi
-
-        cd openclaw
-        if [ -f "./docker-setup.sh" ]; then
-            echo -e "${YELLOW}Running OpenClaw Docker setup (this may take a few minutes to build/pull)...${NC}"
-            # Use docker-setup.sh --yes if possible, or run it directly. 
-            # Note: This script typically builds the 'openclaw:local' image and starts the container.
-            # If it's the first time, it takes a while.
-            bash ./docker-setup.sh --yes || bash ./docker-setup.sh
+    if command -v openclaw &> /dev/null; then
+        if lsof -Pi :18789 -sTCP:LISTEN -t >/dev/null ; then
+            echo -e "${GREEN}OpenClaw is already running (Port 18789).${NC}"
         else
-            echo -e "${RED}Error: docker-setup.sh not found in openclaw directory.${NC}"
-            cd ..
+            echo -e "${YELLOW}Starting OpenClaw...${NC}"
+            # Check if OpenClaw is installed as a daemon
+            if [ "$OS_TYPE" == "Darwin" ]; then
+                if launchctl list | grep -q "ai.openclaw.gateway"; then
+                    launchctl start ai.openclaw.gateway
+                else
+                    openclaw gateway --port 18789 > /dev/null 2>&1 &
+                fi
+            else
+                 # Linux (Systemd)
+                 if systemctl --user is-active --quiet openclaw-gateway; then
+                     systemctl --user start openclaw-gateway
+                 else
+                     openclaw gateway --port 18789 > /dev/null 2>&1 &
+                 fi
+            fi
+
+            # Wait for port 18789 to be open
+            echo "Waiting for OpenClaw to start on port 18789..."
+            local max_retries=12 # 1 minute total
+            local count=0
+            while [ $count -lt $max_retries ]; do
+                if lsof -Pi :18789 -sTCP:LISTEN -t >/dev/null ; then
+                    echo -e "${GREEN}OpenClaw started successfully.${NC}"
+                    return 0
+                fi
+                sleep 5
+                ((count++))
+            done
+            echo -e "${RED}Failed to start OpenClaw or port is busy.${NC}"
             return 1
         fi
-        cd ..
-        
-        # Wait for startup and check again (Port 18789 is default for Web UI)
-        echo "Waiting for OpenClaw containers to stabilize..."
-        local max_retries=24 # 2 minutes total
-        local count=0
-        while [ $count -lt $max_retries ]; do
-            if docker ps --format '{{.Names}}' | grep -q "openclaw"; then
-                echo -e "${GREEN}OpenClaw started successfully (Port 18789).${NC}"
-                return 0
-            fi
-            sleep 5
-            ((count++))
-        done
-
-        echo -e "${RED}Failed to start OpenClaw.${NC}"
-        docker ps -a --filter "name=openclaw"
+    else
+        echo -e "${RED}Error: OpenClaw CLI not found.${NC}"
         return 1
     fi
 }
@@ -105,7 +93,7 @@ check_services() {
         start_ollama
     fi
     
-    if docker ps | grep -q "openclaw"; then
+    if lsof -Pi :18789 -sTCP:LISTEN -t >/dev/null ; then
         echo -e "OpenClaw: ${GREEN}RUNNING${NC}"
     else
         echo -e "OpenClaw: ${RED}STOPPED${NC}"

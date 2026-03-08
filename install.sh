@@ -160,20 +160,42 @@ setup_local_ai() {
         echo -e "${GREEN}Ollama is already installed.${NC}"
     fi
 
-    # OpenClaw
-    if ! command -v docker &> /dev/null; then
-        echo -e "${YELLOW}Docker not found. Docker is required to run OpenClaw locally.${NC}"
-        echo "Please install Docker from https://www.docker.com/products/docker-desktop/"
-    else
-        if ! docker ps | grep -q "openclaw"; then
-            echo "OpenClaw allows for more advanced agentic reasoning."
-            read -p "Would you like to start OpenClaw via Docker now? (y/n): " start_oc
-            if [[ "$start_oc" == "y"* ]]; then
-                ./scripts/manage_services.sh start
-            fi
-        else
-            echo -e "${GREEN}OpenClaw is already running in Docker.${NC}"
+    # OpenClaw (Node-based)
+    if ! command -v node &> /dev/null; then
+        echo -e "${YELLOW}Node.js not found. Node.js >= 22 is required for OpenClaw.${NC}"
+        if [ "$OS_TYPE" == "Darwin" ]; then
+             if command -v brew &> /dev/null; then
+                 echo "Installing Node.js 22 via Homebrew..."
+                 brew install node@22
+                 brew link --force --overwrite node@22
+             fi
         fi
+    else
+        NODE_VER=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+        if [ "$NODE_VER" -lt 22 ]; then
+            echo -e "${YELLOW}Node.js version is $NODE_VER. Node.js >= 22 is required for OpenClaw.${NC}"
+            if [ "$OS_TYPE" == "Darwin" ] && command -v brew &> /dev/null; then
+                 echo "Upgrading Node.js to 22 via Homebrew..."
+                 brew install node@22
+                 brew link --force --overwrite node@22
+            fi
+        fi
+    fi
+
+    if ! command -v openclaw &> /dev/null; then
+        echo "OpenClaw not found. It allows for more advanced agentic reasoning."
+        read -p "Would you like to install OpenClaw now? (y/n): " install_oc
+        if [[ "$install_oc" == "y"* ]]; then
+            echo "Installing OpenClaw via official script..."
+            curl -fsSL https://openclaw.ai/install.sh | bash
+            
+            # Run onboarding with daemon installation
+            echo -e "${YELLOW}Launching OpenClaw Onboarding...${NC}"
+            echo -e "${BLUE}Please follow the instructions in the new terminal window if it opens.${NC}"
+            openclaw onboard --install-daemon
+        fi
+    else
+        echo -e "${GREEN}OpenClaw is already installed.${NC}"
     fi
     
     ./scripts/manage_services.sh start

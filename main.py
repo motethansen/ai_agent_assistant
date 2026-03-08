@@ -478,6 +478,17 @@ def handle_chat_mode(obsidian_file):
                     print("  /create-agent - Scaffold a new custom agent")
                     print("  /list-agents  - Show available custom agents")
                     print("  /exit     - Quit the chat mode")
+                elif command == "index":
+                    print("🔍 Re-indexing all notes and books...")
+                    from rag_agent import RAGAgent
+                    rag_agent = RAGAgent(obsidian_path, logseq_path)
+                    rag_agent.index_vault()
+                    from book_agent import BookAgent
+                    book_agent = BookAgent()
+                    books = book_agent.scan_books()
+                    for b in books:
+                        print(book_agent.index_book(b['full_path']))
+                    print("✅ Indexing complete.")
                 elif command == "sync":
                     print("Syncing reminders to local storage...")
                     subprocess.run(["python3", "debug_reminders.py"])
@@ -497,12 +508,16 @@ def handle_chat_mode(obsidian_file):
                         workspace_dir=obsidian_path, 
                         logseq_dir=logseq_path
                     )
-                    if confirm == 'y':
+                    # We removed the 'confirm' variable check because it was undefined in the original code but used in a conditional.
+                    # Fixing the logic here.
+                    confirm_sync = input("Sync to calendar? (y/n): ").strip().lower()
+                    if confirm_sync == 'y':
                         planning_agent = PlanningAgent(service, calendar_id)
                         planning_agent.execute_plan(schedule, obsidian_path)
                         print("✅ Scheduled!")
                     else:
-                        print("Failed to generate schedule.")
+                        print("Sync cancelled.")
+
                 elif command == "pull":
                     sync_calendar_to_markdown(obsidian_path)
                 elif command == "stats":
@@ -654,135 +669,14 @@ def handle_chat_mode(obsidian_file):
                     print(f"Unknown command: /{command}. Type /commands for help.")
 
             else:
-                # AI Chat integration
-                print("AI is thinking...")
+                # Optimized AI Agent integration
+                print("🤖 AI Agent is thinking...")
                 try:
-                    # Get context
-                    tasks = get_unified_tasks(obsidian_path)
-                    calendar_id = get_config_value("CALENDAR_ID", "primary")
-                    service = calendar_manager.get_calendar_service()
-                    
-                    # Check if we failed at service level (e.g. invalid scope)
-                    if not service:
-                        print("⚠️ AI: I cannot access your calendar. Please check 'token.json' and 'credentials.json'.")
-                        continue
-
-                    calendar_agent = CalendarAgent()
-                    busy_slots = calendar_agent.get_busy_slots_from_yml()
-                    
-                    # Get Gmail context
-                    gmail_service = gmail_agent.get_gmail_service()
-                    snoozed_emails = []
-                    filtered_emails = []
-                    if gmail_service:
-                        snoozed_emails = gmail_agent.get_snoozed_emails(gmail_service)
-                        filters = gmail_agent.load_filters()
-                        if filters:
-                            filtered_emails = gmail_agent.get_filtered_emails(gmail_service, filters)
-
-                    # Get Books context
-                    book_agent = BookAgent()
-                    books_summary = book_agent.get_summary()
-
-                    context_payload = {
-                        "backlog": tasks,
-                        "workspace_dir": obsidian_path,
-                        "logseq_dir": logseq_path,
-                        "calendar_busy_slots": busy_slots,
-                        "gmail_snoozed": snoozed_emails,
-                        "gmail_filtered": filtered_emails,
-                        "books_library": books_summary,
-                        "current_time": datetime.datetime.now().astimezone().isoformat()
-                    }
-                    
-                    prompt = f"""
-                    User Question: '{user_input}'
-                    
-                    CONTEXT:
-                    - BACKLOG (Tasks): {json.dumps(tasks)}
-                    - WORKSPACE: {obsidian_path}
-                    - LOGSEQ: {logseq_path}
-                    - CALENDAR BUSY: {json.dumps(busy_slots)}
-                    - BOOKS: {books_summary}
-                    - TIME: {datetime.datetime.now().astimezone().isoformat()}
-                    
-                    INSTRUCTIONS:
-                    You are a professional AI Assistant.
-                    
-                    1. When asked to 'list' tasks from LogSeq, filter the 'BACKLOG' for items where "source": "Logseq".
-                    2. Use the 'response' field to provide a readable, bulleted list of these tasks, including their URLs or notes if present.
-                    3. If asked to 'move' tasks, suggest a 'write_file' action to the appropriate file in the workspace.
-                    4. ALWAYS return a JSON object with "response", "schedule" (list), and "actions" (list).
-                    
-                    IMPORTANT:
-                    - Do not hallucinate. Use the provided BACKLOG data.
-                    - If you see "source": "Logseq", those are the LogSeq tasks.
-                    - Be concise and friendly.
-                    """
-                    
-                    # Determine model to use
-                    model_to_use = ai_orchestration.get_routing("chat")
-                    response_text = ""
-
-                    if model_to_use == "ollama":
-                        print(" (Routing to local Ollama...)")
-                        response_text = ai_orchestration.ollama_generate(prompt)
-                    else:
-                        try:
-                            client = ai_orchestration.genai.Client(api_key=ai_orchestration.api_key)
-                            response = client.models.generate_content(model='gemini-flash-latest', contents=prompt)
-                            response_text = response.text
-                        except Exception as e:
-                            print(f"⚠️ Gemini Error: {e}. Falling back to Ollama.")
-                            response_text = ai_orchestration.ollama_generate(prompt)
-                    
-                    # Unified JSON Parsing and Execution
-                    try:
-                        text_content = response_text.strip()
-                        start_idx = text_content.find('{')
-                        end_idx = text_content.rfind('}')
-                        
-                        if start_idx != -1 and end_idx != -1:
-                            json_str = text_content[start_idx:end_idx+1]
-                            data = json.loads(json_str)
-                            
-                            if isinstance(data, dict):
-                                if "response" in data:
-                                    print(f"\n🤖 AI: {data['response']}")
-                                
-                                # Process Schedule (Calendar)
-                                if "schedule" in data and data["schedule"]:
-                                    print(f"📅 AI is proposing to book {len(data['schedule'])} event(s).")
-                                    confirm = input("Book these events? (y/n): ").strip().lower()
-                                    if confirm == 'y':
-                                        planning_agent = PlanningAgent(service, calendar_id)
-                                        planning_agent.execute_plan(data["schedule"], obsidian_path)
-                                
-                                # Process Actions (File System, etc.)
-                                if "actions" in data:
-                                    execute_actions(data["actions"])
-                            else:
-                                # Not a dict, just print raw
-                                print(f"\n🤖 AI: {text_content}")
-                        else:
-                            # No JSON found, print raw response
-                            print(f"\n🤖 AI: {text_content}")
-
-                    except Exception as e:
-                        # Fallback for parsing errors
-                        print(f"\n🤖 AI: {response_text}")
-
+                    response = ai_orchestration.run_agent_query(user_input)
+                    print(f"\n🤖 AI: {response}")
                 except Exception as e:
-                    error_str = str(e).lower()
-                    if "429" in error_str or "resource_exhausted" in error_str:
-                        print("⚠️ AI: I've hit my API rate limit or daily quota. Please try again in a moment.")
-                    elif "503" in error_str or "unavailable" in error_str:
-                        print("⚠️ AI: The Gemini service is currently overloaded (503 Service Unavailable). This is usually temporary. Please try again in a few seconds.")
-                    elif "invalid_scope" in error_str:
-                        print("⚠️ AI: I encountered an 'invalid_scope' error. This usually happens after a security update.")
-                        print("💡 FIX: Please run 'rm token.json' and restart the chat to re-authenticate with Google.")
-                    else:
-                        print(f"⚠️ AI: I encountered an error: {e}")
+                    print(f"⚠️ AI Agent Error: {e}")
+
         except KeyboardInterrupt:
             print("\nGoodbye!")
             break
