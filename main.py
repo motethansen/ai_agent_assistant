@@ -783,7 +783,6 @@ def handle_chat_mode(obsidian_file):
 
             else:
                 # Streaming AI response with Rich rendering
-                chat_ui.render_user_input(user_input)
                 history = chat_ui.add_to_history("user", user_input, history)
 
                 try:

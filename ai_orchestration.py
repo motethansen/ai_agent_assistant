@@ -314,15 +314,89 @@ def run_agent_query(user_input, context_data=None):
     except Exception as e:
         return f"Agent Error: {e}", model_used
 
+def _get_file_context(user_input):
+    """Try to get relevant file context from LogSeq/Obsidian based on user query."""
+    context_parts = []
+    months = {
+        'january': '01', 'february': '02', 'march': '03', 'april': '04',
+        'may': '05', 'june': '06', 'july': '07', 'august': '08',
+        'september': '09', 'october': '10', 'november': '11', 'december': '12'
+    }
+
+    logseq_dir = get_config_value("LOGSEQ_DIR", None)
+    if logseq_dir:
+        # Match "March 6 2026", "March 6, 2026", "2026-03-06", "2026/03/06"
+        numeric_match = re.search(r'\b(\d{4})[/-](\d{1,2})[/-](\d{1,2})\b', user_input)
+        word_match = re.search(
+            r'\b(january|february|march|april|may|june|july|august|september|october|november|december)'
+            r'\s+(\d{1,2})[,\s]+(\d{4})\b',
+            user_input.lower()
+        )
+        found_date = None
+        if numeric_match:
+            y, m, d = numeric_match.group(1), numeric_match.group(2).zfill(2), numeric_match.group(3).zfill(2)
+            found_date = f"{y}_{m}_{d}"
+        elif word_match:
+            m = months.get(word_match.group(1), '01')
+            d = word_match.group(2).zfill(2)
+            y = word_match.group(3)
+            found_date = f"{y}_{m}_{d}"
+
+        if found_date:
+            journals_dir = os.path.join(logseq_dir, "journals")
+            journal_file = os.path.join(journals_dir, f"{found_date}.md")
+            if os.path.exists(journal_file):
+                try:
+                    with open(journal_file, 'r') as f:
+                        content = f.read()
+                    context_parts.append(f"=== LogSeq Journal ({found_date}) ===\n{content}")
+                except Exception:
+                    pass
+        elif any(kw in user_input.lower() for kw in ['logseq', 'journal', 'task', 'todo', 'later']):
+            # No specific date — return today's journal if it exists
+            today = datetime.datetime.now().strftime("%Y_%m_%d")
+            journal_file = os.path.join(logseq_dir, "journals", f"{today}.md")
+            if os.path.exists(journal_file):
+                try:
+                    with open(journal_file, 'r') as f:
+                        content = f.read()
+                    context_parts.append(f"=== LogSeq Journal (today: {today}) ===\n{content}")
+                except Exception:
+                    pass
+
+    # Inject Obsidian context via RAG for note-related queries
+    note_keywords = ['obsidian', 'note', 'vault', 'project', 'plan', 'page']
+    if any(kw in user_input.lower() for kw in note_keywords):
+        try:
+            rag = RAGAgent(
+                get_config_value("WORKSPACE_DIR", None),
+                get_config_value("LOGSEQ_DIR", None)
+            )
+            rag_context = rag.query_context(user_input)
+            if rag_context:
+                context_parts.append(f"=== Notes Context ===\n{rag_context}")
+        except Exception:
+            pass
+
+    return "\n\n".join(context_parts)
+
+
 def run_agent_query_stream(user_input, chat_history=None):
     """Streams LLM response chunks for real-time display. Returns (stream_iterator, model_used)."""
     llm, model_used = get_llm("chat", user_input)
 
-    messages = [
-        ("system", "You are a professional AI Assistant. Be concise and helpful. "
-                   "Format responses in markdown when appropriate. "
-                   "If asked about tasks, schedules, or plans, provide actionable suggestions."),
-    ]
+    # Pre-fetch file context for LogSeq/Obsidian queries
+    file_context = _get_file_context(user_input)
+
+    system_msg = (
+        "You are a professional AI Assistant. Be concise and helpful. "
+        "Format responses in markdown when appropriate. "
+        "If asked about tasks, schedules, or plans, provide actionable suggestions."
+    )
+    if file_context:
+        system_msg += f"\n\nCONTEXT FROM FILES:\n{file_context}"
+
+    messages = [("system", system_msg)]
     if chat_history:
         for msg in chat_history[-10:]:
             role = "human" if msg["role"] == "user" else "ai"
