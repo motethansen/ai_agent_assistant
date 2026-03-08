@@ -97,15 +97,10 @@ def is_ollama_running():
 def is_openclaw_running():
     """Checks if the OpenClaw endpoint is actually serving a working API."""
     endpoint = get_config_value('OPENCLAW_ENDPOINT', 'http://localhost:18789/v1')
+    oc_api_key = get_config_value('OPENCLAW_API_KEY', '')
+    headers = {"Authorization": f"Bearer {oc_api_key}", "Content-Type": "application/json"}
     try:
-        response = requests.get(f"{endpoint}/models", timeout=2)
-        if response.status_code not in [200, 401]:
-            return False
-        content_type = response.headers.get('content-type', '')
-        if 'html' in content_type:
-            return False
-        oc_api_key = get_config_value('OPENCLAW_API_KEY', '')
-        headers = {"Authorization": f"Bearer {oc_api_key}", "Content-Type": "application/json"}
+        # /v1/models returns the HTML control UI (SPA catch-all), so probe chat/completions directly
         probe = requests.post(
             f"{endpoint}/chat/completions",
             json={"model": get_config_value("OPENCLAW_MODEL", "gpt-3.5-turbo"),
@@ -114,8 +109,16 @@ def is_openclaw_running():
             headers=headers,
             timeout=5
         )
+        content_type = probe.headers.get('content-type', '')
+        if 'html' in content_type:
+            return False
         data = probe.json()
         if "error" in data:
+            err_type = data['error'].get('type', '')
+            # unauthorized means the server IS running; other errors mean misconfigured
+            if err_type == 'unauthorized':
+                print(f"⚠️ OpenClaw auth error — check OPENCLAW_API_KEY in .config")
+                return False
             print(f"⚠️ OpenClaw API error: {data['error'].get('message', 'unknown')}")
             return False
         return True

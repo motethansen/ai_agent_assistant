@@ -188,7 +188,7 @@ setup_local_ai() {
         if [[ "$install_oc" == "y"* ]]; then
             echo "Installing OpenClaw via official script..."
             curl -fsSL https://openclaw.ai/install.sh | bash
-            
+
             # Run onboarding with daemon installation
             echo -e "${YELLOW}Launching OpenClaw Onboarding...${NC}"
             echo -e "${BLUE}Please follow the instructions in the new terminal window if it opens.${NC}"
@@ -196,34 +196,123 @@ setup_local_ai() {
         fi
     else
         echo -e "${GREEN}OpenClaw is already installed.${NC}"
+        # Ensure OpenClaw gateway is installed as a persistent background service
+        if openclaw gateway status 2>&1 | grep -q "not loaded\|not installed\|Service not installed"; then
+            echo -e "${YELLOW}Installing OpenClaw gateway as a background service...${NC}"
+            openclaw gateway install
+            openclaw gateway start 2>/dev/null || true
+            echo -e "${GREEN}OpenClaw gateway service installed.${NC}"
+        elif openclaw gateway status 2>&1 | grep -q "not running\|stopped"; then
+            echo -e "${YELLOW}Starting OpenClaw gateway service...${NC}"
+            openclaw gateway start 2>/dev/null || launchctl start ai.openclaw.gateway 2>/dev/null || true
+        else
+            echo -e "${GREEN}OpenClaw gateway service is active.${NC}"
+        fi
     fi
     
     ./scripts/manage_services.sh start
 }
 
+# Helper: update or append a KEY=value in .config
+set_config_key() {
+    local key="$1"
+    local value="$2"
+    local file=".config"
+    if grep -qE "^#?\s*${key}=" "$file" 2>/dev/null; then
+        sed -i.bak "s|^#\?\s*${key}=.*|${key}=${value}|" "$file" && rm -f "${file}.bak"
+    else
+        echo "${key}=${value}" >> "$file"
+    fi
+}
+
+# Helper: update OpenClaw auth-profiles.json with a provider API key
+set_openclaw_provider_key() {
+    local provider="$1"
+    local api_key="$2"
+    local profiles_file="$HOME/.openclaw/agents/main/agent/auth-profiles.json"
+    if [ ! -f "$profiles_file" ]; then return; fi
+    python3 - "$profiles_file" "$provider" "$api_key" <<'PYEOF'
+import json, sys
+path, provider, key = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(path) as f:
+    data = json.load(f)
+profile_key = f"{provider}:default"
+data.setdefault("profiles", {})[profile_key] = {
+    "type": "api_key", "provider": provider, "key": key
+}
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+PYEOF
+}
+
 # 4. Configuration (Web Wizard or CLI)
 setup_configuration() {
     show_progress "System Configuration..."
-    
+
     if [ ! -f ".config" ]; then
-        echo "I will now help you configure your API keys and folder paths."
-        echo "I recommend using the ${GREEN}Web Setup Wizard${NC} for a better experience."
-        read -p "Launch Web Setup Wizard? (y/n): " use_wizard
-        
-        if [[ "$use_wizard" == "y"* ]]; then
-            echo -e "${YELLOW}Launching Setup Wizard in your browser...${NC}"
-            .venv/bin/streamlit run setup_wizard.py
-            exit 0
+        cp config.template .config
+        echo -e "${GREEN}Created .config from template.${NC}"
+    else
+        echo -e "${GREEN}Existing .config found.${NC}"
+    fi
+
+    echo ""
+    echo -e "${BLUE}--- API Key Setup ---${NC}"
+    echo "The assistant uses OpenClaw as its primary AI gateway (supports OpenAI, local models, etc.)"
+    echo "You need at least one API key to get started."
+    echo ""
+
+    # OpenAI (primary/recommended)
+    CURRENT_OPENAI=$(grep -E "^OPENAI_API_KEY=" .config | cut -d'=' -f2- | tr -d ' ')
+    if [ -z "$CURRENT_OPENAI" ] || [[ "$CURRENT_OPENAI" == *"your_"* ]]; then
+        read -p "OpenAI API Key (sk-proj-...) [Enter to skip]: " openai_key
+        if [ -n "$openai_key" ]; then
+            set_config_key "OPENAI_API_KEY" "$openai_key"
+            set_config_key "ENABLE_OPENAI" "true"
+            set_config_key "OPENCLAW_MODEL" "openai/gpt-4o-mini"
+            set_openclaw_provider_key "openai" "$openai_key"
+            echo -e "${GREEN}OpenAI API key saved and configured as primary model.${NC}"
         else
-            echo "Proceeding with manual CLI configuration..."
-            cp config.template .config
-            # Basic CLI config logic (shortened for brevity)
-            read -p "Enter Gemini API Key: " gkey
-            sed -i.bak "s|GEMINI_API_KEY=.*|GEMINI_API_KEY=$gkey|" .config && rm .config.bak
+            echo -e "${YELLOW}Skipped. You can add it later with: /settings set OPENAI_API_KEY sk-proj-...${NC}"
         fi
     else
-        echo -e "${GREEN}Existing configuration (.config) found.${NC}"
+        echo -e "${GREEN}OpenAI API key already configured.${NC}"
     fi
+
+    # Gemini (optional)
+    CURRENT_GEMINI=$(grep -E "^GEMINI_API_KEY=" .config | cut -d'=' -f2- | tr -d ' ')
+    if [ -z "$CURRENT_GEMINI" ] || [[ "$CURRENT_GEMINI" == *"your_"* ]]; then
+        read -p "Google Gemini API Key [Enter to skip]: " gemini_key
+        if [ -n "$gemini_key" ]; then
+            set_config_key "GEMINI_API_KEY" "$gemini_key"
+            set_config_key "ENABLE_GEMINI" "true"
+            echo -e "${GREEN}Gemini API key saved.${NC}"
+        fi
+    else
+        echo -e "${GREEN}Gemini API key already configured.${NC}"
+    fi
+
+    # Claude (optional)
+    CURRENT_CLAUDE=$(grep -E "^CLAUDE_API_KEY=" .config | cut -d'=' -f2- | tr -d ' ')
+    if [ -z "$CURRENT_CLAUDE" ] || [[ "$CURRENT_CLAUDE" == *"your_"* ]]; then
+        read -p "Anthropic Claude API Key [Enter to skip]: " claude_key
+        if [ -n "$claude_key" ]; then
+            set_config_key "CLAUDE_API_KEY" "$claude_key"
+            set_config_key "ENABLE_CLAUDE" "true"
+            echo -e "${GREEN}Claude API key saved.${NC}"
+        fi
+    else
+        echo -e "${GREEN}Claude API key already configured.${NC}"
+    fi
+
+    echo ""
+    echo -e "${BLUE}--- Folder Paths ---${NC}"
+    read -p "Path to your Obsidian/Markdown notes folder [Enter to skip]: " ws_path
+    if [ -n "$ws_path" ]; then
+        set_config_key "WORKSPACE_DIR" "$ws_path"
+    fi
+
+    echo -e "${GREEN}Configuration complete. You can update keys any time with /settings in chat.${NC}"
 }
 
 # 5. Background Automation (Cron)

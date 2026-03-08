@@ -89,6 +89,49 @@ def render_warning(msg):
     console.print(f"[bold yellow]{msg}[/bold yellow]")
 
 
+def render_settings(config_path):
+    """Render current API key and LLM configuration status."""
+    from config_utils import get_config_value
+    table = Table(title="Settings & API Keys", show_header=True, header_style="bold cyan")
+    table.add_column("Setting", style="cyan", min_width=20)
+    table.add_column("Status")
+    table.add_column("Value (masked)")
+
+    def mask(val):
+        if not val or "your_" in val or "here" in val:
+            return "[red]NOT SET[/red]"
+        return "[green]SET[/green]", f"{val[:8]}...{val[-4:]}" if len(val) > 14 else "***"
+
+    keys = [
+        ("OPENAI_API_KEY",   "OpenAI API Key"),
+        ("OPENCLAW_API_KEY", "OpenClaw Gateway Token"),
+        ("GEMINI_API_KEY",   "Gemini API Key"),
+        ("CLAUDE_API_KEY",   "Claude API Key"),
+        ("HF_TOKEN",         "HuggingFace Token"),
+    ]
+    for key, label in keys:
+        val = get_config_value(key, "")
+        if not val or "your_" in val or "here" in val:
+            table.add_row(label, "[red]NOT SET[/red]", "—")
+        else:
+            table.add_row(label, "[green]SET[/green]", f"{val[:8]}...{val[-4:]}" if len(val) > 14 else "***")
+
+    console.print(table)
+
+    settings_table = Table(title="LLM Configuration", show_header=True, header_style="bold cyan")
+    settings_table.add_column("Setting", style="cyan", min_width=20)
+    settings_table.add_column("Value")
+    for key in ["OPENCLAW_MODEL", "OPENAI_MODEL", "OLLAMA_MODEL", "LLM_PRIORITY",
+                "ROUTING_CHAT", "ROUTING_SCHEDULING", "ENABLE_OPENAI", "ENABLE_OPENCLAW",
+                "ENABLE_OLLAMA", "ENABLE_GEMINI", "ENABLE_CLAUDE"]:
+        val = get_config_value(key, "")
+        settings_table.add_row(key, val or "[dim]not set[/dim]")
+    console.print(settings_table)
+    console.print(f"\n[dim]Config file: {config_path}[/dim]")
+    console.print("[dim]To update a key: /settings set <KEY> <value>[/dim]")
+    console.print("[dim]Example: /settings set OPENAI_API_KEY sk-proj-...[/dim]\n")
+
+
 COMMAND_DESCRIPTIONS = {
     "sync": "Manually trigger task sync from Obsidian and Reminders",
     "pull": "Sync Calendar -> Markdown (Two-Way Sync)",
@@ -111,6 +154,7 @@ COMMAND_DESCRIPTIONS = {
     "create-agent": "Scaffold a new custom agent",
     "define-agent": "Link an agent to a specific LLM",
     "list-agents": "Show available custom agents",
+    "settings": "View or update API keys and configuration (/settings set KEY value)",
     "history": "Show recent conversation history",
     "clear-history": "Clear conversation history",
     "exit": "Quit the chat mode",

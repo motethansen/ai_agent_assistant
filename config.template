@@ -12,8 +12,9 @@ CALENDAR_ID=primary
 # Run `openclaw config get gateway.auth.token` to get the API key.
 OPENCLAW_API_KEY=your_openclaw_api_key_here
 OPENCLAW_ENDPOINT=http://localhost:18789/v1
-# OPENCLAW_MODEL: Model name used by OpenClaw (OpenAI-compatible).
-OPENCLAW_MODEL=gpt-3.5-turbo
+# OPENCLAW_MODEL: Model routed through OpenClaw. Format: provider/model-id
+# e.g. openai/gpt-4o-mini, openai/gpt-4o, huggingface/deepseek-ai/DeepSeek-R1
+OPENCLAW_MODEL=openai/gpt-4o-mini
 
 # --- Ollama Settings ---
 OLLAMA_MODEL=llama3

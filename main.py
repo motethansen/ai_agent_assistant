@@ -19,6 +19,45 @@ from calendar_agent import CalendarAgent, start_background_calendar_sync
 from planning_agent import PlanningAgent
 from obsidian_agent import ObsidianAgent
 
+def _update_config_key(config_path, key, value):
+    """Update or append a KEY=value line in the .config file."""
+    lines = []
+    found = False
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            lines = f.readlines()
+    new_lines = []
+    for line in lines:
+        if line.startswith(f"{key}=") or line.startswith(f"# {key}="):
+            new_lines.append(f"{key}={value}\n")
+            found = True
+        else:
+            new_lines.append(line)
+    if not found:
+        new_lines.append(f"{key}={value}\n")
+    with open(config_path, "w") as f:
+        f.writelines(new_lines)
+
+
+def _update_openclaw_api_key(provider, api_key):
+    """Update the API key for a provider in OpenClaw's auth-profiles.json."""
+    import json
+    profiles_path = os.path.expanduser("~/.openclaw/agents/main/agent/auth-profiles.json")
+    if not os.path.exists(profiles_path):
+        return
+    with open(profiles_path, "r") as f:
+        data = json.load(f)
+    profile_key = f"{provider}:default"
+    if profile_key not in data.get("profiles", {}):
+        data.setdefault("profiles", {})[profile_key] = {
+            "type": "api_key",
+            "provider": provider,
+        }
+    data["profiles"][profile_key]["key"] = api_key
+    with open(profiles_path, "w") as f:
+        json.dump(data, f, indent=2)
+
+
 def get_unified_tasks(obsidian_path):
     """
     Merges tasks from Obsidian, LogSeq, and Apple Reminders.
@@ -721,6 +760,24 @@ def handle_chat_mode(obsidian_file):
                             chat_ui.render_info("Usage: /gmail-filter <add/remove/list> [query]")
                     else:
                         chat_ui.render_info("Usage: /gmail-filter <add/remove/list> [query]")
+                elif command == "settings":
+                    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".config")
+                    if len(parts) >= 3 and parts[1].lower() == "set":
+                        key = parts[2].upper()
+                        value = parts[3] if len(parts) >= 4 else ""
+                        if not value:
+                            chat_ui.render_warning("Usage: /settings set <KEY> <value>")
+                        else:
+                            _update_config_key(config_path, key, value)
+                            chat_ui.render_success(f"Updated {key} in .config")
+                            # Reload relevant in-memory values
+                            if key in ("OPENAI_API_KEY",):
+                                _update_openclaw_api_key("openai", value)
+                                chat_ui.render_info("OpenClaw auth-profiles updated with new OpenAI key.")
+                            elif key in ("OPENCLAW_MODEL", "OPENCLAW_ENDPOINT", "OPENCLAW_API_KEY"):
+                                chat_ui.render_info("Restart the chat for routing changes to take effect.")
+                    else:
+                        chat_ui.render_settings(config_path)
                 else:
                     chat_ui.render_warning(f"Unknown command: /{command}. Type /commands for help.")
 
