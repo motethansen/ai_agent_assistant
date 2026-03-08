@@ -93,7 +93,8 @@ class BookAgent:
         report = f"\n📚 DEEP SEARCH RESULTS FOR: '{query}'\n"
         for doc in results:
             source = os.path.basename(doc.metadata.get("source", "Unknown"))
-            report += f"- From '{source}': {doc.page_content[:400].replace('\\n', ' ')}...\n"
+            content_snippet = doc.page_content[:400].replace('\n', ' ')
+            report += f"- From '{source}': {content_snippet}...\n"
         return report
 
     def get_summary(self):

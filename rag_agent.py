@@ -111,7 +111,8 @@ class RAGAgent:
             source = doc.metadata.get("source", "Unknown")
             path = doc.metadata.get("source_file") or doc.metadata.get("path") or "Unknown"
             filename = os.path.basename(path)
-            context_str += f"- From {source} ('{filename}'): {doc.page_content[:400].replace('\\n', ' ')}\n"
+            content_snippet = doc.page_content[:400].replace('\n', ' ')
+            context_str += f"- From {source} ('{filename}'): {content_snippet}\n"
             
         return context_str
 

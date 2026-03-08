@@ -23,21 +23,16 @@ def test_openclaw():
     try:
         # We call the generation function directly, bypassing routing fallbacks
         response = ai_orchestration.openclaw_generate(prompt)
-        print(f"
-OpenClaw Response: {response}")
+        print(f"\nOpenClaw Response: {response}")
         
         if "SUCCESS" in response.upper():
-            print("
-✅ OpenClaw is WORKING correctly!")
+            print("\n✅ OpenClaw is WORKING correctly!")
         else:
-            print("
-⚠️ OpenClaw responded, but the output was unexpected.")
+            print("\n⚠️ OpenClaw responded, but the output was unexpected.")
             
     except Exception as e:
-        print(f"
-❌ OpenClaw test FAILED: {e}")
-        print("
-Possible solutions:")
+        print(f"\n❌ OpenClaw test FAILED: {e}")
+        print("\nPossible solutions:")
         print(f"1. Make sure your local server is running on {endpoint}")
         print("2. Check if your API key is required (configured in .config)")
         print("3. Ensure the model 'gpt-3.5-turbo' (default) is loaded in your server")

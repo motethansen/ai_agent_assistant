@@ -8,12 +8,18 @@ from config_utils import get_config_value
 
 try:
     from langchain_ollama import ChatOllama
-    from langchain.agents import AgentExecutor, create_tool_calling_agent
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.tools import tool
+    try:
+        from langchain.agents import AgentExecutor, create_tool_calling_agent
+    except ImportError:
+        from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 except ImportError:
     ChatOllama = None
     AgentExecutor = None
+    create_tool_calling_agent = None
+    ChatPromptTemplate = None
+    def tool(func): return func  # Fallback decorator
 
 from rag_agent import RAGAgent
 from book_agent import BookAgent
@@ -199,6 +205,70 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
     except Exception as e:
         print(f"Schedule Gen Error: {e}")
     return None
+
+def suggest_task_organization(tasks):
+    """
+    Analyzes a list of tasks and suggests categories and scheduling dates.
+    """
+    llm = get_llm("scheduling")
+    
+    prompt = f"""
+    Analyze the following tasks and suggest the best category and target date for each.
+    
+    VALID CATEGORIES: {json.dumps(VALID_CATEGORIES)}
+    
+    TASKS: {json.dumps(tasks)}
+    
+    OUTPUT: Return a JSON object with a "suggestions" array.
+    Each item: {{
+        "task": "Original Task Name", 
+        "suggested_category": "Category from list", 
+        "target_date": "YYYY-MM-DD", 
+        "reason": "Brief explanation"
+    }}
+    Return ONLY JSON.
+    """
+    
+    try:
+        response = llm.invoke(prompt)
+        content = response.content.strip()
+        match = re.search(r'\{.*\}', content, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+    except Exception as e:
+        print(f"Task Organization Error: {e}")
+    return {"suggestions": []}
+
+def process_tasks_with_command(tasks, command):
+    """
+    Processes tasks based on a custom natural language command.
+    """
+    llm = get_llm("chat")
+    
+    prompt = f"""
+    The user wants to perform the following action on these tasks: "{command}"
+    
+    TASKS: {json.dumps(tasks)}
+    
+    OUTPUT: Return a JSON object with a "suggestions" array.
+    Each item: {{
+        "task": "Task Name", 
+        "suggested_category": "Category", 
+        "target_date": "YYYY-MM-DD", 
+        "reason": "Applied change based on command"
+    }}
+    Return ONLY JSON.
+    """
+    
+    try:
+        response = llm.invoke(prompt)
+        content = response.content.strip()
+        match = re.search(r'\{.*\}', content, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+    except Exception as e:
+        print(f"Custom Command Error: {e}")
+    return {"suggestions": []}
 
 def ollama_generate(prompt, model=None):
     """Simple wrapper for single generation."""

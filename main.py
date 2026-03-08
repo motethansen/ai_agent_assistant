@@ -622,6 +622,82 @@ def handle_chat_mode(obsidian_file):
                 elif command == "list-agents":
                     agents = [f[:-3] for f in os.listdir("custom_agents") if f.endswith(".py") and f != "__init__.py"]
                     print(f"Available Agents: {', '.join(agents) if agents else 'None'}")
+                elif command == "organize":
+                    print("🧠 AI is analyzing your backlog for organization...")
+                    tasks = get_unified_tasks(obsidian_path)
+                    if not tasks:
+                        print("No tasks found in backlog.")
+                        continue
+                    
+                    results = ai_orchestration.suggest_task_organization(tasks)
+                    if results and "suggestions" in results:
+                        print("\n--- AI Organization Suggestions ---")
+                        for sug in results["suggestions"]:
+                            print(f"  • {sug['task']}")
+                            print(f"    - Category: {sug['suggested_category']}")
+                            print(f"    - Target Date: {sug['target_date']}")
+                            print(f"    - Reason: {sug['reason']}")
+                        
+                        confirm = input("\nApply these suggestions to your markdown plan? (y/n): ").strip().lower()
+                        if confirm == 'y':
+                            # Simplified apply logic: update the file with suggested categories/dates
+                            update_markdown_plan(obsidian_path, results["suggestions"])
+                            print("✅ Suggestions applied to markdown.")
+                    else:
+                        print("Failed to get suggestions from AI.")
+
+                elif command == "cmd":
+                    if len(parts) >= 2:
+                        user_cmd = " ".join(parts[1:])
+                        print(f"🤖 Executing command on backlog: '{user_cmd}'")
+                        tasks = get_unified_tasks(obsidian_path)
+                        results = ai_orchestration.process_tasks_with_command(tasks, user_cmd)
+                        if results and "suggestions" in results:
+                            for sug in results["suggestions"]:
+                                print(f"  • {sug['task']} -> {sug['suggested_category']} ({sug['target_date']})")
+                            
+                            confirm = input("\nApply changes? (y/n): ").strip().lower()
+                            if confirm == 'y':
+                                update_markdown_plan(obsidian_path, results["suggestions"])
+                                print("✅ Changes applied.")
+                        else:
+                            print("No changes suggested by AI.")
+                    else:
+                        print("Usage: /cmd <instruction for backlog>")
+
+                elif command == "develop":
+                    if len(parts) >= 2:
+                        prompt = " ".join(parts[1:])
+                        print(f"👨‍💻 AI is developing code for: '{prompt}'...")
+                        # Use a specialized prompt for code generation
+                        code_prompt = f"Develop a complete, working script or code snippet for: {prompt}. Return only the code and a brief explanation."
+                        code_response = ai_orchestration.run_agent_query(code_prompt)
+                        print(f"\n--- GENERATED CODE ---\n{code_response}\n")
+                        
+                        save = input("Save this code to a file? (y/n): ").strip().lower()
+                        if save == 'y':
+                            filename = input("Enter filename (e.g. script.py): ").strip()
+                            with open(filename, "w") as f:
+                                f.write(code_response)
+                            print(f"✅ Saved to {filename}")
+                    else:
+                        print("Usage: /develop <what to build>")
+
+                elif command == "define-agent":
+                    if len(parts) >= 3:
+                        agent_name = parts[1].lower().replace("-", "_")
+                        linked_llm = parts[2].lower()
+                        
+                        if linked_llm not in ai_orchestration.MODELS_ENABLED:
+                            print(f"⚠️ Warning: '{linked_llm}' is not a recognized model. Using default.")
+                        
+                        agent_path = f"custom_agents/{agent_name}.py"
+                        with open(agent_path, "w") as f:
+                            f.write(f'\"\"\"\nAgent: {agent_name}\nLinked LLM: {linked_llm}\nCreated dynamically by AI Agent Assistant\n\"\"\"\n\nimport ai_orchestration\n\ndef run(context):\n    \"\"\"Main entry point for the {agent_name} agent using {linked_llm}.\"\"\"\n    prompt = f"As the {agent_name} specialist, process this context: {{context}}"\n    # This is a conceptual link - the agent code can call specific LLM functions\n    if "{linked_llm}" == "ollama":\n        return ai_orchestration.ollama_generate(prompt)\n    elif "{linked_llm}" == "openclaw":\n        return ai_orchestration.openclaw_generate(prompt)\n    else:\n        return ai_orchestration.run_agent_query(prompt)\n')
+                        print(f"✅ Agent '{agent_name}' defined and linked to '{linked_llm}' at {agent_path}.")
+                    else:
+                        print("Usage: /define-agent <name> <llm_type>")
+
                 elif command == "gmail":
                     print("Checking Gmail for snoozed and filtered emails...")
                     service = gmail_agent.get_gmail_service()
