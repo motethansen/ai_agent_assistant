@@ -421,65 +421,64 @@ def execute_actions(actions):
         print("🚫 Actions cancelled.")
 
 def print_banner():
-
     """Prints the AI Agent Assistant banner."""
-    banner = """
-    #######################################
-    #                                     #
-    #        🤖 AI AGENT ASSISTANT        #
-    #                                     #
-    #######################################
-    """
-    print(banner)
+    try:
+        import chat_ui
+        chat_ui.print_banner()
+    except ImportError:
+        print("\n  AI AGENT ASSISTANT\n")
 
 def handle_chat_mode(obsidian_file):
     """
-    Starts an interactive CLI chat loop with slash commands.
+    Starts an interactive CLI chat loop with slash commands and Rich UI.
     """
+    import chat_ui
+
     obsidian_path = get_config_value("WORKSPACE_DIR", ".")
     logseq_path = get_config_value("LOGSEQ_DIR", None)
-    
-    print_banner()
-    print("🤖 AI Agent Assistant: Interactive Chat Mode")
-    print("Type /commands to see available slash commands or type your question.")
-    
+
+    chat_ui.print_banner()
+    history = chat_ui.load_history()
+
+    # Use prompt_toolkit for better input if available
+    try:
+        from prompt_toolkit import prompt as pt_prompt
+        from prompt_toolkit.history import FileHistory
+        input_history = FileHistory(os.path.expanduser("~/.ai_agent_input_history"))
+        def get_input():
+            return pt_prompt("You: ", history=input_history).strip()
+    except ImportError:
+        def get_input():
+            return input("\nYou: ").strip()
+
     while True:
         try:
-            user_input = input("\n👤 You: ").strip()
-            
+            user_input = get_input()
+
             if not user_input:
                 continue
-                
+
             if user_input.startswith("/"):
-                command_full = user_input[1:].lower().strip()
+                command_full = user_input[1:].strip()
                 parts = command_full.split()
                 if not parts:
-                    print("⚠️ Invalid command. Type /commands for help.")
+                    chat_ui.render_warning("Invalid command. Type /commands for help.")
                     continue
-                command = parts[0]
-                
-                if command == "exit" or command == "quit":
-                    print("Goodbye!")
+                command = parts[0].lower()
+
+                if command in ("exit", "quit"):
+                    chat_ui.render_info("Goodbye!")
                     break
-                elif command == "commands" or command == "help":
-                    print("\nAvailable Commands:")
-                    print("  /sync     - Manually trigger task sync from Obsidian and Reminders")
-                    print("  /pull     - Sync Calendar -> Markdown (Two-Way Sync)")
-                    print("  /backlog  - Display the current unified backlog (grouped by category)")
-                    print("  /stats    - Display focus analytics for today")
-                    print("  /plan     - Trigger a morning planning session")
-                    print("  /review   - Trigger an evening review session")
-                    print("  /ui       - Launch the Streamlit web interface")
-                    print("  /models   - Show current status of LLM models")
-                    print("  /model    - Enable/disable models (e.g., /model disable gemini)")
-                    print("  /gmail    - List snoozed and filtered emails from Gmail")
-                    print("  /gmail-filter - Manage Gmail search filters (e.g., /gmail-filter add 'from:boss')")
-                    print("  /docs     - Show project documentation")
-                    print("  /create-agent - Scaffold a new custom agent")
-                    print("  /list-agents  - Show available custom agents")
-                    print("  /exit     - Quit the chat mode")
+                elif command in ("commands", "help"):
+                    chat_ui.render_command_help()
+                elif command == "history":
+                    chat_ui.render_history_summary(history)
+                elif command == "clear-history":
+                    history = []
+                    chat_ui.save_history(history)
+                    chat_ui.render_success("Conversation history cleared.")
                 elif command == "index":
-                    print("🔍 Re-indexing all notes and books...")
+                    chat_ui.render_info("Re-indexing all notes and books...")
                     from rag_agent import RAGAgent
                     rag_agent = RAGAgent(obsidian_path, logseq_path)
                     rag_agent.index_vault()
@@ -488,40 +487,35 @@ def handle_chat_mode(obsidian_file):
                     books = book_agent.scan_books()
                     for b in books:
                         print(book_agent.index_book(b['full_path']))
-                    print("✅ Indexing complete.")
+                    chat_ui.render_success("Indexing complete.")
                 elif command == "sync":
-                    print("Syncing reminders to local storage...")
+                    chat_ui.render_info("Syncing reminders to local storage...")
                     subprocess.run(["python3", "debug_reminders.py"])
-                    print("Manually triggering task sync...")
+                    chat_ui.render_info("Manually triggering task sync...")
                     tasks = get_unified_tasks(obsidian_path)
                     calendar_id = get_config_value("CALENDAR_ID", "primary")
                     service = calendar_manager.get_calendar_service()
                     if not service:
-                        print("❌ Calendar service not available. Check credentials.")
+                        chat_ui.render_error("Calendar service not available. Check credentials.")
                         continue
                     calendar_agent = CalendarAgent()
                     busy_slots = calendar_agent.get_busy_slots_from_yml()
                     logseq_path = get_config_value("LOGSEQ_DIR", None)
                     schedule = ai_orchestration.generate_schedule(
-                        tasks, 
-                        busy_slots, 
-                        workspace_dir=obsidian_path, 
-                        logseq_dir=logseq_path
+                        tasks, busy_slots,
+                        workspace_dir=obsidian_path, logseq_dir=logseq_path
                     )
-                    # We removed the 'confirm' variable check because it was undefined in the original code but used in a conditional.
-                    # Fixing the logic here.
                     confirm_sync = input("Sync to calendar? (y/n): ").strip().lower()
                     if confirm_sync == 'y':
                         planning_agent = PlanningAgent(service, calendar_id)
                         planning_agent.execute_plan(schedule, obsidian_path)
-                        print("✅ Scheduled!")
+                        chat_ui.render_success("Scheduled!")
                     else:
-                        print("Sync cancelled.")
-
+                        chat_ui.render_info("Sync cancelled.")
                 elif command == "pull":
                     sync_calendar_to_markdown(obsidian_path)
                 elif command == "stats":
-                    print("\n📊 --- Today's Focus Stats ---")
+                    print("\n--- Today's Focus Stats ---")
                     service = calendar_manager.get_calendar_service()
                     calendar_id = get_config_value("CALENDAR_ID", "primary")
                     if service:
@@ -536,228 +530,222 @@ def handle_chat_mode(obsidian_file):
                                 total_mins += mins
                                 cat = m.get('category', 'General')
                                 cat_hours[cat] = cat_hours.get(cat, 0) + mins
-                            
                             for cat, mins in cat_hours.items():
                                 print(f"  - {cat:20}: {mins/60:4.1f} hours")
                             print(f"  TOTAL PLANNED FOCUS: {total_mins/60:4.1f} hours")
                         else:
-                            print("No AI-managed events found for today.")
+                            chat_ui.render_info("No AI-managed events found for today.")
                     else:
-                        print("Could not connect to Google Calendar.")
+                        chat_ui.render_error("Could not connect to Google Calendar.")
                 elif command == "backlog":
                     tasks = get_unified_tasks(obsidian_path)
-                    print(f"\n--- Unified Backlog ({len(tasks)} tasks) ---")
-                    # Group by category
-                    cats = {}
-                    for t in tasks:
-                        cat = t.get("category", "Uncategorized")
-                        if cat not in cats: cats[cat] = []
-                        cats[cat].append(t)
-                    
-                    for cat, task_list in cats.items():
-                        print(f"\n[{cat.upper()}]")
-                        for t in task_list:
-                            source_icon = "📝" if t['source'] == "Obsidian" else "🪵" if t['source'] == "Logseq" else "🍎"
-                            due = f" (Due: {t['due_date']})" if t.get('due_date') else ""
-                            print(f"  {source_icon} {t['task']}{due}")
+                    chat_ui.render_backlog(tasks)
                 elif command == "plan":
                     handle_morning_planning(obsidian_path)
                 elif command == "review":
                     handle_evening_review(obsidian_path)
                 elif command == "ui":
-                    print("Launching Streamlit UI in the background...")
+                    chat_ui.render_info("Launching Streamlit UI in the background...")
                     subprocess.Popen([".venv/bin/streamlit", "run", "app.py"])
-                    print("Web interface is opening in your browser.")
+                    chat_ui.render_success("Web interface is opening in your browser.")
                 elif command == "docs":
                     display_docs()
+                elif command == "services":
+                    ollama_up = ai_orchestration.is_ollama_running()
+                    openclaw_up = ai_orchestration.is_openclaw_running()
+                    chat_ui.render_services(ollama_up, openclaw_up)
+                    if not openclaw_up:
+                        start = input("Start OpenClaw? (y/n): ").strip().lower()
+                        if start == 'y':
+                            if ai_orchestration.ensure_openclaw():
+                                chat_ui.render_success("OpenClaw started successfully.")
+                            else:
+                                chat_ui.render_error("Failed to start OpenClaw.")
                 elif command == "models":
-                    print(f"\nModel Activation Status:")
+                    models_status = {}
                     for m, enabled in ai_orchestration.MODELS_ENABLED.items():
-                        status = "✅ ENABLED" if enabled else "❌ DISABLED"
-                        print(f"  - {m:10}: {status}")
+                        available = ai_orchestration._is_model_available(m)
+                        models_status[m] = {"enabled": enabled, "available": available}
+                    chat_ui.render_models(models_status)
                 elif command == "model":
                     if len(parts) >= 3:
                         action, target = parts[1].lower(), parts[2].lower()
                         if target in ai_orchestration.MODELS_ENABLED:
                             if action == "enable":
                                 ai_orchestration.MODELS_ENABLED[target] = True
-                                print(f"✅ Model '{target}' enabled.")
+                                chat_ui.render_success(f"Model '{target}' enabled.")
                             elif action == "disable":
                                 ai_orchestration.MODELS_ENABLED[target] = False
-                                print(f"❌ Model '{target}' disabled.")
+                                chat_ui.render_info(f"Model '{target}' disabled.")
                             else:
-                                print(f"Unknown action: {action}. Use enable/disable.")
+                                chat_ui.render_warning(f"Unknown action: {action}. Use enable/disable.")
                         else:
-                            print(f"Unknown model: {target}. Available: {', '.join(ai_orchestration.MODELS_ENABLED.keys())}")
+                            chat_ui.render_warning(f"Unknown model: {target}. Available: {', '.join(ai_orchestration.MODELS_ENABLED.keys())}")
                     else:
-                        print("Usage: /model <enable/disable> <model_name>")
+                        chat_ui.render_info("Usage: /model <enable/disable> <model_name>")
+                elif command == "routing":
+                    routing_info = {}
+                    for task_type in ["chat", "scheduling", "parsing"]:
+                        config_val = get_config_value(f"ROUTING_{task_type.upper()}", "auto")
+                        active = ai_orchestration.get_routing(task_type)
+                        routing_info[task_type] = {"config": config_val, "active": active}
+                    chat_ui.render_routing(routing_info)
                 elif command == "create-agent":
                     if len(parts) >= 2:
                         agent_name = parts[1].lower().replace("-", "_")
                         agent_path = f"custom_agents/{agent_name}.py"
                         if os.path.exists(agent_path):
-                            print(f"⚠️ Agent '{agent_name}' already exists.")
+                            chat_ui.render_warning(f"Agent '{agent_name}' already exists.")
                         else:
                             with open(agent_path, "w") as f:
                                 f.write(f'\"\"\"\nAgent: {agent_name}\nCreated dynamically by AI Agent Assistant\n\"\"\"\n\ndef run(context):\n    \"\"\"Main entry point for the {agent_name} agent.\"\"\"\n    print(f"[{agent_name}] Running with context: {{len(context)}} tasks")\n    # Add your logic here\n    return f"Agent {agent_name} executed successfully."\n')
-                            print(f"✅ Agent '{agent_name}' scaffolded at {agent_path}.")
+                            chat_ui.render_success(f"Agent '{agent_name}' scaffolded at {agent_path}.")
                     else:
-                        print("Usage: /create-agent <name>")
+                        chat_ui.render_info("Usage: /create-agent <name>")
                 elif command == "push-agent":
                     if len(parts) >= 3:
                         agent_name, repo_url = parts[1].lower(), parts[2]
                         agent_dir = f"custom_agents/{agent_name}_repo"
                         os.makedirs(agent_dir, exist_ok=True)
-                        # Move the file into its own repo folder
                         os.rename(f"custom_agents/{agent_name}.py", f"{agent_dir}/agent.py")
-                        # Init git and push
                         subprocess.run(["git", "init"], cwd=agent_dir)
                         subprocess.run(["git", "add", "."], cwd=agent_dir)
                         subprocess.run(["git", "commit", "-m", "Initial commit for custom agent"], cwd=agent_dir)
                         subprocess.run(["git", "remote", "add", "origin", repo_url], cwd=agent_dir)
-                        print(f"🚀 Agent '{agent_name}' prepared for push to {repo_url}.")
-                        print(f"Run 'cd {agent_dir} && git push -u origin main' to complete.")
+                        chat_ui.render_success(f"Agent '{agent_name}' prepared for push to {repo_url}.")
+                        chat_ui.render_info(f"Run 'cd {agent_dir} && git push -u origin main' to complete.")
                     else:
-                        print("Usage: /push-agent <name> <repo_url>")
+                        chat_ui.render_info("Usage: /push-agent <name> <repo_url>")
                 elif command == "list-agents":
                     agents = [f[:-3] for f in os.listdir("custom_agents") if f.endswith(".py") and f != "__init__.py"]
-                    print(f"Available Agents: {', '.join(agents) if agents else 'None'}")
+                    chat_ui.render_info(f"Available Agents: {', '.join(agents) if agents else 'None'}")
                 elif command == "organize":
-                    print("🧠 AI is analyzing your backlog for organization...")
+                    chat_ui.render_info("AI is analyzing your backlog for organization...")
                     tasks = get_unified_tasks(obsidian_path)
                     if not tasks:
-                        print("No tasks found in backlog.")
+                        chat_ui.render_info("No tasks found in backlog.")
                         continue
-                    
                     results = ai_orchestration.suggest_task_organization(tasks)
                     if results and "suggestions" in results:
-                        print("\n--- AI Organization Suggestions ---")
                         for sug in results["suggestions"]:
-                            print(f"  • {sug['task']}")
-                            print(f"    - Category: {sug['suggested_category']}")
-                            print(f"    - Target Date: {sug['target_date']}")
-                            print(f"    - Reason: {sug['reason']}")
-                        
+                            print(f"  - {sug['task']} -> {sug['suggested_category']} ({sug['target_date']}): {sug['reason']}")
                         confirm = input("\nApply these suggestions to your markdown plan? (y/n): ").strip().lower()
                         if confirm == 'y':
-                            # Simplified apply logic: update the file with suggested categories/dates
                             update_markdown_plan(obsidian_path, results["suggestions"])
-                            print("✅ Suggestions applied to markdown.")
+                            chat_ui.render_success("Suggestions applied to markdown.")
                     else:
-                        print("Failed to get suggestions from AI.")
-
+                        chat_ui.render_error("Failed to get suggestions from AI.")
                 elif command == "cmd":
                     if len(parts) >= 2:
                         user_cmd = " ".join(parts[1:])
-                        print(f"🤖 Executing command on backlog: '{user_cmd}'")
+                        chat_ui.render_info(f"Executing command on backlog: '{user_cmd}'")
                         tasks = get_unified_tasks(obsidian_path)
                         results = ai_orchestration.process_tasks_with_command(tasks, user_cmd)
                         if results and "suggestions" in results:
                             for sug in results["suggestions"]:
-                                print(f"  • {sug['task']} -> {sug['suggested_category']} ({sug['target_date']})")
-                            
+                                print(f"  - {sug['task']} -> {sug['suggested_category']} ({sug['target_date']})")
                             confirm = input("\nApply changes? (y/n): ").strip().lower()
                             if confirm == 'y':
                                 update_markdown_plan(obsidian_path, results["suggestions"])
-                                print("✅ Changes applied.")
+                                chat_ui.render_success("Changes applied.")
                         else:
-                            print("No changes suggested by AI.")
+                            chat_ui.render_info("No changes suggested by AI.")
                     else:
-                        print("Usage: /cmd <instruction for backlog>")
-
+                        chat_ui.render_info("Usage: /cmd <instruction for backlog>")
                 elif command == "develop":
                     if len(parts) >= 2:
                         prompt = " ".join(parts[1:])
-                        print(f"👨‍💻 AI is developing code for: '{prompt}'...")
-                        # Use a specialized prompt for code generation
+                        chat_ui.render_info(f"AI is developing code for: '{prompt}'...")
                         code_prompt = f"Develop a complete, working script or code snippet for: {prompt}. Return only the code and a brief explanation."
-                        code_response = ai_orchestration.run_agent_query(code_prompt)
-                        print(f"\n--- GENERATED CODE ---\n{code_response}\n")
-                        
+                        code_response, model_used = ai_orchestration.run_agent_query(code_prompt)
+                        chat_ui.render_response(code_response, model_used)
                         save = input("Save this code to a file? (y/n): ").strip().lower()
                         if save == 'y':
                             filename = input("Enter filename (e.g. script.py): ").strip()
                             with open(filename, "w") as f:
                                 f.write(code_response)
-                            print(f"✅ Saved to {filename}")
+                            chat_ui.render_success(f"Saved to {filename}")
                     else:
-                        print("Usage: /develop <what to build>")
-
+                        chat_ui.render_info("Usage: /develop <what to build>")
                 elif command == "define-agent":
                     if len(parts) >= 3:
                         agent_name = parts[1].lower().replace("-", "_")
                         linked_llm = parts[2].lower()
-                        
                         if linked_llm not in ai_orchestration.MODELS_ENABLED:
-                            print(f"⚠️ Warning: '{linked_llm}' is not a recognized model. Using default.")
-                        
+                            chat_ui.render_warning(f"'{linked_llm}' is not a recognized model. Using default.")
                         agent_path = f"custom_agents/{agent_name}.py"
                         with open(agent_path, "w") as f:
-                            f.write(f'\"\"\"\nAgent: {agent_name}\nLinked LLM: {linked_llm}\nCreated dynamically by AI Agent Assistant\n\"\"\"\n\nimport ai_orchestration\n\ndef run(context):\n    \"\"\"Main entry point for the {agent_name} agent using {linked_llm}.\"\"\"\n    prompt = f"As the {agent_name} specialist, process this context: {{context}}"\n    # This is a conceptual link - the agent code can call specific LLM functions\n    if "{linked_llm}" == "ollama":\n        return ai_orchestration.ollama_generate(prompt)\n    elif "{linked_llm}" == "openclaw":\n        return ai_orchestration.openclaw_generate(prompt)\n    else:\n        return ai_orchestration.run_agent_query(prompt)\n')
-                        print(f"✅ Agent '{agent_name}' defined and linked to '{linked_llm}' at {agent_path}.")
+                            f.write(f'\"\"\"\nAgent: {agent_name}\nLinked LLM: {linked_llm}\nCreated dynamically by AI Agent Assistant\n\"\"\"\n\nimport ai_orchestration\n\ndef run(context):\n    \"\"\"Main entry point for the {agent_name} agent using {linked_llm}.\"\"\"\n    prompt = f"As the {agent_name} specialist, process this context: {{context}}"\n    if "{linked_llm}" == "ollama":\n        return ai_orchestration.ollama_generate(prompt)\n    elif "{linked_llm}" == "openclaw":\n        return ai_orchestration.openclaw_generate(prompt)\n    else:\n        result, _ = ai_orchestration.run_agent_query(prompt)\n        return result\n')
+                        chat_ui.render_success(f"Agent '{agent_name}' defined and linked to '{linked_llm}' at {agent_path}.")
                     else:
-                        print("Usage: /define-agent <name> <llm_type>")
-
+                        chat_ui.render_info("Usage: /define-agent <name> <llm_type>")
                 elif command == "gmail":
-                    print("Checking Gmail for snoozed and filtered emails...")
+                    chat_ui.render_info("Checking Gmail for snoozed and filtered emails...")
                     service = gmail_agent.get_gmail_service()
                     if service:
                         snoozed = gmail_agent.get_snoozed_emails(service)
                         print(f"\n--- Snoozed Emails ({len(snoozed)}) ---")
                         for e in snoozed:
-                            print(f"  💤 {e['subject']} (From: {e['from']})")
-                        
+                            print(f"  {e['subject']} (From: {e['from']})")
                         filters = gmail_agent.load_filters()
                         if filters:
                             filtered = gmail_agent.get_filtered_emails(service, filters)
                             print(f"\n--- Filtered Emails ({len(filtered)}) ---")
                             for e in filtered:
-                                print(f"  🔍 [{e['filter']}] {e['subject']} (From: {e['from']})")
+                                print(f"  [{e['filter']}] {e['subject']} (From: {e['from']})")
                         else:
-                            print("\nNo filters set. Use /gmail-filter add <query> to add one.")
+                            chat_ui.render_info("No filters set. Use /gmail-filter add <query> to add one.")
                     else:
-                        print("❌ Could not connect to Gmail. Check 'credentials.json' and 'token.json'.")
+                        chat_ui.render_error("Could not connect to Gmail. Check 'credentials.json' and 'token.json'.")
                 elif command == "gmail-filter":
                     if len(parts) >= 2:
                         sub_cmd = parts[1].lower()
                         if sub_cmd == "add" and len(parts) >= 3:
                             query = " ".join(parts[2:])
                             if gmail_agent.add_filter(query):
-                                print(f"✅ Filter added: '{query}'")
+                                chat_ui.render_success(f"Filter added: '{query}'")
                             else:
-                                print(f"ℹ️ Filter already exists: '{query}'")
+                                chat_ui.render_info(f"Filter already exists: '{query}'")
                         elif sub_cmd == "remove" and len(parts) >= 3:
                             query = " ".join(parts[2:])
                             if gmail_agent.remove_filter(query):
-                                print(f"✅ Filter removed: '{query}'")
+                                chat_ui.render_success(f"Filter removed: '{query}'")
                             else:
-                                print(f"❌ Filter not found: '{query}'")
+                                chat_ui.render_error(f"Filter not found: '{query}'")
                         elif sub_cmd == "list":
                             filters = gmail_agent.load_filters()
                             print("\n--- Gmail Search Filters ---")
                             for i, f in enumerate(filters, 1):
                                 print(f"  {i}. {f}")
                         else:
-                            print("Usage: /gmail-filter <add/remove/list> [query]")
+                            chat_ui.render_info("Usage: /gmail-filter <add/remove/list> [query]")
                     else:
-                        print("Usage: /gmail-filter <add/remove/list> [query]")
+                        chat_ui.render_info("Usage: /gmail-filter <add/remove/list> [query]")
                 else:
-                    print(f"Unknown command: /{command}. Type /commands for help.")
+                    chat_ui.render_warning(f"Unknown command: /{command}. Type /commands for help.")
 
             else:
-                # Optimized AI Agent integration
-                print("🤖 AI Agent is thinking...")
+                # Streaming AI response with Rich rendering
+                chat_ui.render_user_input(user_input)
+                history = chat_ui.add_to_history("user", user_input, history)
+
                 try:
-                    response = ai_orchestration.run_agent_query(user_input)
-                    print(f"\n🤖 AI: {response}")
+                    stream, model_used = ai_orchestration.run_agent_query_stream(user_input, history)
+                    full_response = chat_ui.render_streaming(stream, model_used)
+                    history = chat_ui.add_to_history("assistant", full_response, history)
+                    chat_ui.save_history(history)
                 except Exception as e:
-                    print(f"⚠️ AI Agent Error: {e}")
+                    chat_ui.render_error(str(e))
+                    traceback.print_exc()
 
         except KeyboardInterrupt:
-            print("\nGoodbye!")
+            chat_ui.render_info("\nGoodbye!")
+            break
+        except EOFError:
+            chat_ui.render_info("\nGoodbye!")
             break
         except Exception as e:
-            print(f"❌ An unexpected error occurred: {e}")
+            chat_ui.render_error(f"An unexpected error occurred: {e}")
             traceback.print_exc()
 
 

@@ -38,3 +38,10 @@ EbookLib
 beautifulsoup4
 pyyaml
 requests
+
+# Rich Terminal UI & Input
+rich
+prompt_toolkit
+
+# Claude API (optional)
+langchain-anthropic

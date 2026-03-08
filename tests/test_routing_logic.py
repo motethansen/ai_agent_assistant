@@ -44,16 +44,18 @@ def test_get_routing_fallback_to_gemini(mock_ollama_running, mock_get_config):
         assert route == "gemini"
 
 @patch('ai_orchestration.get_config_value')
+@patch('ai_orchestration.is_openclaw_running')
 @patch('ai_orchestration.is_ollama_running')
-def test_get_routing_openclaw_preference(mock_ollama_running, mock_get_config):
+def test_get_routing_openclaw_preference(mock_ollama_running, mock_openclaw_running, mock_get_config):
     # Setup: User wants openclaw for scheduling
-    def side_effect(key, default):
+    def side_effect(key, default=None):
         if key == "ROUTING_SCHEDULING": return "openclaw"
         if key == "ENABLE_OPENCLAW": return "true"
         return default
-    
+
     mock_get_config.side_effect = side_effect
+    mock_openclaw_running.return_value = True
     ai_orchestration.MODELS_ENABLED["openclaw"] = True
-    
+
     route = ai_orchestration.get_routing("scheduling")
     assert route == "openclaw"

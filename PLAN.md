@@ -76,6 +76,11 @@
     - `/exit`: Quit the interactive session.
 - [x] Integrate the AI orchestrator to answer questions about the schedule or backlog within the chat.
 - [x] Ensure the CLI feels similar to `gemini-cli` or `claude-cli` for a consistent developer experience.
+    - `/services`: Check and start local AI services.
+    - `/routing`: Show LLM routing configuration.
+    - `/models`: Show all model backends with availability.
+    - `/history`: Show recent conversation history.
+    - `/clear-history`: Clear conversation history.
 
 ### Phase 12: Multi-LLM Support & Task Routing
 - [x] Implement support for toggling active language models (Gemini, Ollama, OpenClaw) via the `.config` file.
@@ -125,6 +130,19 @@
 - [x] Refine LogSeq parser to specifically target `LATER` tasks.
 - [x] Add optional support for OpenAI and Claude APIs.
 - [x] Update routing logic to prioritize local models with intelligent fallback.
+
+### Phase 19: Rich Chat UX, Streaming & Smart Routing
+- [x] Create `chat_ui.py` module using Rich library for markdown rendering, panels, and tables.
+- [x] Implement streaming LLM responses with live terminal updates via `run_agent_query_stream()`.
+- [x] Add persistent conversation history (JSON, last 200 messages) with `/history` and `/clear-history` commands.
+- [x] Integrate `prompt_toolkit` for enhanced terminal input with command history.
+- [x] Add `ensure_openclaw()` for auto-starting OpenClaw gateway from chat via `/services` command.
+- [x] Implement complexity-based LLM routing: simple tasks (parse, list, filter) -> Ollama; complex tasks (plan, analyze, code) -> OpenClaw/OpenAI/Claude.
+- [x] Wire `ROUTING_SCHEDULING`, `ROUTING_PARSING`, `ROUTING_CHAT` config values into `get_routing()`.
+- [x] Add direct OpenAI and Claude API support via `langchain-openai` and `langchain-anthropic`.
+- [x] Add `/routing` command to show active routing configuration per task type.
+- [x] Upgrade `/models` to show both enabled and available status for all 5 backends.
+- [x] Upgrade `/backlog` to render Rich tables grouped by category with source indicators.
 
 ## Summary of Planned Development
 The system will act as a bridge between your local knowledge base and your schedule. 

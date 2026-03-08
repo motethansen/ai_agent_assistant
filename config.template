@@ -23,7 +23,9 @@ OLLAMA_NUM_CTX=8192
 
 # --- Optional Cloud API Settings ---
 OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4o-mini
 CLAUDE_API_KEY=your_claude_api_key_here
+CLAUDE_MODEL=claude-sonnet-4-20250514
 
 # --- RAG & Book Agent Settings ---
 # HF_TOKEN: Hugging Face token for faster model downloads and higher rate limits.
@@ -55,8 +57,8 @@ ROUTING_PARSING=ollama
 ROUTING_CHAT=openclaw
 
 # --- LLM Priority ---
-# Comma-separated fallback order when the preferred model is unavailable.
-LLM_PRIORITY=openclaw, gemini, ollama
+# Comma-separated fallback order: openclaw (local) -> ollama (local) -> gemini (API).
+LLM_PRIORITY=openclaw,ollama,gemini
 
 # --- User Productivity Preferences ---
 # CHRONOTYPE: morning_owl, night_owl, or balanced

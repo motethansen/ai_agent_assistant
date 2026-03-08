@@ -95,63 +95,204 @@ def is_ollama_running():
         return False
 
 def is_openclaw_running():
-    """Checks if the OpenClaw endpoint is responding."""
+    """Checks if the OpenClaw endpoint is actually serving a working API."""
     endpoint = get_config_value('OPENCLAW_ENDPOINT', 'http://localhost:18789/v1')
     try:
         response = requests.get(f"{endpoint}/models", timeout=2)
-        return response.status_code in [200, 401]
+        if response.status_code not in [200, 401]:
+            return False
+        content_type = response.headers.get('content-type', '')
+        if 'html' in content_type:
+            return False
+        oc_api_key = get_config_value('OPENCLAW_API_KEY', '')
+        headers = {"Authorization": f"Bearer {oc_api_key}", "Content-Type": "application/json"}
+        probe = requests.post(
+            f"{endpoint}/chat/completions",
+            json={"model": get_config_value("OPENCLAW_MODEL", "gpt-3.5-turbo"),
+                  "messages": [{"role": "user", "content": "ping"}],
+                  "max_tokens": 1},
+            headers=headers,
+            timeout=5
+        )
+        data = probe.json()
+        if "error" in data:
+            print(f"⚠️ OpenClaw API error: {data['error'].get('message', 'unknown')}")
+            return False
+        return True
     except:
         return False
 
-def get_routing(task_type="scheduling"):
-    """Determines the best available model based on user priority and health."""
-    priority_str = get_config_value("LLM_PRIORITY", "ollama,openclaw,gemini")
-    priority_list = [m.strip().lower() for m in priority_str.split(",")]
-    
-    for model in priority_list:
-        if model == "gemini" and MODELS_ENABLED["gemini"] and api_key and "your_gemini_api_key" not in api_key:
-            return "gemini"
-        elif model == "ollama" and MODELS_ENABLED["ollama"] and is_ollama_running():
-            return "ollama"
-        elif model == "openclaw" and MODELS_ENABLED["openclaw"] and is_openclaw_running():
-            return "openclaw"
-    
-    return "ollama" if is_ollama_running() else "gemini"
+def ensure_openclaw():
+    """Attempts to start OpenClaw if not running. Returns True if running after attempt."""
+    if is_openclaw_running():
+        return True
 
-def get_llm(model_type="chat"):
-    """Returns a LangChain LLM instance based on routing."""
-    model_name = get_routing(model_type)
-    
+    import subprocess
+    import shutil
+    import platform
+    import time
+
+    openclaw_path = shutil.which("openclaw")
+    if not openclaw_path:
+        print("OpenClaw CLI not found. Install with: curl -fsSL https://openclaw.ai/install.sh | bash")
+        print("Then run: openclaw onboard --install-daemon")
+        return False
+
+    print("Starting OpenClaw gateway...")
+    if platform.system() == "Darwin":
+        result = subprocess.run(["launchctl", "list"], capture_output=True, text=True)
+        if "ai.openclaw.gateway" in result.stdout:
+            subprocess.run(["launchctl", "start", "ai.openclaw.gateway"])
+        else:
+            port = get_config_value("OPENCLAW_PORT", "18789")
+            subprocess.Popen([openclaw_path, "gateway", "--port", port],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        port = get_config_value("OPENCLAW_PORT", "18789")
+        subprocess.Popen([openclaw_path, "gateway", "--port", port],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    for i in range(6):
+        time.sleep(5)
+        if is_openclaw_running():
+            print("OpenClaw gateway started successfully.")
+            return True
+        print(f"  Waiting for OpenClaw... ({(i+1)*5}s)")
+
+    print("Failed to start OpenClaw gateway.")
+    return False
+
+def is_openai_available():
+    """Checks if OpenAI API key is configured and enabled."""
+    key = get_config_value("OPENAI_API_KEY", "")
+    return bool(key) and "your_openai" not in key and MODELS_ENABLED.get("openai", False)
+
+def is_claude_available():
+    """Checks if Claude API key is configured and enabled."""
+    key = get_config_value("CLAUDE_API_KEY", "")
+    return bool(key) and "your_claude" not in key and MODELS_ENABLED.get("claude", False)
+
+# --- Complexity Classification ---
+COMPLEXITY_KEYWORDS_SIMPLE = [
+    "parse", "extract", "categorize", "list", "format", "convert",
+    "remind", "sort", "filter", "count", "show", "display", "what time",
+    "how many", "which", "status"
+]
+COMPLEXITY_KEYWORDS_COMPLEX = [
+    "plan", "analyze", "compare", "generate code", "write code", "design",
+    "debug", "explain why", "research", "strategy", "refactor", "review",
+    "deep", "improve", "optimize", "architect", "suggest", "create a"
+]
+
+def classify_complexity(query):
+    """Returns 'simple' or 'complex' based on query content."""
+    query_lower = query.lower()
+    complex_score = sum(1 for kw in COMPLEXITY_KEYWORDS_COMPLEX if kw in query_lower)
+    simple_score = sum(1 for kw in COMPLEXITY_KEYWORDS_SIMPLE if kw in query_lower)
+    if len(query) > 500:
+        complex_score += 1
+    return "complex" if complex_score > simple_score else "simple"
+
+def _is_model_available(model, try_start=False):
+    """Check if a model backend is both enabled and reachable."""
+    if model == "ollama":
+        return MODELS_ENABLED.get("ollama", False) and is_ollama_running()
+    if model == "openclaw":
+        if not MODELS_ENABLED.get("openclaw", False):
+            return False
+        if is_openclaw_running():
+            return True
+        return try_start and ensure_openclaw()
+    if model == "gemini":
+        return MODELS_ENABLED.get("gemini", False) and api_key and "your_gemini" not in api_key
+    if model == "openai":
+        return is_openai_available()
+    if model == "claude":
+        return is_claude_available()
+    return False
+
+def get_routing(task_type="chat", query=""):
+    """Routes to the best LLM based on task type, complexity, and availability.
+
+    1. Check ROUTING_{task_type} config for explicit assignment
+    2. Route by complexity: simple -> local, complex -> powerful
+    3. Fall back through LLM_PRIORITY chain
+    """
+    # Check explicit routing config
+    explicit = get_config_value(f"ROUTING_{task_type.upper()}", None)
+    if explicit:
+        explicit = explicit.strip().lower()
+        if _is_model_available(explicit, try_start=True):
+            return explicit
+
+    # Complexity-based routing
+    complexity = classify_complexity(query) if query else "simple"
+
+    if complexity == "simple":
+        for model in ["ollama", "openclaw", "gemini"]:
+            if _is_model_available(model, try_start=True):
+                return model
+    else:
+        for model in ["openclaw", "openai", "claude", "gemini", "ollama"]:
+            if _is_model_available(model, try_start=True):
+                return model
+
+    # Fallback through priority list
+    priority_str = get_config_value("LLM_PRIORITY", "openclaw,ollama,gemini")
+    for model in [m.strip().lower() for m in priority_str.split(",")]:
+        if _is_model_available(model, try_start=True):
+            return model
+
+    return "ollama"
+
+def get_llm(model_type="chat", query=""):
+    """Returns a LangChain LLM instance based on routing. Also returns the model name used."""
+    model_name = get_routing(model_type, query)
+
     if model_name == "ollama":
         model = get_config_value("OLLAMA_MODEL", "qwen3:8b")
         host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
-        # Increase context window for RAG and agent tasks as suggested
         ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "8192"))
-        return ChatOllama(model=model, base_url=host, num_ctx=ctx_size, temperature=0)
-    
+        return ChatOllama(model=model, base_url=host, num_ctx=ctx_size, temperature=0), f"ollama/{model}"
+
     elif model_name == "openclaw":
         model = get_config_value("OPENCLAW_MODEL", "gpt-3.5-turbo")
         endpoint = get_config_value("OPENCLAW_ENDPOINT", "http://localhost:18789/v1")
-        # ChatOllama can't do OpenClaw directly, but LangChain has OpenAI-compatible
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
             model=model,
             openai_api_base=endpoint,
             openai_api_key=get_config_value("OPENCLAW_API_KEY", "not-needed"),
             temperature=0
-        )
-    
-    # Fallback to Gemini (via Google GenAI) - LangChain also supports this
+        ), f"openclaw/{model}"
+
+    elif model_name == "openai":
+        from langchain_openai import ChatOpenAI
+        openai_key = get_config_value("OPENAI_API_KEY", "")
+        openai_model = get_config_value("OPENAI_MODEL", "gpt-4o-mini")
+        return ChatOpenAI(model=openai_model, openai_api_key=openai_key, temperature=0), f"openai/{openai_model}"
+
+    elif model_name == "claude":
+        try:
+            from langchain_anthropic import ChatAnthropic
+        except ImportError:
+            print("langchain-anthropic not installed. Install with: pip install langchain-anthropic")
+            # Fall through to gemini
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            return ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=api_key), "gemini/gemini-2.0-flash"
+        claude_key = get_config_value("CLAUDE_API_KEY", "")
+        claude_model = get_config_value("CLAUDE_MODEL", "claude-sonnet-4-20250514")
+        return ChatAnthropic(model=claude_model, anthropic_api_key=claude_key, temperature=0), f"claude/{claude_model}"
+
+    # Fallback to Gemini
     from langchain_google_genai import ChatGoogleGenerativeAI
-    return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key)
+    return ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=api_key), "gemini/gemini-2.0-flash"
 
 def run_agent_query(user_input, context_data=None):
-    """
-    Runs a tool-calling agent to handle a user query.
-    """
-    llm = get_llm()
+    """Runs a tool-calling agent to handle a user query."""
+    llm, model_used = get_llm("chat", user_input)
     tools = [get_current_time, search_notes, search_books, list_calendar_events, read_file_content]
-    
+
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a professional AI Assistant. Use tools to find information. "
                    "If asked about tasks, check notes and calendar. "
@@ -160,15 +301,36 @@ def run_agent_query(user_input, context_data=None):
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}"),
     ])
-    
+
     agent = create_tool_calling_agent(llm, tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
-    
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=False, handle_parsing_errors=True)
+
     try:
         response = agent_executor.invoke({"input": user_input})
-        return response["output"]
+        return response["output"], model_used
     except Exception as e:
-        return f"Agent Error: {e}"
+        return f"Agent Error: {e}", model_used
+
+def run_agent_query_stream(user_input, chat_history=None):
+    """Streams LLM response chunks for real-time display. Returns (stream_iterator, model_used)."""
+    llm, model_used = get_llm("chat", user_input)
+
+    messages = [
+        ("system", "You are a professional AI Assistant. Be concise and helpful. "
+                   "Format responses in markdown when appropriate. "
+                   "If asked about tasks, schedules, or plans, provide actionable suggestions."),
+    ]
+    if chat_history:
+        for msg in chat_history[-10:]:
+            role = "human" if msg["role"] == "user" else "ai"
+            messages.append((role, msg["content"]))
+    messages.append(("human", user_input))
+
+    try:
+        return llm.stream(messages), model_used
+    except Exception:
+        response = llm.invoke(messages)
+        return iter([response]), model_used
 
 def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None, logseq_dir=None):
     """Legacy wrapper for schedule generation, now using the improved RAG logic."""
@@ -181,7 +343,7 @@ def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None,
     except Exception as e:
         print(f"⚠️ RAG error: {e}")
 
-    llm = get_llm("scheduling")
+    llm, _ = get_llm("scheduling", str(tasks[:3]))
     current_time = datetime.datetime.now().astimezone().isoformat()
     
     prompt = f"""
@@ -210,7 +372,7 @@ def suggest_task_organization(tasks):
     """
     Analyzes a list of tasks and suggests categories and scheduling dates.
     """
-    llm = get_llm("scheduling")
+    llm, _ = get_llm("scheduling")
     
     prompt = f"""
     Analyze the following tasks and suggest the best category and target date for each.
@@ -243,7 +405,7 @@ def process_tasks_with_command(tasks, command):
     """
     Processes tasks based on a custom natural language command.
     """
-    llm = get_llm("chat")
+    llm, _ = get_llm("chat", command)
     
     prompt = f"""
     The user wants to perform the following action on these tasks: "{command}"
@@ -272,7 +434,7 @@ def process_tasks_with_command(tasks, command):
 
 def ollama_generate(prompt, model=None):
     """Simple wrapper for single generation."""
-    llm = get_llm()
+    llm, _ = get_llm()
     try:
         response = llm.invoke(prompt)
         return response.content
