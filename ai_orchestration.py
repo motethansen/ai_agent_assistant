@@ -42,7 +42,6 @@ MODELS_ENABLED = {
     "openai": get_config_value("ENABLE_OPENAI", "false").lower() == "true",
     "claude": get_config_value("ENABLE_CLAUDE", "false").lower() == "true",
     "ollama": get_config_value("ENABLE_OLLAMA", "true").lower() == "true",
-    "openclaw": get_config_value("ENABLE_OPENCLAW", "true").lower() == "true"
 }
 
 # --- Tools for the AI Agent ---
@@ -94,77 +93,6 @@ def is_ollama_running():
     except:
         return False
 
-def is_openclaw_running():
-    """Checks if the OpenClaw endpoint is actually serving a working API."""
-    endpoint = get_config_value('OPENCLAW_ENDPOINT', 'http://localhost:18789/v1')
-    oc_api_key = get_config_value('OPENCLAW_API_KEY', '')
-    headers = {"Authorization": f"Bearer {oc_api_key}", "Content-Type": "application/json"}
-    try:
-        # /v1/models returns the HTML control UI (SPA catch-all), so probe chat/completions directly
-        probe = requests.post(
-            f"{endpoint}/chat/completions",
-            json={"model": get_config_value("OPENCLAW_MODEL", "gpt-3.5-turbo"),
-                  "messages": [{"role": "user", "content": "ping"}],
-                  "max_tokens": 1},
-            headers=headers,
-            timeout=5
-        )
-        content_type = probe.headers.get('content-type', '')
-        if 'html' in content_type:
-            return False
-        data = probe.json()
-        if "error" in data:
-            err_type = data['error'].get('type', '')
-            # unauthorized means the server IS running; other errors mean misconfigured
-            if err_type == 'unauthorized':
-                print(f"⚠️ OpenClaw auth error — check OPENCLAW_API_KEY in .config")
-                return False
-            print(f"⚠️ OpenClaw API error: {data['error'].get('message', 'unknown')}")
-            return False
-        return True
-    except:
-        return False
-
-def ensure_openclaw():
-    """Attempts to start OpenClaw if not running. Returns True if running after attempt."""
-    if is_openclaw_running():
-        return True
-
-    import subprocess
-    import shutil
-    import platform
-    import time
-
-    openclaw_path = shutil.which("openclaw")
-    if not openclaw_path:
-        print("OpenClaw CLI not found. Install with: curl -fsSL https://openclaw.ai/install.sh | bash")
-        print("Then run: openclaw onboard --install-daemon")
-        return False
-
-    print("Starting OpenClaw gateway...")
-    if platform.system() == "Darwin":
-        result = subprocess.run(["launchctl", "list"], capture_output=True, text=True)
-        if "ai.openclaw.gateway" in result.stdout:
-            subprocess.run(["launchctl", "start", "ai.openclaw.gateway"])
-        else:
-            port = get_config_value("OPENCLAW_PORT", "18789")
-            subprocess.Popen([openclaw_path, "gateway", "--port", port],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    else:
-        port = get_config_value("OPENCLAW_PORT", "18789")
-        subprocess.Popen([openclaw_path, "gateway", "--port", port],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-    for i in range(6):
-        time.sleep(5)
-        if is_openclaw_running():
-            print("OpenClaw gateway started successfully.")
-            return True
-        print(f"  Waiting for OpenClaw... ({(i+1)*5}s)")
-
-    print("Failed to start OpenClaw gateway.")
-    return False
-
 def is_openai_available():
     """Checks if OpenAI API key is configured and enabled."""
     key = get_config_value("OPENAI_API_KEY", "")
@@ -200,12 +128,6 @@ def _is_model_available(model, try_start=False):
     """Check if a model backend is both enabled and reachable."""
     if model == "ollama":
         return MODELS_ENABLED.get("ollama", False) and is_ollama_running()
-    if model == "openclaw":
-        if not MODELS_ENABLED.get("openclaw", False):
-            return False
-        if is_openclaw_running():
-            return True
-        return try_start and ensure_openclaw()
     if model == "gemini":
         return MODELS_ENABLED.get("gemini", False) and api_key and "your_gemini" not in api_key
     if model == "openai":
@@ -232,16 +154,16 @@ def get_routing(task_type="chat", query=""):
     complexity = classify_complexity(query) if query else "simple"
 
     if complexity == "simple":
-        for model in ["ollama", "openclaw", "gemini"]:
+        for model in ["ollama", "gemini"]:
             if _is_model_available(model, try_start=True):
                 return model
     else:
-        for model in ["openclaw", "openai", "claude", "gemini", "ollama"]:
+        for model in ["openai", "claude", "gemini", "ollama"]:
             if _is_model_available(model, try_start=True):
                 return model
 
     # Fallback through priority list
-    priority_str = get_config_value("LLM_PRIORITY", "openclaw,ollama,gemini")
+    priority_str = get_config_value("LLM_PRIORITY", "ollama,gemini,openai,claude")
     for model in [m.strip().lower() for m in priority_str.split(",")]:
         if _is_model_available(model, try_start=True):
             return model
@@ -257,17 +179,6 @@ def get_llm(model_type="chat", query=""):
         host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
         ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "8192"))
         return ChatOllama(model=model, base_url=host, num_ctx=ctx_size, temperature=0), f"ollama/{model}"
-
-    elif model_name == "openclaw":
-        model = get_config_value("OPENCLAW_MODEL", "gpt-3.5-turbo")
-        endpoint = get_config_value("OPENCLAW_ENDPOINT", "http://localhost:18789/v1")
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(
-            model=model,
-            openai_api_base=endpoint,
-            openai_api_key=get_config_value("OPENCLAW_API_KEY", "not-needed"),
-            temperature=0
-        ), f"openclaw/{model}"
 
     elif model_name == "openai":
         from langchain_openai import ChatOpenAI
@@ -511,21 +422,6 @@ def ollama_generate(prompt, model=None):
         return response.content
     except Exception as e:
         return f"Error: {e}"
-
-def openclaw_generate(prompt, model=None):
-    """Simple wrapper for OpenClaw generation."""
-    if model is None:
-        model = get_config_value("OPENCLAW_MODEL", "gpt-3.5-turbo")
-    endpoint = get_config_value('OPENCLAW_ENDPOINT', 'http://localhost:18789/v1')
-    headers = {"Authorization": f"Bearer {get_config_value('OPENCLAW_API_KEY', '')}"}
-    payload = {"model": model, "messages": [{"role": "user", "content": prompt}]}
-    try:
-        response = requests.post(f"{endpoint}/chat/completions", json=payload, headers=headers, timeout=10)
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        return f"OpenClaw error: {e}"
-
 
 if __name__ == "__main__":
     test_tasks = [{"task": "Review WineDragons wireframes", "source": "Obsidian"}]

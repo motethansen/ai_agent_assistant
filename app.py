@@ -416,8 +416,6 @@ if prompt := st.chat_input("Ask me about your emails, calendar, or books..."):
                 
                 if model_to_use == "ollama":
                     response_text = ai_orchestration.ollama_generate(ai_prompt)
-                elif model_to_use == "openclaw":
-                    response_text = ai_orchestration.openclaw_generate(ai_prompt)
                 else:
                     if not ai_orchestration.api_key or "your_gemini_api_key" in ai_orchestration.api_key:
                         st.info("Gemini key not set. Using local Ollama fallback.")

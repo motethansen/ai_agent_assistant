@@ -39,25 +39,6 @@ def _update_config_key(config_path, key, value):
         f.writelines(new_lines)
 
 
-def _update_openclaw_api_key(provider, api_key):
-    """Update the API key for a provider in OpenClaw's auth-profiles.json."""
-    import json
-    profiles_path = os.path.expanduser("~/.openclaw/agents/main/agent/auth-profiles.json")
-    if not os.path.exists(profiles_path):
-        return
-    with open(profiles_path, "r") as f:
-        data = json.load(f)
-    profile_key = f"{provider}:default"
-    if profile_key not in data.get("profiles", {}):
-        data.setdefault("profiles", {})[profile_key] = {
-            "type": "api_key",
-            "provider": provider,
-        }
-    data["profiles"][profile_key]["key"] = api_key
-    with open(profiles_path, "w") as f:
-        json.dump(data, f, indent=2)
-
-
 def get_unified_tasks(obsidian_path):
     """
     Merges tasks from Obsidian, LogSeq, and Apple Reminders.
@@ -591,15 +572,7 @@ def handle_chat_mode(obsidian_file):
                     display_docs()
                 elif command == "services":
                     ollama_up = ai_orchestration.is_ollama_running()
-                    openclaw_up = ai_orchestration.is_openclaw_running()
-                    chat_ui.render_services(ollama_up, openclaw_up)
-                    if not openclaw_up:
-                        start = input("Start OpenClaw? (y/n): ").strip().lower()
-                        if start == 'y':
-                            if ai_orchestration.ensure_openclaw():
-                                chat_ui.render_success("OpenClaw started successfully.")
-                            else:
-                                chat_ui.render_error("Failed to start OpenClaw.")
+                    chat_ui.render_services(ollama_up)
                 elif command == "models":
                     models_status = {}
                     for m, enabled in ai_orchestration.MODELS_ENABLED.items():
@@ -714,7 +687,7 @@ def handle_chat_mode(obsidian_file):
                             chat_ui.render_warning(f"'{linked_llm}' is not a recognized model. Using default.")
                         agent_path = f"custom_agents/{agent_name}.py"
                         with open(agent_path, "w") as f:
-                            f.write(f'\"\"\"\nAgent: {agent_name}\nLinked LLM: {linked_llm}\nCreated dynamically by AI Agent Assistant\n\"\"\"\n\nimport ai_orchestration\n\ndef run(context):\n    \"\"\"Main entry point for the {agent_name} agent using {linked_llm}.\"\"\"\n    prompt = f"As the {agent_name} specialist, process this context: {{context}}"\n    if "{linked_llm}" == "ollama":\n        return ai_orchestration.ollama_generate(prompt)\n    elif "{linked_llm}" == "openclaw":\n        return ai_orchestration.openclaw_generate(prompt)\n    else:\n        result, _ = ai_orchestration.run_agent_query(prompt)\n        return result\n')
+                            f.write(f'\"\"\"\nAgent: {agent_name}\nLinked LLM: {linked_llm}\nCreated dynamically by AI Agent Assistant\n\"\"\"\n\nimport ai_orchestration\n\ndef run(context):\n    \"\"\"Main entry point for the {agent_name} agent using {linked_llm}.\"\"\"\n    prompt = f"As the {agent_name} specialist, process this context: {{context}}"\n    if "{linked_llm}" == "ollama":\n        return ai_orchestration.ollama_generate(prompt)\n    else:\n        result, _ = ai_orchestration.run_agent_query(prompt)\n        return result\n')
                         chat_ui.render_success(f"Agent '{agent_name}' defined and linked to '{linked_llm}' at {agent_path}.")
                     else:
                         chat_ui.render_info("Usage: /define-agent <name> <llm_type>")
@@ -771,10 +744,8 @@ def handle_chat_mode(obsidian_file):
                             _update_config_key(config_path, key, value)
                             chat_ui.render_success(f"Updated {key} in .config")
                             # Reload relevant in-memory values
-                            if key in ("OPENAI_API_KEY",):
-                                _update_openclaw_api_key("openai", value)
-                                chat_ui.render_info("OpenClaw auth-profiles updated with new OpenAI key.")
-                            elif key in ("OPENCLAW_MODEL", "OPENCLAW_ENDPOINT", "OPENCLAW_API_KEY"):
+                            if key in ("OLLAMA_MODEL", "OLLAMA_HOST", "LLM_PRIORITY",
+                                       "ROUTING_CHAT", "ROUTING_SCHEDULING"):
                                 chat_ui.render_info("Restart the chat for routing changes to take effect.")
                     else:
                         chat_ui.render_settings(config_path)

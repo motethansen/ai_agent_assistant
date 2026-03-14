@@ -104,7 +104,6 @@ def render_settings(config_path):
 
     keys = [
         ("OPENAI_API_KEY",   "OpenAI API Key"),
-        ("OPENCLAW_API_KEY", "OpenClaw Gateway Token"),
         ("GEMINI_API_KEY",   "Gemini API Key"),
         ("CLAUDE_API_KEY",   "Claude API Key"),
         ("HF_TOKEN",         "HuggingFace Token"),
@@ -121,8 +120,8 @@ def render_settings(config_path):
     settings_table = Table(title="LLM Configuration", show_header=True, header_style="bold cyan")
     settings_table.add_column("Setting", style="cyan", min_width=20)
     settings_table.add_column("Value")
-    for key in ["OPENCLAW_MODEL", "OPENAI_MODEL", "OLLAMA_MODEL", "LLM_PRIORITY",
-                "ROUTING_CHAT", "ROUTING_SCHEDULING", "ENABLE_OPENAI", "ENABLE_OPENCLAW",
+    for key in ["OPENAI_MODEL", "OLLAMA_MODEL", "LLM_PRIORITY",
+                "ROUTING_CHAT", "ROUTING_SCHEDULING", "ENABLE_OPENAI",
                 "ENABLE_OLLAMA", "ENABLE_GEMINI", "ENABLE_CLAUDE"]:
         val = get_config_value(key, "")
         settings_table.add_row(key, val or "[dim]not set[/dim]")
@@ -143,7 +142,7 @@ COMMAND_DESCRIPTIONS = {
     "models": "Show current status of LLM models",
     "model": "Enable/disable models (e.g., /model disable gemini)",
     "routing": "Show current LLM routing configuration",
-    "services": "Check and start local AI services (Ollama, OpenClaw)",
+    "services": "Check and start local AI services (Ollama)",
     "organize": "AI suggestions for task organization",
     "cmd": "Custom AI command on backlog (e.g., /cmd prioritize by deadline)",
     "develop": "AI code generation (e.g., /develop a flask REST API)",
@@ -196,13 +195,12 @@ def render_backlog(tasks):
         console.print()
 
 
-def render_services(ollama_status, openclaw_status):
+def render_services(ollama_status):
     """Render service status table."""
     table = Table(title="Local AI Services", show_header=True)
     table.add_column("Service", style="cyan")
     table.add_column("Status")
     table.add_row("Ollama", "[bold green]RUNNING[/bold green]" if ollama_status else "[bold red]STOPPED[/bold red]")
-    table.add_row("OpenClaw", "[bold green]RUNNING[/bold green]" if openclaw_status else "[bold red]STOPPED[/bold red]")
     console.print(table)
 
 

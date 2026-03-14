@@ -30,7 +30,6 @@ def test_config_model_flags():
         content = f.read()
     assert "ENABLE_GEMINI=false" in content
     assert "ENABLE_OLLAMA=true" in content
-    assert "ENABLE_OPENCLAW=true" in content
 
 def test_available_models_list():
     """

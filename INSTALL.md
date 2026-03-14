@@ -8,8 +8,6 @@ This project requires setting up a few local and cloud components to function as
 - Google Cloud Project with Calendar API enabled.
 - `credentials.json` (OAuth Client ID) from Google Cloud Console.
 - [Ollama](https://ollama.com/) installed locally.
-- [Docker](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev/) (Required for OpenClaw).
-- [OpenClaw](https://openclaw.ai/) for enhanced agentic capabilities.
 
 ## Setup Instructions
 
@@ -32,18 +30,18 @@ This project requires setting up a few local and cloud components to function as
     - **Configure System:** Guide you through `.config` creation (API keys, paths).
     - **Warming & Verification:** Pre-load the AI model and run a full diagnostic to ensure the assistant is working.
 
-3.  **Local Services (Ollama & OpenClaw):**
-    - The system is **Local-First**. It will always try to use your local machine before hitting cloud APIs.
-    - **OpenClaw** requires **Docker** or **OrbStack** to be running on your machine.
+3.  **Local Services (Ollama):**
+    - The system is **Local-First**. It will always try to use your local Ollama instance before hitting cloud APIs.
     - You can manually manage services using: `./scripts/manage_services.sh {start|check}`.
 
 4.  **Configure `.config`:**
     Open `.config` (managed by the installer) and refine your settings:
-    - `LLM_PRIORITY`: Set your preferred model order (e.g., `ollama, openclaw, gemini`).
+    - `LLM_PRIORITY`: Set your preferred model order (e.g., `ollama,gemini,openai,claude`).
+    - `OLLAMA_MODEL`: The local model to use (e.g., `llama3`, `mistral`, `qwen2.5:14b`).
     - `GEMINI_API_KEY`: Optional cloud fallback.
     - `CALENDAR_ID`: Usually 'primary' or a specific ID.
 
-6.  **Google Calendar API:**
+5.  **Google Calendar API:**
     Place your `credentials.json` in the root directory. The first time you run the script, it will open a browser window for OAuth authentication and save a `token.json`.
 
 ## Running the Assistant

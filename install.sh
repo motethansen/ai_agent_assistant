@@ -135,12 +135,11 @@ setup_python_env() {
     echo -e "${GREEN}Python environment is ready.${NC}"
 }
 
-# 3. Ollama & OpenClaw Installation (Local AI)
+# 3. Ollama Installation (Local AI)
 setup_local_ai() {
-    show_progress "Checking Local AI (Ollama & OpenClaw)..."
+    show_progress "Checking Local AI (Ollama)..."
     chmod +x scripts/manage_services.sh
-    
-    # Ollama
+
     if ! command -v ollama &> /dev/null; then
         echo "Ollama not found. It allows you to run AI models privately on your machine."
         read -p "Would you like to install Ollama now? (y/n): " install_ollama
@@ -160,56 +159,6 @@ setup_local_ai() {
         echo -e "${GREEN}Ollama is already installed.${NC}"
     fi
 
-    # OpenClaw (Node-based)
-    if ! command -v node &> /dev/null; then
-        echo -e "${YELLOW}Node.js not found. Node.js >= 22 is required for OpenClaw.${NC}"
-        if [ "$OS_TYPE" == "Darwin" ]; then
-             if command -v brew &> /dev/null; then
-                 echo "Installing Node.js 22 via Homebrew..."
-                 brew install node@22
-                 brew link --force --overwrite node@22
-             fi
-        fi
-    else
-        NODE_VER=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-        if [ "$NODE_VER" -lt 22 ]; then
-            echo -e "${YELLOW}Node.js version is $NODE_VER. Node.js >= 22 is required for OpenClaw.${NC}"
-            if [ "$OS_TYPE" == "Darwin" ] && command -v brew &> /dev/null; then
-                 echo "Upgrading Node.js to 22 via Homebrew..."
-                 brew install node@22
-                 brew link --force --overwrite node@22
-            fi
-        fi
-    fi
-
-    if ! command -v openclaw &> /dev/null; then
-        echo "OpenClaw not found. It allows for more advanced agentic reasoning."
-        read -p "Would you like to install OpenClaw now? (y/n): " install_oc
-        if [[ "$install_oc" == "y"* ]]; then
-            echo "Installing OpenClaw via official script..."
-            curl -fsSL https://openclaw.ai/install.sh | bash
-
-            # Run onboarding with daemon installation
-            echo -e "${YELLOW}Launching OpenClaw Onboarding...${NC}"
-            echo -e "${BLUE}Please follow the instructions in the new terminal window if it opens.${NC}"
-            openclaw onboard --install-daemon
-        fi
-    else
-        echo -e "${GREEN}OpenClaw is already installed.${NC}"
-        # Ensure OpenClaw gateway is installed as a persistent background service
-        if openclaw gateway status 2>&1 | grep -q "not loaded\|not installed\|Service not installed"; then
-            echo -e "${YELLOW}Installing OpenClaw gateway as a background service...${NC}"
-            openclaw gateway install
-            openclaw gateway start 2>/dev/null || true
-            echo -e "${GREEN}OpenClaw gateway service installed.${NC}"
-        elif openclaw gateway status 2>&1 | grep -q "not running\|stopped"; then
-            echo -e "${YELLOW}Starting OpenClaw gateway service...${NC}"
-            openclaw gateway start 2>/dev/null || launchctl start ai.openclaw.gateway 2>/dev/null || true
-        else
-            echo -e "${GREEN}OpenClaw gateway service is active.${NC}"
-        fi
-    fi
-    
     ./scripts/manage_services.sh start
 }
 
@@ -225,26 +174,6 @@ set_config_key() {
     fi
 }
 
-# Helper: update OpenClaw auth-profiles.json with a provider API key
-set_openclaw_provider_key() {
-    local provider="$1"
-    local api_key="$2"
-    local profiles_file="$HOME/.openclaw/agents/main/agent/auth-profiles.json"
-    if [ ! -f "$profiles_file" ]; then return; fi
-    python3 - "$profiles_file" "$provider" "$api_key" <<'PYEOF'
-import json, sys
-path, provider, key = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(path) as f:
-    data = json.load(f)
-profile_key = f"{provider}:default"
-data.setdefault("profiles", {})[profile_key] = {
-    "type": "api_key", "provider": provider, "key": key
-}
-with open(path, "w") as f:
-    json.dump(data, f, indent=2)
-PYEOF
-}
-
 # 4. Configuration (Web Wizard or CLI)
 setup_configuration() {
     show_progress "System Configuration..."
@@ -258,20 +187,17 @@ setup_configuration() {
 
     echo ""
     echo -e "${BLUE}--- API Key Setup ---${NC}"
-    echo "The assistant uses OpenClaw as its primary AI gateway (supports OpenAI, local models, etc.)"
-    echo "You need at least one API key to get started."
+    echo "The assistant uses Ollama as its primary local LLM. Cloud API keys are optional."
     echo ""
 
-    # OpenAI (primary/recommended)
+    # OpenAI (optional)
     CURRENT_OPENAI=$(grep -E "^OPENAI_API_KEY=" .config | cut -d'=' -f2- | tr -d ' ')
     if [ -z "$CURRENT_OPENAI" ] || [[ "$CURRENT_OPENAI" == *"your_"* ]]; then
         read -p "OpenAI API Key (sk-proj-...) [Enter to skip]: " openai_key
         if [ -n "$openai_key" ]; then
             set_config_key "OPENAI_API_KEY" "$openai_key"
             set_config_key "ENABLE_OPENAI" "true"
-            set_config_key "OPENCLAW_MODEL" "openai/gpt-4o-mini"
-            set_openclaw_provider_key "openai" "$openai_key"
-            echo -e "${GREEN}OpenAI API key saved and configured as primary model.${NC}"
+            echo -e "${GREEN}OpenAI API key saved.${NC}"
         else
             echo -e "${YELLOW}Skipped. You can add it later with: /settings set OPENAI_API_KEY sk-proj-...${NC}"
         fi

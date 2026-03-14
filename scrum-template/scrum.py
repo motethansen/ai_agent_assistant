@@ -87,15 +87,6 @@ PROJECTS = {
             "dev-1": "claude-dev",
         },
     },
-    # AI Agent Assistant — root of this repo
-    "agent": {
-        "path": ".",
-        "sm_agent": "claude-sm",
-        "dev_agents": {
-            "dev-1": "claude-dev",
-            "dev-2": "claude-dev",
-        },
-    },
 }
 
 
