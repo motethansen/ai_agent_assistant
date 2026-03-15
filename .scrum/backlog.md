@@ -53,7 +53,7 @@
   - [ ] `monitoring_agent.py` only checks Ollama health
 - **Epic**: E02
 - **Estimate**: M
-- **Status**: Sprint-01 — implementation ready in `tasks/T01-03-output.md`
+- **Status**: ✅ Done — 2026-03-15 (T01-03)
 - **Notes**: Depends on BLI-001 (done)
 
 #### BLI-003
@@ -65,7 +65,7 @@
   - [ ] Graceful fallback message if Ollama is not running
 - **Epic**: E02
 - **Estimate**: M
-- **Status**: Sprint-01 — covered by T01-03 (implementation in `tasks/T01-03-output.md`)
+- **Status**: ✅ Done — 2026-03-15 (T01-03)
 
 #### BLI-004
 - **Story**: As a user, I want a working LogSeq task integration so that tasks written as `LATER` or `TODO` in my journals and pages are read by the planning agent
@@ -78,7 +78,7 @@
   - [ ] A minimal working config snippet provided in INSTALL.md
 - **Epic**: E03
 - **Estimate**: M
-- **Status**: Sprint-01 — partially implemented (LATER parsing works; TODO + attribution + --backlog flag missing). Implementation in `tasks/T01-04-output.md`
+- **Status**: ✅ Done — 2026-03-15 (T01-04)
 
 #### BLI-005
 - **Story**: As a user, I want to add and update tasks in LogSeq from the CLI so I can capture tasks without opening the LogSeq app
@@ -88,7 +88,7 @@
   - [ ] No LogSeq app needs to be running — operates on markdown files directly
 - **Epic**: E03
 - **Estimate**: M
-- **Status**: Sprint-01 — implementation ready in `tasks/T01-05-output.md`. Depends on BLI-004 (T01-04 applied first)
+- **Status**: ✅ Done — 2026-03-15 (T01-05)
 
 ---
 
@@ -103,52 +103,52 @@
   - [ ] `python main.py --backlog` shows Obsidian tasks alongside LogSeq tasks
 - **Epic**: E04
 - **Estimate**: M
-- **Status**: Backlog
+- **Status**: ✅ Done — 2026-03-15 (T02-01)
 
 #### BLI-011
 - **Story**: As a user, I want tasks synced from LogSeq to Obsidian so Obsidian is my single task dashboard regardless of where tasks were captured
 - **Acceptance Criteria**:
-  - [ ] Sync command pulls new LATER/TODO tasks from LogSeq and appends them to a configured Obsidian page (e.g. `Inbox.md`)
-  - [ ] Duplicate detection prevents re-adding already-synced tasks
-  - [ ] Sync triggered via `/sync-logseq` CLI command or automatically on startup
-  - [ ] Each synced task gets a `#logseq` source tag
+  - [x] Sync command pulls new LATER/TODO tasks from LogSeq and appends them to a configured Obsidian page (e.g. `Inbox.md`)
+  - [x] Duplicate detection prevents re-adding already-synced tasks
+  - [x] Sync triggered via `/sync-logseq` CLI command or automatically on startup
+  - [x] Each synced task gets a `#logseq` source tag
 - **Epic**: E04
 - **Estimate**: L
-- **Status**: Backlog
+- **Status**: ✅ Done — 2026-03-15 (T02-02)
 
 #### BLI-012
 - **Story**: As a user, I want a planning agent that checks my Google Calendar and asks me whether to schedule pending tasks so my calendar reflects my actual priorities
 - **Acceptance Criteria**:
-  - [ ] Planning agent reads pending tasks from Obsidian + LogSeq unified list
-  - [ ] Agent reads Google Calendar for the next 7 days and identifies free slots
-  - [ ] Agent proposes a schedule (task → time slot) and presents it in the CLI
-  - [ ] User confirms, skips, or reschedules each suggestion interactively
-  - [ ] Confirmed tasks are added to Google Calendar via `calendar_manager`
+  - [x] Planning agent reads pending tasks from Obsidian + LogSeq unified list
+  - [x] Agent reads Google Calendar for the next 7 days and identifies free slots
+  - [x] Agent proposes a schedule (task → time slot) and presents it in the CLI
+  - [x] User confirms, skips, or reschedules each suggestion interactively
+  - [x] Confirmed tasks are added to Google Calendar via `calendar_manager`
 - **Epic**: E05
 - **Estimate**: L
-- **Status**: Backlog
+- **Status**: ✅ Done — 2026-03-15 (T02-03)
 
 #### BLI-013
 - **Story**: As a user, I want the planning agent to run on a regular schedule so I get prompted for calendar planning without remembering to run it manually
 - **Acceptance Criteria**:
-  - [ ] A cron job or systemd timer triggers `python main.py --plan` daily at a configurable time
-  - [ ] Setup instructions in INSTALL.md for both cron and systemd
-  - [ ] Agent skips silently if no unscheduled tasks are found
-  - [ ] Prints a clear summary when planning is ready for review
+  - [x] A cron job or systemd timer triggers `python main.py --plan` daily at a configurable time
+  - [x] Setup instructions in INSTALL.md for both cron and systemd
+  - [x] Agent skips silently if no unscheduled tasks are found
+  - [x] Prints a clear summary when planning is ready for review
 - **Epic**: E05
 - **Estimate**: M
-- **Status**: Backlog
+- **Status**: ✅ Done — 2026-03-15 (T02-04)
 
 #### BLI-014
 - **Story**: As a user, I want a clean CLI entry point using my installed Ollama models so I can run the assistant from any terminal without needing Streamlit
 - **Acceptance Criteria**:
-  - [ ] `python main.py` launches CLI chat cleanly with no web UI dependency
-  - [ ] Available Ollama models shown at startup
-  - [ ] Core commands work: `/backlog`, `/plan`, `/sync`, `/add-task`, `/review`
-  - [ ] `--no-web` flag (or equivalent) documented clearly
+  - [x] `python main.py` launches CLI chat cleanly with no web UI dependency
+  - [x] Available Ollama models shown at startup
+  - [x] Core commands work: `/backlog`, `/plan`, `/sync`, `/add-task`, `/review`
+  - [x] `--no-web` flag (or equivalent) documented clearly
 - **Epic**: E06
 - **Estimate**: S
-- **Status**: Backlog
+- **Status**: ✅ Done — 2026-03-15 (T02-05)
 
 ---
 
@@ -157,33 +157,33 @@
 #### BLI-020
 - **Story**: As a user, I want per-task-type model routing across multiple Ollama models so I can experiment with different local models for chat vs scheduling vs parsing
 - **Acceptance Criteria**:
-  - [ ] `ROUTING_CHAT`, `ROUTING_SCHEDULING`, `ROUTING_PARSING` each accept any Ollama model name
-  - [ ] Model names map to full Ollama identifiers (`llama3:8b`, `mistral:latest`, `qwen2.5:14b`, etc.)
-  - [ ] `/routing` CLI command shows current assignments and allows interactive change
+  - [x] `ROUTING_CHAT`, `ROUTING_SCHEDULING`, `ROUTING_PARSING` each accept any Ollama model name
+  - [x] Model names map to full Ollama identifiers (`llama3:8b`, `mistral:latest`, `qwen2.5:14b`, etc.)
+  - [x] `/routing` CLI command shows current assignments and allows interactive change
 - **Epic**: E06
 - **Estimate**: M
-- **Status**: Backlog
+- **Status**: ✅ Done — 2026-03-15 (T03-01)
 
 #### BLI-021
 - **Story**: As a developer, I want a minimal `config.example` with sane defaults so contributors can get started in under 5 minutes
 - **Acceptance Criteria**:
-  - [ ] `config.example` contains only the settings needed for Ollama + LogSeq + Obsidian + Google Calendar
-  - [ ] Every setting has a one-line comment
-  - [ ] Cloud API keys shown but commented out for reference
-  - [ ] OpenClaw section fully absent
+  - [x] `config.example` contains only the settings needed for Ollama + LogSeq + Obsidian + Google Calendar
+  - [x] Every setting has a one-line comment
+  - [x] Cloud API keys shown but commented out for reference
+  - [x] OpenClaw section fully absent
 - **Epic**: E02
 - **Estimate**: S
-- **Status**: Backlog
+- **Status**: ✅ Done — 2026-03-15 (T03-02)
 
 #### BLI-022
 - **Story**: As a user, I want an evening review agent to summarise what I completed that day across Obsidian and LogSeq so I have a daily log without manual effort
 - **Acceptance Criteria**:
-  - [ ] `/review` shows tasks marked done today across Obsidian and LogSeq
-  - [ ] Summary generated by local LLM and printed in CLI
-  - [ ] Optionally appended to today's LogSeq journal file
+  - [x] `/review` shows tasks marked done today across Obsidian and LogSeq
+  - [x] Summary generated by local LLM and printed in CLI
+  - [x] Optionally appended to today's LogSeq journal file
 - **Epic**: E06
 - **Estimate**: M
-- **Status**: Backlog
+- **Status**: ✅ Done — 2026-03-15 (T03-03)
 
 #### BLI-023
 - **Story**: As a user, I want a webhook HTTP API so that n8n workflows can trigger agent tasks (add task, run plan, query backlog) without me running a CLI command manually
@@ -198,7 +198,7 @@
   - [ ] `config.template` updated with `WEBHOOK_PORT` and `N8N_PORT` settings
 - **Epic**: E07
 - **Estimate**: M
-- **Status**: Sprint-01
+- **Status**: ✅ Done — 2026-03-15 (T01-06 / T01-07)
 
 #### BLI-024
 - **Story**: As a user, I want ready-made n8n workflow JSON templates so I can import them and immediately have event-driven automations without building from scratch
@@ -211,7 +211,7 @@
   - [ ] `README_N8N.md` added explaining: how to start n8n, import workflows, configure the webhook URL
 - **Epic**: E07
 - **Estimate**: S
-- **Status**: Sprint-01
+- **Status**: ✅ Done — 2026-03-15 (T01-06 / T01-07)
 - **Notes**: Depends on BLI-023 (API must exist before workflows can be built)
 
 ---
@@ -258,5 +258,6 @@ Sprint-03 start date: TBD (after Sprint-02 review)
 
 | Date | Changed by | Change |
 |------|------------|--------|
+| 2026-03-15 | Scrum Master | Marked Sprint-02 BLI items Done: BLI-010 (T02-01), BLI-011 (T02-02), BLI-012 (T02-03), BLI-013 (T02-04), BLI-014 (T02-05). All AC checkboxes updated. |
 | 2026-03-15 | Scrum Master | Marked BLI-001 Done; updated BLI-002 through BLI-005, BLI-023, BLI-024 statuses to reflect Sprint-01 ready-to-implement state; added Sprint-02 and Sprint-03 placeholders |
 | 2026-03-14 | Product Owner | Initial backlog — OpenClaw removal, Ollama-first, LogSeq/Obsidian CLI, Calendar planning agent |

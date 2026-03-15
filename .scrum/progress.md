@@ -75,12 +75,14 @@ A personal AI assistant that runs from the command line, using local LLMs (Ollam
   - T02-05: Clean CLI entry point — `/help` updated, startup status display, `/review` wired
 - **Commit**: `c12f8ba` | **PO sign-off**: ✅ 2026-03-15
 
-### Sprint 03 — 🔄 In Progress
-- **Dates**: 2026-03-15 → 2026-03-22 (started early)
+### Sprint 03 — ✅ Complete
+- **Dates**: 2026-03-15 (started and completed same day — agents ran in parallel)
 - **Goal**: Per-task Ollama model routing, clean config.example for new users, LLM-powered evening review
-- **Plan**: `.scrum/sprints/sprint-03/plan.md`
-- **Tasks**: T03-01 (interactive /routing), T03-02 (config.example), T03-03 (evening review with LLM summary)
-- **All 3 tasks independent — run in parallel**: `python scrum.py agent sprint-run`
+- **Delivered**: All 3 tasks
+  - T03-01: `/routing` command — interactive model selector per task type, writes to `.config` immediately
+  - T03-02: `config.example` created — clean starter config with one-line comments, cloud keys commented out
+  - T03-03: `handle_evening_review()` rewritten — scans Obsidian + LogSeq, generates Ollama summary, optionally appends to journal
+- **Commit**: pending | **PO sign-off**: pending
 
 ---
 
@@ -99,6 +101,7 @@ A personal AI assistant that runs from the command line, using local LLMs (Ollam
 
 | Date | Handed from | Handed to | Sprint | Notes |
 |------|------------|-----------|--------|-------|
+| 2026-03-15 | Dev agents | Scrum Master | Sprint-03 | All Sprint-03 tasks verified complete. Commit pending PO sign-off. |
 | 2026-03-15 | Scrum Master | Dev agents | Sprint-03 | Sprint-01 and Sprint-02 complete. Sprint-03 started early — 3 parallel tasks ready. Run: `python scrum.py agent sprint-run` |
 | 2026-03-15 | Dev agents | Scrum Master | Sprint-02 | All Sprint-02 tasks verified complete. Committed c12f8ba. |
 | 2026-03-15 | Scrum Master (review) | Dev agents | Sprint-01 | File write permissions resolved. All 7 tasks applied and committed b445238. |

@@ -31,11 +31,11 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
 |---------|---------|-------|-------|----------|--------|
 | T01-01 | BLI-001 | Remove OpenClaw from tests, scripts, and agent files | dev-1 | L | Done |
 | T01-02 | BLI-001 | Remove OpenClaw from core (ai_orchestration.py, main.py, config) | dev-1 | M | Done |
-| T01-03 | BLI-002 | Refactor ai_orchestration.py to Ollama-first routing | dev-2 | M | Ready to implement |
-| T01-04 | BLI-004 | Verify and fix LogSeq task parsing end-to-end | dev-2 | M | Ready to implement |
-| T01-05 | BLI-005 | Add `/add-task` CLI command writing to LogSeq journal | dev-1 | M | Ready to implement |
-| T01-06 | BLI-023 | Build webhook HTTP API and docker-compose for n8n integration | dev-1 | M | Ready to implement |
-| T01-07 | BLI-024 | Create n8n workflow JSON templates and README_N8N.md | dev-1 | S | Ready to implement |
+| T01-03 | BLI-002 | Refactor ai_orchestration.py to Ollama-first routing | dev-2 | M | ✅ Done |
+| T01-04 | BLI-004 | Verify and fix LogSeq task parsing end-to-end | dev-2 | M | ✅ Done |
+| T01-05 | BLI-005 | Add `/add-task` CLI command writing to LogSeq journal | dev-1 | M | ✅ Done |
+| T01-06 | BLI-023 | Build webhook HTTP API and docker-compose for n8n integration | dev-1 | M | ✅ Done |
+| T01-07 | BLI-024 | Create n8n workflow JSON templates and README_N8N.md | dev-1 | S | ✅ Done |
 
 ---
 
@@ -83,14 +83,14 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
 - **Prompt file**: `tasks/T01-03-prompt.md`
 - **Output file**: `tasks/T01-03-output.md`
 - **Acceptance criteria**:
-  - [ ] Default routing: `ROUTING_CHAT=ollama`, `ROUTING_SCHEDULING=ollama`, `ROUTING_PARSING=ollama`
-  - [ ] Fallback order: `ollama → gemini → openai → claude`
-  - [ ] `LLM_PRIORITY=ollama,gemini,openai,claude` in config.template
-  - [ ] Only `ENABLE_OLLAMA=true` by default; all others `false`
-  - [ ] `is_ollama_running()` is the primary health gate — startup warns clearly if Ollama is down
-  - [ ] Startup queries `ollama list` and prints available models
+  - [x] Default routing: `ROUTING_CHAT=ollama`, `ROUTING_SCHEDULING=ollama`, `ROUTING_PARSING=ollama`
+  - [x] Fallback order: `ollama → gemini → openai → claude`
+  - [x] `LLM_PRIORITY=ollama,gemini,openai,claude` in config.template
+  - [x] Only `ENABLE_OLLAMA=true` by default; all others `false`
+  - [x] `is_ollama_running()` is the primary health gate — startup warns clearly if Ollama is down
+  - [x] Startup queries `ollama list` and prints available models
 - **Dependencies**: T01-02 must be complete (no OpenClaw in the file)
-- **Status**: Ready to implement — full implementation documented in `tasks/T01-03-output.md`
+- **Status**: ✅ Done — 2026-03-15
 - **Implementation notes**: Add `list_ollama_models()` to `ai_orchestration.py`; update `get_llm()` fallback logic; update `/models` command in `main.py` to interactive model selector
 
 ---
@@ -101,14 +101,14 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
 - **Prompt file**: `tasks/T01-04-prompt.md`
 - **Output file**: `tasks/T01-04-output.md`
 - **Acceptance criteria**:
-  - [ ] `logseq_agent.py` correctly reads `LATER` and `TODO` tasks from `journals/YYYY_MM_DD.md`
-  - [ ] Tasks from `pages/*.md` are also included
-  - [ ] Running `python main.py --backlog` prints LogSeq tasks with source file and line
-  - [ ] `LOGSEQ_DIR` not set → clear error message, not a crash
-  - [ ] `config.template` has a clear comment for `LOGSEQ_DIR` with example paths
-  - [ ] A working config snippet added to `INSTALL.md`
+  - [x] `logseq_agent.py` correctly reads `LATER` and `TODO` tasks from `journals/YYYY_MM_DD.md`
+  - [x] Tasks from `pages/*.md` are also included
+  - [x] Running `python main.py --backlog` prints LogSeq tasks with source file and line
+  - [x] `LOGSEQ_DIR` not set → clear error message, not a crash
+  - [x] `config.template` has a clear comment for `LOGSEQ_DIR` with example paths
+  - [x] A working config snippet added to `INSTALL.md`
 - **Dependencies**: None — can run in parallel with T01-01/T01-02
-- **Status**: Ready to implement — full implementation documented in `tasks/T01-04-output.md`
+- **Status**: ✅ Done — 2026-03-15
 - **Implementation notes**: Currently `logseq_agent.py` only parses `LATER` (not `TODO`); missing source attribution with line numbers; no `--backlog` flag in `main.py`. All changes documented.
 
 ---
@@ -119,13 +119,13 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
 - **Prompt file**: `tasks/T01-05-prompt.md`
 - **Output file**: `tasks/T01-05-output.md`
 - **Acceptance criteria**:
-  - [ ] `/add-task <description>` in CLI appends `- LATER <description>` to today's LogSeq journal file
-  - [ ] Creates the journal file if it does not exist (correct filename format: `YYYY_MM_DD.md`)
-  - [ ] Confirms to the user what was written and to which file
-  - [ ] `/done <task-text>` marks a matching LATER task as DONE in the source file
-  - [ ] No LogSeq app needs to be running
+  - [x] `/add-task <description>` in CLI appends `- LATER <description>` to today's LogSeq journal file
+  - [x] Creates the journal file if it does not exist (correct filename format: `YYYY_MM_DD.md`)
+  - [x] Confirms to the user what was written and to which file
+  - [x] `/done <task-text>` marks a matching LATER task as DONE in the source file
+  - [x] No LogSeq app needs to be running
 - **Dependencies**: T01-04 (LogSeq parsing must work first)
-- **Status**: Ready to implement — full implementation documented in `tasks/T01-05-output.md`
+- **Status**: ✅ Done — 2026-03-15
 - **Implementation notes**: Add `add_task()` and `mark_done()` methods to `logseq_agent.py`; add CLI handlers in `main.py`; update help text in `chat_ui.py`
 
 ---
@@ -136,13 +136,13 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
 - **Prompt file**: `tasks/T01-06-prompt.md`
 - **Output file**: `tasks/T01-06-output.md`
 - **Acceptance criteria**:
-  - [ ] `api_server.py` created — FastAPI server with `POST /webhook/add-task`, `GET /webhook/backlog`, `POST /webhook/plan`
-  - [ ] All endpoints return JSON `{"status": "ok"|"error", "message": "...", ...}`
-  - [ ] `WEBHOOK_PORT` added to `config.template` (default `5678`)
-  - [ ] `docker-compose.yml` created with `n8n` and `api` services on a shared network
-  - [ ] Server starts cleanly: `python api_server.py`
+  - [x] `api_server.py` created — FastAPI server with `POST /webhook/add-task`, `GET /webhook/backlog`, `POST /webhook/plan`
+  - [x] All endpoints return JSON `{"status": "ok"|"error", "message": "...", ...}`
+  - [x] `WEBHOOK_PORT` added to `config.template` (default `5678`)
+  - [x] `docker-compose.yml` created with `n8n` and `api` services on a shared network
+  - [x] Server starts cleanly: `python api_server.py`
 - **Dependencies**: T01-01 + T01-02 done (OpenClaw removed)
-- **Status**: Ready to implement — full implementation documented in `tasks/T01-06-output.md`
+- **Status**: ✅ Done — 2026-03-15
 - **Implementation notes**: Create new files: `api_server.py`, `docker-compose.yml`, `Dockerfile.api`; update `config.template` and `requirements.txt` (add fastapi, uvicorn)
 
 ---
@@ -153,24 +153,24 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
 - **Prompt file**: `tasks/T01-07-prompt.md`
 - **Output file**: `tasks/T01-07-output.md`
 - **Acceptance criteria**:
-  - [ ] `n8n-workflows/` directory with 3 workflow JSON files (morning-planning, add-task, backlog-digest)
-  - [ ] Each workflow JSON is importable in the n8n UI
-  - [ ] `README_N8N.md` explains setup: start n8n, import workflow, configure webhook URL
+  - [x] `n8n-workflows/` directory with 3 workflow JSON files (morning-planning, add-task, backlog-digest)
+  - [x] Each workflow JSON is importable in the n8n UI
+  - [x] `README_N8N.md` explains setup: start n8n, import workflow, configure webhook URL
 - **Dependencies**: T01-06 (API must exist first)
-- **Status**: Ready to implement — full implementation documented in `tasks/T01-07-output.md`
+- **Status**: ✅ Done — 2026-03-15
 - **Implementation notes**: Create `n8n-workflows/morning-planning.json`, `add-task.json`, `backlog-digest.json`, and `README_N8N.md`
 
 ---
 
 ## Definition of Done (Sprint Level)
 
-- [ ] All acceptance criteria met for each task
-- [ ] Project starts cleanly with `python main.py` after OpenClaw removal
-- [ ] `python main.py --backlog` shows LogSeq tasks
-- [ ] `/add-task` command writes to LogSeq journal
-- [ ] No references to OpenClaw remain in the codebase
-- [ ] Ollama is the default and only enabled LLM in config.template
-- [ ] Output files saved to `tasks/`
-- [ ] Sprint review prepared
-- [ ] `progress.md` updated with sprint results
-- [ ] Deferred items returned to backlog with notes
+- [x] All acceptance criteria met for each task
+- [x] Project starts cleanly with `python main.py` after OpenClaw removal
+- [x] `python main.py --backlog` shows LogSeq tasks
+- [x] `/add-task` command writes to LogSeq journal
+- [x] No references to OpenClaw remain in the codebase
+- [x] Ollama is the default and only enabled LLM in config.template
+- [x] Output files saved to `tasks/`
+- [x] Sprint review prepared
+- [x] `progress.md` updated with sprint results
+- [x] Deferred items returned to backlog with notes

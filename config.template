@@ -57,10 +57,10 @@ ENABLE_OPENAI=false
 ENABLE_CLAUDE=false
 
 # --- Model Routing ---
-# Which LLM handles which task: ollama, gemini, openai, claude
+# Accepts: ollama model name (e.g. llama3:latest, qwen2.5:14b, mistral:latest) or auto
+ROUTING_CHAT=ollama
 ROUTING_SCHEDULING=ollama
 ROUTING_PARSING=ollama
-ROUTING_CHAT=ollama
 
 # --- LLM Priority ---
 # Comma-separated fallback order: ollama (local) -> gemini -> openai -> claude

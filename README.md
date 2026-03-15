@@ -42,6 +42,15 @@ The installer will:
 5. Set up an hourly cron job for background task sync
 6. Verify everything is working
 
+### Configuration
+
+Copy the example config and fill in your paths:
+
+```bash
+cp config.example .config
+# Edit .config with your Obsidian vault path, LogSeq path, and Ollama model
+```
+
 ---
 
 ## API Key Setup

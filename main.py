@@ -422,36 +422,71 @@ def handle_planning_session(obsidian_path, dry_run=False):
 
 
 def handle_evening_review(obsidian_path):
-    """
-    Runs an interactive evening review session.
-    """
-    print("🌙 --- Evening Review Session ---")
-    tasks = get_unified_tasks(obsidian_path)
+    """Scans completed tasks from today, generates LLM summary, optionally saves to LogSeq."""
+    print("🌙 Evening Review")
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    today_logseq = datetime.datetime.now().strftime("%Y_%m_%d")
+    done_tasks = []
 
-    # Try to use ObsidianAgent
-    agent = None
-    try:
-        agent = ObsidianAgent()
-    except:
-        pass
+    # 1. Scan Obsidian for - [x] lines in any .md file modified today
+    workspace = get_config_value("WORKSPACE_DIR", None)
+    if workspace and os.path.isdir(workspace):
+        for root, _, files in os.walk(workspace):
+            for fname in files:
+                if not fname.endswith(".md"):
+                    continue
+                fpath = os.path.join(root, fname)
+                with open(fpath, errors="ignore") as fh:
+                    for line in fh:
+                        if re.match(r"\s*- \[x\]", line):
+                            task = re.sub(r"\s*- \[x\]\s*", "", line).strip()
+                            if task:
+                                done_tasks.append(f"[Obsidian] {task}")
 
-    # Check for completions
-    print("Checking which tasks from today's plan were completed...")
-    today_str = datetime.datetime.now().strftime("%Y-%m-%d")
-    for t in tasks:
-        # We'll just ask for status for now as part of the loop
-        if t.get("source") == "Obsidian" and t.get("due_date") == today_str:
-             status = input(f"Did you complete: '{t['task']}'? (y/n): ").strip().lower()
-             if status == 'y':
-                 print(f"Great work on {t['task']}!")
-                 if agent and t.get("file") and t.get("line"):
-                     # Mark as done via CLI
-                     agent.update_task(path=t["file"], line=t["line"], action="done")
-                     print(f"✅ Marked as DONE in Obsidian: {t['file']}:{t['line']}")
+    # 2. Scan LogSeq journal for DONE lines from today
+    logseq_dir = get_config_value("LOGSEQ_DIR", None)
+    if logseq_dir:
+        jpath = os.path.join(logseq_dir, "journals", f"{today_logseq}.md")
+        if os.path.exists(jpath):
+            with open(jpath, errors="ignore") as fh:
+                for line in fh:
+                    if re.match(r"\s*- DONE", line):
+                        task = re.sub(r"\s*- DONE\s*", "", line).strip()
+                        if task:
+                            done_tasks.append(f"[LogSeq] {task}")
 
-    print("\nBacklog summary for tomorrow:")
+    if not done_tasks:
+        print("No tasks completed today.")
+        return
 
-    # Future logic for moving incomplete tasks to the next day
+    print(f"\n✅ {len(done_tasks)} tasks completed today:")
+    for t in done_tasks:
+        print(f"  • {t}")
+
+    # 3. Generate LLM summary
+    prompt = (
+        f"Today is {today}. The user completed the following tasks:\n\n"
+        + "\n".join(f"- {t}" for t in done_tasks)
+        + "\n\nWrite a brief, encouraging 2-3 sentence daily summary. "
+        "Mention the key themes of what was accomplished. Be concise and positive."
+    )
+    print("\n💬 Generating summary...")
+    summary = ai_orchestration.ollama_generate(prompt)
+    if summary:
+        print(f"\n{summary}")
+
+    # 4. Optionally append to LogSeq journal
+    if logseq_dir and summary:
+        try:
+            save = input("\nAppend summary to today's LogSeq journal? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            save = "n"
+        if save == "y":
+            jpath = os.path.join(logseq_dir, "journals", f"{today_logseq}.md")
+            os.makedirs(os.path.dirname(jpath), exist_ok=True)
+            with open(jpath, "a", encoding="utf-8") as f:
+                f.write(f"\n## Evening Review — {today}\n\n{summary}\n")
+            print(f"✅ Saved to {jpath}")
 
 import subprocess
 from file_system_agent import FileSystemAgent
@@ -719,37 +754,7 @@ def handle_chat_mode(obsidian_file):
                 elif command == "plan":
                     handle_planning_session(obsidian_path)
                 elif command == "review":
-                    import re as _re
-                    _today = __import__('datetime').datetime.now().strftime("%Y-%m-%d")
-                    _done_tasks = []
-                    # Scan Obsidian vault
-                    if obsidian_path and os.path.isdir(obsidian_path):
-                        for _root, _dirs, _files in os.walk(obsidian_path):
-                            for _fname in _files:
-                                if _fname.endswith(".md") and _today in _fname:
-                                    _fpath = os.path.join(_root, _fname)
-                                    with open(_fpath, errors="ignore") as _fh:
-                                        for _line in _fh:
-                                            if _re.match(r"\s*- \[x\]", _line) or "DONE" in _line:
-                                                _done_tasks.append(("Obsidian", _line.strip()))
-                    # Scan LogSeq journals
-                    _ldir = get_config_value("LOGSEQ_DIR", None)
-                    if _ldir:
-                        _journals = os.path.join(_ldir, "journals")
-                        _jfile = os.path.join(_journals, _today.replace("-", "_") + ".md")
-                        if not os.path.exists(_jfile):
-                            _jfile = os.path.join(_journals, _today + ".md")
-                        if os.path.exists(_jfile):
-                            with open(_jfile, errors="ignore") as _fh:
-                                for _line in _fh:
-                                    if _re.match(r"\s*- \[x\]", _line) or _re.match(r"\s*- DONE", _line):
-                                        _done_tasks.append(("LogSeq", _line.strip()))
-                    if _done_tasks:
-                        print(f"\n\u2705 Tasks completed today ({_today}):")
-                        for _src, _t in _done_tasks:
-                            print(f"  [{_src}] {_t}")
-                    else:
-                        chat_ui.render_info(f"No completed tasks found for today ({_today}).")
+                    handle_evening_review(obsidian_path)
                 elif command == "ui":
                     chat_ui.render_info("Launching Streamlit UI in the background...")
                     subprocess.Popen([".venv/bin/streamlit", "run", "app.py"])
@@ -799,12 +804,31 @@ def handle_chat_mode(obsidian_file):
                     else:
                         chat_ui.render_info("Usage: /model <enable/disable> <model_name>")
                 elif command == "routing":
-                    routing_info = {}
-                    for task_type in ["chat", "scheduling", "parsing"]:
-                        config_val = get_config_value(f"ROUTING_{task_type.upper()}", "auto")
-                        active = ai_orchestration.get_routing(task_type)
-                        routing_info[task_type] = {"config": config_val, "active": active}
-                    chat_ui.render_routing(routing_info)
+                    ollama_models = ai_orchestration.list_ollama_models()
+                    if not ollama_models:
+                        chat_ui.render_warning("No Ollama models found. Run: ollama pull <model>")
+                    else:
+                        task_types = ["chat", "scheduling", "parsing"]
+                        print("\n--- Current Routing ---")
+                        for i, tt in enumerate(task_types, 1):
+                            current = get_config_value(f"ROUTING_{tt.upper()}", "ollama")
+                            print(f"  {i}. {tt:<12} → {current}")
+                        print("\n--- Installed Ollama Models ---")
+                        for j, m in enumerate(ollama_models, 1):
+                            print(f"  {j}. {m}")
+                        try:
+                            route_choice = input("\nChange routing for which task type? (1=chat 2=scheduling 3=parsing, Enter=skip): ").strip()
+                            if route_choice.isdigit() and 1 <= int(route_choice) <= 3:
+                                tt = task_types[int(route_choice) - 1]
+                                model_choice = input(f"Select model number for {tt}: ").strip()
+                                if model_choice.isdigit() and 1 <= int(model_choice) <= len(ollama_models):
+                                    selected = ollama_models[int(model_choice) - 1]
+                                    _update_config_key(config_path, f"ROUTING_{tt.upper()}", selected)
+                                    chat_ui.render_success(f"Routing for {tt} → {selected}. Effective immediately.")
+                                else:
+                                    chat_ui.render_warning("Invalid model selection.")
+                        except (EOFError, KeyboardInterrupt):
+                            pass
                 elif command == "create-agent":
                     if len(parts) >= 2:
                         agent_name = parts[1].lower().replace("-", "_")

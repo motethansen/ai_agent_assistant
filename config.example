@@ -1,0 +1,36 @@
+# Copy this file to .config and fill in your paths.
+# Cloud API keys are optional — Ollama runs fully locally.
+
+# Ollama (required — install from https://ollama.com)
+OLLAMA_MODEL=llama3:latest
+OLLAMA_HOST=http://localhost:11434
+
+# Your notes directories
+WORKSPACE_DIR=/path/to/your/obsidian/vault
+LOGSEQ_DIR=/path/to/your/logseq/graph
+
+# Google Calendar (optional — needs credentials.json from Google Cloud Console)
+CALENDAR_ID=primary
+
+# LLM routing — which model handles each task type
+ROUTING_CHAT=ollama
+ROUTING_SCHEDULING=ollama
+ROUTING_PARSING=ollama
+
+# Fallback order if Ollama is unavailable
+LLM_PRIORITY=ollama,gemini,openai,claude
+
+# Cloud API keys (optional — uncomment and fill in if you want cloud fallback)
+# GEMINI_API_KEY=your_key_here
+# OPENAI_API_KEY=your_key_here
+# CLAUDE_API_KEY=your_key_here
+
+# Enable cloud providers (all off by default — Ollama only)
+ENABLE_OLLAMA=true
+ENABLE_GEMINI=false
+ENABLE_OPENAI=false
+ENABLE_CLAUDE=false
+
+# Webhook server for n8n integration (optional)
+# WEBHOOK_PORT=5678
+# N8N_PORT=5679
