@@ -1,6 +1,7 @@
 import time
 import os
 import re
+import sys
 import datetime
 import json
 import traceback
@@ -43,77 +44,60 @@ def get_unified_tasks(obsidian_path):
     """
     Merges tasks from Obsidian, LogSeq, and Apple Reminders.
     """
-    # 1. Parse Obsidian tasks
+    # 1. Parse Obsidian tasks via direct file parsing (no Obsidian app needed)
     obsidian_tasks = []
-    
-    # Try using Obsidian Agent first (CLI)
-    try:
-        agent = ObsidianAgent()
-        # If obsidian_path is a file, we filter by that file
-        raw_obs_tasks = []
-        if os.path.isfile(obsidian_path):
-            file_name = os.path.basename(obsidian_path)
-            raw_obs_tasks = agent.get_tasks(todo=True, format="json")
-            # Filter by file name if we have many tasks
-            if raw_obs_tasks:
-                raw_obs_tasks = [t for t in raw_obs_tasks if t.get("file") == file_name or t.get("file").endswith("/" + file_name)]
-        else:
-            raw_obs_tasks = agent.get_tasks(todo=True, format="json")
 
-        if raw_obs_tasks:
+    workspace_dir = get_config_value("WORKSPACE_DIR", None)
+    if not workspace_dir:
+        print("ℹ️  WORKSPACE_DIR not set — skipping Obsidian tasks")
+    elif not os.path.isdir(workspace_dir):
+        print(f"⚠️  WORKSPACE_DIR is set but does not exist: {workspace_dir}")
+    else:
+        try:
+            agent = ObsidianAgent(workspace_dir=workspace_dir)
+            raw_obs_tasks = agent.get_tasks(todo=True, done=False)
+
             for t in raw_obs_tasks:
                 text = t.get("text", "")
-                # Clean up "- [ ] "
-                clean_text = re.sub(r"^-\s+\[[ xX]\]\s+", "", text).strip()
-                
+                clean_text = re.sub(r"^\s*-\s+\[[ xX]\]\s+", "", text).strip()
+                rel_file = t.get("file", "")
+                line_num = t.get("line", "")
+
                 task_data = {
                     "task": clean_text,
                     "category": "Uncategorized",
                     "due_date": None,
-                    "source": "Obsidian",
-                    "file": t.get("file", ""),
-                    "line": t.get("line", "")
+                    "source": f"obsidian:{rel_file}:{line_num}",
+                    "file": rel_file,
+                    "line": line_num,
                 }
-                
+
                 # Extract #category
                 cat_match = re.search(r"#([\w./-]+)", task_data["task"])
                 if cat_match:
                     task_data["category"] = cat_match.group(1)
                     task_data["task"] = task_data["task"].replace(f"#{task_data['category']}", "").strip()
-                
+
                 # Extract 📅 YYYY-MM-DD
                 date_match = re.search(r"📅\s*(\d{4}-\d{2}-\d{2})", task_data["task"])
                 if date_match:
                     task_data["due_date"] = date_match.group(1)
                     task_data["task"] = task_data["task"].replace(f"📅 {task_data['due_date']}", "").strip()
                     task_data["task"] = task_data["task"].replace(f"📅{task_data['due_date']}", "").strip()
-                
+
                 # Also support ^YYYY-MM-DD
                 if not task_data["due_date"]:
                     date_match = re.search(r"\^(\d{4}-\d{2}-\d{2})", task_data["task"])
                     if date_match:
                         task_data["due_date"] = date_match.group(1)
                         task_data["task"] = task_data["task"].replace(f"^{task_data['due_date']}", "").strip()
-                
-                obsidian_tasks.append(task_data)
-            
-            if obsidian_tasks:
-                print(f"Extracted {len(obsidian_tasks)} tasks from Obsidian via CLI.")
-    except Exception as e:
-        print(f"⚠️ Obsidian CLI error or not available, falling back to file parsing: {e}")
-        obsidian_tasks = []
 
-    # Fallback to file parsing if CLI failed or returned nothing
-    if not obsidian_tasks:
-        if os.path.isdir(obsidian_path):
-            for root, _, files in os.walk(obsidian_path):
-                for file in files:
-                    if file.endswith(".md"):
-                        path = os.path.join(root, file)
-                        tasks = parse_markdown_tasks(path)
-                        obsidian_tasks.extend(tasks)
-        else:
-            obsidian_tasks = parse_markdown_tasks(obsidian_path)
+                obsidian_tasks.append(task_data)
+
+            if obsidian_tasks:
+                print(f"Extracted {len(obsidian_tasks)} tasks from Obsidian vault.")
+        except Exception as e:
+            print(f"⚠️ ObsidianAgent error: {e}")
     
     # 2. Parse LogSeq tasks if directory is provided
     logseq_tasks = []
@@ -353,6 +337,90 @@ def handle_morning_planning(obsidian_path):
     else:
         print("Failed to generate schedule suggestion.")
 
+def handle_planning_session(obsidian_path, dry_run=False):
+    """
+    Interactive planning session: fetch tasks + 7-day calendar, propose schedule,
+    confirm per-task, then book confirmed items to Google Calendar.
+    Safe to run non-interactively (cron, systemd): prints schedule to stdout and exits.
+    """
+    is_interactive = sys.stdin.isatty()
+
+    # 1. Check credentials
+    if not os.path.exists("token.json"):
+        print("⚠️  Google Calendar not connected. Run the assistant once interactively to authenticate.")
+        print("    Missing: token.json")
+        return
+
+    # 2. Get tasks
+    tasks = get_unified_tasks(obsidian_path)
+    if not tasks:
+        if is_interactive:
+            print("ℹ️  No tasks found in backlog.")
+        return
+
+    # 3. Connect to calendar
+    service = calendar_manager.get_calendar_service()
+    if not service:
+        print("⚠️  Could not connect to Google Calendar.")
+        return
+
+    # 4. Fetch busy slots for next 7 days
+    busy_slots = []
+    for i in range(7):
+        day = (datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%Y-%m-%d")
+        busy_slots.extend(calendar_manager.get_busy_slots(service, date_str=day))
+
+    # 5. Generate schedule via LLM
+    logseq_path = get_config_value("LOGSEQ_DIR", None)
+    print("AI is generating your schedule...")
+    result = ai_orchestration.generate_schedule(
+        tasks, busy_slots, morning_mode=True,
+        workspace_dir=obsidian_path, logseq_dir=logseq_path
+    )
+    if not result or not result.get("schedule"):
+        print("ℹ️  No schedule proposed.")
+        return
+
+    if dry_run:
+        print("\n--- Proposed Schedule (dry-run, nothing will be booked) ---")
+        for item in result["schedule"]:
+            date_part = item["start"].split("T")[0] if "T" in item["start"] else item["start"]
+            time_part = item["start"].split("T")[1][:5] if "T" in item["start"] else ""
+            print(f"  [{date_part} {time_part}] {item['task']}")
+        print("\nDry run — no events created.")
+        return
+
+    if not is_interactive:
+        print("📋 Proposed schedule (non-interactive mode — no calendar writes):")
+        for item in result["schedule"]:
+            print(f"  [{item['start']}] {item['task']}")
+        print(f"\nℹ️  Run interactively to confirm and book: python main.py --plan")
+        return
+
+    # 6. Per-task confirmation
+    confirmed = []
+    for item in result["schedule"]:
+        date_part = item["start"].split("T")[0] if "T" in item["start"] else item["start"]
+        time_part = item["start"].split("T")[1][:5] if "T" in item["start"] else ""
+        print(f"\nSchedule '{item['task']}' on {date_part} at {time_part}? [y/n/s(kip all)]: ", end="", flush=True)
+        try:
+            choice = input().strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            break
+        if choice == "y":
+            confirmed.append(item)
+        elif choice == "s":
+            break
+
+    # 7. Book confirmed items
+    if confirmed:
+        calendar_id = get_config_value("CALENDAR_ID", "primary")
+        calendar_manager.create_events(service, confirmed, calendar_id=calendar_id)
+        print(f"\n✅ Booked {len(confirmed)} event(s) to Google Calendar.")
+    else:
+        print("No events booked.")
+
+
 def handle_evening_review(obsidian_path):
     """
     Runs an interactive evening review session.
@@ -452,6 +520,68 @@ def print_banner():
     except ImportError:
         print("\n  AI AGENT ASSISTANT\n")
 
+def sync_logseq_to_obsidian():
+    """
+    One-way sync: reads all open LATER/TODO tasks from LogSeq journals and pages,
+    then appends new (non-duplicate) tasks to the configured Obsidian target file.
+    Returns (synced_count, skipped_count, target_path) or None on config error.
+    """
+    logseq_dir = get_config_value("LOGSEQ_DIR", None)
+    workspace_dir = get_config_value("WORKSPACE_DIR", None)
+
+    missing = []
+    if not logseq_dir or "path/to" in logseq_dir:
+        missing.append("LOGSEQ_DIR")
+    if not workspace_dir or "path/to" in workspace_dir:
+        missing.append("WORKSPACE_DIR")
+    if missing:
+        print(f"❌ Required config key(s) not set: {', '.join(missing)}")
+        print("   Set them with: /settings set <KEY> <value>")
+        return None
+
+    from logseq_agent import LogSeqAgent
+    ls = LogSeqAgent(logseq_dir)
+
+    journal_tasks = ls.get_recent_tasks(days=30)
+    page_tasks = ls.get_all_page_tasks()
+    all_tasks = journal_tasks + page_tasks
+
+    sync_target = get_config_value("SYNC_TARGET_PAGE", "Inbox.md")
+    target_path = os.path.join(workspace_dir, sync_target)
+
+    # Read existing content (create parent dirs if needed)
+    if os.path.exists(target_path):
+        with open(target_path, "r", encoding="utf-8") as f:
+            current_content = f.read()
+    else:
+        os.makedirs(os.path.dirname(os.path.abspath(target_path)), exist_ok=True)
+        current_content = ""
+
+    new_lines = []
+    skipped = 0
+    for task in all_tasks:
+        task_text = task.get("task", "").strip()
+        if not task_text:
+            continue
+        # Duplicate detection: skip if task text already appears anywhere in file
+        if task_text in current_content:
+            skipped += 1
+            continue
+        source = task.get("source", "")
+        new_lines.append(f"- [ ] {task_text} #logseq <!-- source: {source} -->")
+
+    if new_lines:
+        separator = "\n" if current_content and not current_content.endswith("\n") else ""
+        updated = current_content + separator + "\n".join(new_lines) + "\n"
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(updated)
+
+    synced = len(new_lines)
+    target_name = os.path.basename(target_path)
+    print(f"✅ Synced {synced} tasks, skipped {skipped} duplicates → {target_name}")
+    return synced, skipped, target_path
+
+
 def handle_chat_mode(obsidian_file):
     """
     Starts an interactive CLI chat loop with slash commands and Rich UI.
@@ -463,17 +593,28 @@ def handle_chat_mode(obsidian_file):
 
     chat_ui.print_banner()
 
+    # Config path status
+    workspace_status = "✅ set" if obsidian_path and obsidian_path != "." else "⚠️  not set (defaulting to .)"
+    logseq_status = "✅ set" if logseq_path else "⚠️  not set"
+    print(f"WORKSPACE_DIR: {obsidian_path}  [{workspace_status}]")
+    print(f"LOGSEQ_DIR:    {logseq_path or '(none)'}  [{logseq_status}]")
+
     # Ollama startup check
     if ai_orchestration.is_ollama_running():
         models = ai_orchestration.list_ollama_models()
         if models:
-            print(f"✅ Ollama models available: {', '.join(models)}")
+            print(f"✅ Ollama running — models: {', '.join(models)}")
         else:
-            print("⚠️  No Ollama models found. Run: ollama pull llama3")
+            print("⚠️  Ollama running but no models found. Run: ollama pull llama3")
     else:
         print("⚠️  Ollama is not running. Start it with: ollama serve")
 
     history = chat_ui.load_history()
+
+    # Auto-sync LogSeq → Obsidian on startup if configured
+    if get_config_value("AUTO_SYNC_LOGSEQ", "false").lower() == "true":
+        chat_ui.render_info("AUTO_SYNC_LOGSEQ enabled — syncing LogSeq tasks on startup...")
+        sync_logseq_to_obsidian()
 
     # Use prompt_toolkit for better input if available
     try:
@@ -576,9 +717,39 @@ def handle_chat_mode(obsidian_file):
                     tasks = get_unified_tasks(obsidian_path)
                     chat_ui.render_backlog(tasks)
                 elif command == "plan":
-                    handle_morning_planning(obsidian_path)
+                    handle_planning_session(obsidian_path)
                 elif command == "review":
-                    handle_evening_review(obsidian_path)
+                    import re as _re
+                    _today = __import__('datetime').datetime.now().strftime("%Y-%m-%d")
+                    _done_tasks = []
+                    # Scan Obsidian vault
+                    if obsidian_path and os.path.isdir(obsidian_path):
+                        for _root, _dirs, _files in os.walk(obsidian_path):
+                            for _fname in _files:
+                                if _fname.endswith(".md") and _today in _fname:
+                                    _fpath = os.path.join(_root, _fname)
+                                    with open(_fpath, errors="ignore") as _fh:
+                                        for _line in _fh:
+                                            if _re.match(r"\s*- \[x\]", _line) or "DONE" in _line:
+                                                _done_tasks.append(("Obsidian", _line.strip()))
+                    # Scan LogSeq journals
+                    _ldir = get_config_value("LOGSEQ_DIR", None)
+                    if _ldir:
+                        _journals = os.path.join(_ldir, "journals")
+                        _jfile = os.path.join(_journals, _today.replace("-", "_") + ".md")
+                        if not os.path.exists(_jfile):
+                            _jfile = os.path.join(_journals, _today + ".md")
+                        if os.path.exists(_jfile):
+                            with open(_jfile, errors="ignore") as _fh:
+                                for _line in _fh:
+                                    if _re.match(r"\s*- \[x\]", _line) or _re.match(r"\s*- DONE", _line):
+                                        _done_tasks.append(("LogSeq", _line.strip()))
+                    if _done_tasks:
+                        print(f"\n\u2705 Tasks completed today ({_today}):")
+                        for _src, _t in _done_tasks:
+                            print(f"  [{_src}] {_t}")
+                    else:
+                        chat_ui.render_info(f"No completed tasks found for today ({_today}).")
                 elif command == "ui":
                     chat_ui.render_info("Launching Streamlit UI in the background...")
                     subprocess.Popen([".venv/bin/streamlit", "run", "app.py"])
@@ -784,17 +955,23 @@ def handle_chat_mode(obsidian_file):
                     if not args_str:
                         chat_ui.render_warning("Usage: /done <task text or partial match>")
                     else:
+                        marked = False
                         logseq_dir = get_config_value("LOGSEQ_DIR", None)
-                        if not logseq_dir:
-                            chat_ui.render_error("LOGSEQ_DIR not set in .env")
-                        else:
+                        if logseq_dir:
                             from logseq_agent import LogSeqAgent
                             ls = LogSeqAgent(logseq_dir)
-                            found = ls.mark_done(args_str)
-                            if found:
-                                chat_ui.render_success(f"Marked DONE: {args_str}")
-                            else:
-                                chat_ui.render_warning(f"No matching LATER/TODO task found for: {args_str}")
+                            if ls.mark_done(args_str):
+                                chat_ui.render_success(f"Marked DONE in LogSeq: {args_str}")
+                                marked = True
+                        if not marked:
+                            workspace_dir = get_config_value("WORKSPACE_DIR", None)
+                            if workspace_dir:
+                                obs = ObsidianAgent(workspace_dir=workspace_dir)
+                                if obs.mark_done(args_str):
+                                    chat_ui.render_success(f"Marked DONE in Obsidian: {args_str}")
+                                    marked = True
+                        if not marked:
+                            chat_ui.render_warning(f"No matching task found for: {args_str}")
                 elif command == "settings":
                     config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".config")
                     if len(parts) >= 3 and parts[1].lower() == "set":
@@ -811,6 +988,9 @@ def handle_chat_mode(obsidian_file):
                                 chat_ui.render_info("Restart the chat for routing changes to take effect.")
                     else:
                         chat_ui.render_settings(config_path)
+                elif command == "sync-logseq":
+                    chat_ui.render_info("Syncing LogSeq tasks → Obsidian...")
+                    sync_logseq_to_obsidian()
                 else:
                     chat_ui.render_warning(f"Unknown command: /{command}. Type /commands for help.")
 
@@ -848,9 +1028,12 @@ if __name__ == "__main__":
     parser.add_argument("--docs", action="store_true", help="Display project documentation in terminal")
     parser.add_argument("--stats", action="store_true", help="Display statistics about models, configuration, and usage")
     parser.add_argument("--morning", action="store_true", help="Start morning planning mode")
+    parser.add_argument("--plan", action="store_true", help="Run interactive planning session against Google Calendar")
+    parser.add_argument("--dry-run", action="store_true", help="Show proposed schedule without booking (use with --plan)")
     parser.add_argument("--evening", action="store_true", help="Start evening review mode")
     parser.add_argument("--chat", action="store_true", help="Start interactive chat mode")
     parser.add_argument("--backlog", action="store_true", help="Print unified task backlog (Obsidian + LogSeq + Reminders) and exit")
+    parser.add_argument("--no-web", action="store_true", help="Suppress any Streamlit/web UI references (CLI-only mode)")
     parser.add_argument("--file", type=str, help="Specific markdown file to process", default="daily_note.md")
     args = parser.parse_args()
 
@@ -865,6 +1048,9 @@ if __name__ == "__main__":
         chat_ui.render_backlog(tasks)
     elif args.morning:
         handle_morning_planning(args.file)
+    elif args.plan:
+        obsidian_path = get_config_value("WORKSPACE_DIR", ".")
+        handle_planning_session(obsidian_path, dry_run=args.dry_run)
     elif args.evening:
         handle_evening_review(args.file)
     elif args.chat:

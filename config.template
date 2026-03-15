@@ -28,14 +28,19 @@ HF_TOKEN=your_huggingface_token_here
 APPLE_REMINDERS_LIST=Reminders
 
 # --- General Settings ---
-# WORKSPACE_DIR: The absolute path to your Obsidian vault or Markdown notes folder.
-# Example (Mac): /Users/yourname/Documents/ObsidianVault
-# Example (Linux): /home/yourname/Notes
-WORKSPACE_DIR=/path/to/your/markdown/notes
+# WORKSPACE_DIR: Path to your Obsidian vault directory (contains .md files).
+# The Obsidian app does NOT need to be running — tasks are read directly from disk.
+# Linux example: WORKSPACE_DIR=/home/yourname/Documents/Obsidian
+# Mac example:   WORKSPACE_DIR=/Users/yourname/Documents/Obsidian
+WORKSPACE_DIR=/home/michaelhansen/Documents/Obsidian
 # LOGSEQ_DIR: Path to your LogSeq graph folder (the one containing journals/ and pages/).
 # Linux example:  LOGSEQ_DIR=/home/yourname/logseq/my-graph
 # Mac example:    LOGSEQ_DIR=/Users/yourname/Documents/LogSeq/my-graph
 LOGSEQ_DIR=/path/to/your/logseq/graph
+# SYNC_TARGET_PAGE: Obsidian page (relative to WORKSPACE_DIR) where LogSeq tasks are synced
+SYNC_TARGET_PAGE=Inbox.md
+# AUTO_SYNC_LOGSEQ: Set to true to sync LogSeq tasks to Obsidian on every startup
+AUTO_SYNC_LOGSEQ=false
 BOOKS_DIR=/path/to/your/books/folder
 DEBOUNCE_SECONDS=5
 
@@ -60,6 +65,9 @@ ROUTING_CHAT=ollama
 # --- LLM Priority ---
 # Comma-separated fallback order: ollama (local) -> gemini -> openai -> claude
 LLM_PRIORITY=ollama,gemini,openai,claude
+
+# PLAN_TIME: Default time for scheduled planning runs (informational — set in your cron/systemd config)
+PLAN_TIME=08:00
 
 # --- User Productivity Preferences ---
 # CHRONOTYPE: morning_owl, night_owl, or balanced

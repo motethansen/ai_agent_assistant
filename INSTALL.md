@@ -1,5 +1,14 @@
 # Installation Guide
 
+## Quick Start
+
+```bash
+python main.py          # Launch interactive CLI chat
+python main.py --backlog # Print task list and exit
+python main.py --plan    # Run calendar planning session
+python main.py --plan --dry-run  # Preview plan without booking
+```
+
 This project requires setting up a few local and cloud components to function as an AI agent assistant.
 
 ## Prerequisites
@@ -89,6 +98,101 @@ python3 main.py --backlog
 ```
 
 This merges tasks from LogSeq journals (last 14 days), LogSeq pages, Obsidian, and Apple Reminders into one list.
+
+## Scheduled Planning (cron / systemd)
+
+### cron
+
+Add to your crontab (`crontab -e`):
+
+```
+0 8 * * 1-5 cd /home/michaelhansen/Projects/github/ai_agent_assistant && python main.py --plan >> /tmp/ai-plan.log 2>&1
+```
+
+### systemd timer
+
+Create `/etc/systemd/user/ai-plan.service`:
+
+```ini
+[Unit]
+Description=AI Agent morning planning
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/michaelhansen/Projects/github/ai_agent_assistant
+ExecStart=/home/michaelhansen/Projects/github/ai_agent_assistant/.venv/bin/python main.py --plan
+```
+
+Create `/etc/systemd/user/ai-plan.timer`:
+
+```ini
+[Unit]
+Description=Run AI planning daily at 08:00
+
+[Timer]
+OnCalendar=Mon-Fri 08:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable: `systemctl --user enable --now ai-plan.timer`
+
+
+## Obsidian Setup
+
+If you use [Obsidian](https://obsidian.md/) for note-taking, the assistant can read and update your tasks directly from your vault's markdown files — **the Obsidian app does not need to be running**.
+
+### 1. Find your vault path
+
+Your Obsidian vault is a folder on disk that contains `.md` files (and optionally subdirectories).
+
+| Platform | Typical location |
+|----------|-----------------|
+| Linux    | `/home/yourname/Documents/Obsidian` |
+| macOS    | `/Users/yourname/Documents/Obsidian` |
+
+Open Obsidian → **Settings → About** → **Vault path** to see the exact path.
+
+### 2. Set WORKSPACE_DIR in .config
+
+```
+# WORKSPACE_DIR: Path to your Obsidian vault directory (contains .md files).
+# The Obsidian app does NOT need to be running — tasks are read directly from disk.
+# Linux example: WORKSPACE_DIR=/home/yourname/Documents/Obsidian
+# Mac example:   WORKSPACE_DIR=/Users/yourname/Documents/Obsidian
+WORKSPACE_DIR=/home/yourname/Documents/Obsidian
+```
+
+### 3. Supported task formats
+
+The assistant parses standard Obsidian/markdown checkbox syntax:
+
+```markdown
+- [ ] Incomplete task
+- [x] Completed task
+- [ ] Task with category #dev
+- [ ] Task with due date 📅 2026-04-01
+```
+
+### 4. View your backlog
+
+```bash
+python3 main.py --backlog
+```
+
+Obsidian tasks appear alongside LogSeq and Apple Reminders, grouped by source file.
+
+### 5. Mark a task done
+
+In the interactive chat, use:
+
+```
+/done <partial task text>
+```
+
+The assistant checks LogSeq first, then Obsidian. It will report which system the task was marked done in.
 
 ## Running the Assistant
 

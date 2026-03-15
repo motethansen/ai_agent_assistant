@@ -132,16 +132,17 @@ def render_settings(config_path):
 
 
 COMMAND_DESCRIPTIONS = {
+    "backlog": "Show all pending tasks (Obsidian + LogSeq)",
+    "plan": "Run interactive planning session with Google Calendar",
+    "add-task": "Add a LATER task to today's LogSeq journal  e.g. /add-task Write tests",
+    "done": "Mark a matching task done in LogSeq or Obsidian  e.g. /done Write tests",
+    "sync-logseq": "Sync LogSeq tasks to Obsidian Inbox",
+    "review": "Show tasks completed today (file scan, no LLM)",
+    "models": "Show and select installed Ollama models",
     "sync": "Manually trigger task sync from Obsidian and Reminders",
     "pull": "Sync Calendar -> Markdown (Two-Way Sync)",
-    "backlog": "Display the current unified backlog (grouped by category)",
-    "add-task": "Add a LATER task to today's LogSeq journal",
-    "done": "Mark a matching task as DONE in LogSeq journals",
     "stats": "Display focus analytics for today",
-    "plan": "Trigger a morning planning session",
-    "review": "Trigger an evening review session",
     "ui": "Launch the Streamlit web interface",
-    "models": "Show current status of LLM models",
     "model": "Enable/disable models (e.g., /model disable gemini)",
     "routing": "Show current LLM routing configuration",
     "services": "Check and start local AI services (Ollama)",
@@ -156,8 +157,10 @@ COMMAND_DESCRIPTIONS = {
     "define-agent": "Link an agent to a specific LLM",
     "list-agents": "Show available custom agents",
     "settings": "View or update API keys and configuration (/settings set KEY value)",
+    "help": "Show this help",
     "history": "Show recent conversation history",
     "clear-history": "Clear conversation history",
+    "quit": "Exit the assistant",
     "exit": "Quit the chat mode",
 }
 

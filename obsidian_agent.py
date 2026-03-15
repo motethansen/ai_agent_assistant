@@ -1,148 +1,150 @@
-import subprocess
-import json
 import os
+import re
+
+from config_utils import get_config_value
+
+_TASK_RE = re.compile(r"^(\s*)-\s+\[([ xX])\]\s+(.*)")
+
 
 class ObsidianAgent:
     """
-    An agent that interacts with Obsidian via its Command Line Interface (CLI).
-    Requires Obsidian 1.12+ and CLI enabled in settings.
+    Reads and writes Obsidian tasks directly from markdown files.
+    The Obsidian app does NOT need to be running.
     """
 
-    def __init__(self, vault=None):
-        self.vault = vault
+    def __init__(self, workspace_dir=None):
+        self.workspace_dir = workspace_dir or get_config_value("WORKSPACE_DIR", None)
 
-    def _run_command(self, command_args):
-        """Runs an obsidian CLI command and returns the output."""
-        cmd = ["obsidian"] + command_args
-        if self.vault:
-            cmd.append(f"vault={self.vault}")
-        
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            # Remove the "Loading updated app package..." and "Your Obsidian installer is out of date..." messages
-            output = result.stdout
-            clean_output = []
-            for line in output.splitlines():
-                if "Loading updated app package" in line or "Your Obsidian installer is out of date" in line:
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def get_tasks(self, todo=True, done=False, format="dict"):
+        """Scan all .md files under workspace_dir and return matching tasks.
+
+        Returns a list of dicts:
+            {"text": str, "file": str (relative path), "line": int (1-indexed), "done": bool}
+        """
+        if not self.workspace_dir or not os.path.isdir(self.workspace_dir):
+            return []
+
+        tasks = []
+        for root, _, files in os.walk(self.workspace_dir):
+            for filename in files:
+                if not filename.endswith(".md"):
                     continue
-                clean_output.append(line)
-            return "\n".join(clean_output).strip()
-        except subprocess.CalledProcessError as e:
-            print(f"Error running Obsidian CLI: {e.stderr}")
-            return None
+                abs_path = os.path.join(root, filename)
+                rel_path = os.path.relpath(abs_path, self.workspace_dir)
+                tasks.extend(self._parse_file(abs_path, rel_path, todo=todo, done=done))
 
-    def get_tasks(self, todo=True, done=False, daily=False, format="json"):
-        """Lists tasks from the vault."""
-        args = ["tasks"]
-        if todo: args.append("todo")
-        if done: args.append("done")
-        if daily: args.append("daily")
-        args.append(f"format={format}")
-        
-        output = self._run_command(args)
-        if output and format == "json":
-            try:
-                return json.loads(output)
-            except json.JSONDecodeError:
-                return []
-        return output
+        return tasks
 
-    def update_task(self, path=None, line=None, ref=None, action="toggle"):
-        """Updates a specific task's status."""
-        args = ["task"]
-        if ref:
-            args.append(f"ref={ref}")
-        elif path and line:
-            args.append(f"path={path}")
-            args.append(f"line={line}")
-        else:
-            raise ValueError("Must provide either 'ref' or 'path' and 'line'")
-        
-        if action in ["toggle", "done", "todo"]:
-            args.append(action)
-        else:
-            args.append(f"status={action}")
-            
-        return self._run_command(args)
+    def get_all_tasks(self, include_done=False):
+        """Convenience wrapper — returns all incomplete tasks (or all tasks if include_done=True)."""
+        return self.get_tasks(todo=True, done=include_done)
 
-    def read_file(self, path):
-        """Reads the content of a file."""
-        return self._run_command(["read", f"path={path}"])
+    def mark_done(self, task_text: str) -> bool:
+        """Find the first matching - [ ] task by text and rewrite it as - [x].
 
-    def create_file(self, path, content="", template=None, overwrite=False, open_file=False):
-        """Creates a new file."""
-        args = ["create", f"path={path}", f"content={content}"]
-        if template: args.append(f"template={template}")
-        if overwrite: args.append("overwrite")
-        if open_file: args.append("open")
-        return self._run_command(args)
+        Returns True if a task was found and updated, False otherwise.
+        """
+        if not self.workspace_dir or not os.path.isdir(self.workspace_dir):
+            return False
 
-    def append_to_file(self, path, content, inline=False):
-        """Appends content to a file."""
-        args = ["append", f"path={path}", f"content={content}"]
-        if inline: args.append("inline")
-        return self._run_command(args)
+        task_text_lower = task_text.strip().lower()
 
-    def prepend_to_file(self, path, content, inline=False):
-        """Prepends content to a file."""
-        args = ["prepend", f"path={path}", f"content={content}"]
-        if inline: args.append("inline")
-        return self._run_command(args)
+        for root, _, files in os.walk(self.workspace_dir):
+            for filename in files:
+                if not filename.endswith(".md"):
+                    continue
+                abs_path = os.path.join(root, filename)
+                if self._mark_done_in_file(abs_path, task_text_lower):
+                    return True
 
-    def get_daily_note_path(self):
-        """Returns the path to today's daily note."""
-        return self._run_command(["daily:path"])
+        return False
 
-    def read_daily_note(self):
-        """Reads today's daily note."""
-        return self._run_command(["daily:read"])
+    def update_task(self, path: str, line: int, action: str = "done"):
+        """Mark the task at the given file path and 1-indexed line number as done.
 
-    def append_to_daily_note(self, content, inline=False, open_file=False):
-        """Appends content to today's daily note."""
-        args = ["daily:append", f"content={content}"]
-        if inline: args.append("inline")
-        if open_file: args.append("open")
-        return self._run_command(args)
+        Only 'done' is currently supported as an action.
+        """
+        if not os.path.isabs(path):
+            path = os.path.join(self.workspace_dir, path)
 
-    def prepend_to_daily_note(self, content, inline=False, open_file=False):
-        """Prepends content to today's daily note."""
-        args = ["daily:prepend", f"content={content}"]
-        if inline: args.append("inline")
-        if open_file: args.append("open")
-        return self._run_command(args)
+        if not os.path.isfile(path):
+            return
 
-    def set_property(self, path, name, value, property_type=None):
-        """Sets a property on a file."""
-        args = ["property:set", f"path={path}", f"name={name}", f"value={value}"]
-        if property_type: args.append(f"type={property_type}")
-        return self._run_command(args)
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
 
-    def read_property(self, path, name):
-        """Reads a property value from a file."""
-        return self._run_command(["property:read", f"path={path}", f"name={name}"])
+        idx = line - 1  # convert to 0-indexed
+        if idx < 0 or idx >= len(lines):
+            return
 
-    def search(self, query, path=None, limit=None, context=False):
-        """Searches the vault."""
-        args = ["search:context" if context else "search", f"query={query}"]
-        if path: args.append(f"path={path}")
-        if limit: args.append(f"limit={limit}")
-        args.append("format=json")
-        
-        output = self._run_command(args)
-        if output:
-            try:
-                return json.loads(output)
-            except json.JSONDecodeError:
-                return []
-        return []
+        m = _TASK_RE.match(lines[idx])
+        if m and m.group(2) == " " and action == "done":
+            indent = m.group(1)
+            task_body = m.group(3)
+            lines[idx] = f"{indent}- [x] {task_body}\n"
+            with open(path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _parse_file(self, abs_path: str, rel_path: str, todo: bool, done: bool) -> list:
+        tasks = []
+        try:
+            with open(abs_path, "r", encoding="utf-8", errors="replace") as f:
+                for line_num, raw_line in enumerate(f, start=1):
+                    m = _TASK_RE.match(raw_line)
+                    if not m:
+                        continue
+                    is_done = m.group(2).lower() == "x"
+                    if is_done and not done:
+                        continue
+                    if not is_done and not todo:
+                        continue
+                    tasks.append({
+                        "text": raw_line.rstrip(),
+                        "file": rel_path,
+                        "line": line_num,
+                        "done": is_done,
+                    })
+        except OSError:
+            pass
+        return tasks
+
+    def _mark_done_in_file(self, abs_path: str, task_text_lower: str) -> bool:
+        try:
+            with open(abs_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+        except OSError:
+            return False
+
+        for idx, raw_line in enumerate(lines):
+            m = _TASK_RE.match(raw_line)
+            if not m or m.group(2) != " ":
+                continue
+            task_body = m.group(3).strip().lower()
+            if task_text_lower in task_body or task_body in task_text_lower:
+                indent = m.group(1)
+                original_body = m.group(3)
+                lines[idx] = f"{indent}- [x] {original_body}\n"
+                try:
+                    with open(abs_path, "w", encoding="utf-8") as f:
+                        f.writelines(lines)
+                    return True
+                except OSError:
+                    return False
+
+        return False
+
 
 if __name__ == "__main__":
-    # Simple test
     agent = ObsidianAgent()
-    print("Tasks (JSON):")
-    tasks = agent.get_tasks()
-    if tasks:
-        print(json.dumps(tasks[:3], indent=2))
-    
-    print("\nDaily Note Path:")
-    print(agent.get_daily_note_path())
+    tasks = agent.get_tasks(todo=True, done=False)
+    print(f"Found {len(tasks)} incomplete tasks")
+    for t in tasks[:5]:
+        print(f"  [{t['file']}:{t['line']}] {t['text']}")
