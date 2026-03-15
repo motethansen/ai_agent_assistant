@@ -56,8 +56,8 @@ A personal AI assistant that runs from the command line, using local LLMs (Ollam
 
 ## Sprint History
 
-### Sprint 01 — In Progress
-- **Dates**: 2026-03-14 → 2026-03-21
+### Sprint 01 — ✅ Complete
+- **Dates**: 2026-03-14 → 2026-03-15 (closed early)
 - **Team**: Claude CLI agents
 - **Goal**: Remove OpenClaw, make Ollama the default LLM, get LogSeq task reading working end-to-end
 - **Plan**: `.scrum/sprints/sprint-01/plan.md`
@@ -72,7 +72,7 @@ A personal AI assistant that runs from the command line, using local LLMs (Ollam
   - T01-06: FastAPI webhook server + docker-compose (new files)
   - T01-07: n8n workflow JSON templates + README_N8N.md (depends on T01-06)
 - **Deferred**: —
-- **Demo approved by PO**: Pending
+- **Demo approved by PO**: ✅ 2026-03-15 — all 8 demos passed, commit b445238
 
 ### Sprint 02 — Planned (2026-03-22 onward)
 - **Goal**: Obsidian task management, Google Calendar planning agent, clean CLI entry point
