@@ -135,6 +135,8 @@ COMMAND_DESCRIPTIONS = {
     "sync": "Manually trigger task sync from Obsidian and Reminders",
     "pull": "Sync Calendar -> Markdown (Two-Way Sync)",
     "backlog": "Display the current unified backlog (grouped by category)",
+    "add-task": "Add a LATER task to today's LogSeq journal",
+    "done": "Mark a matching task as DONE in LogSeq journals",
     "stats": "Display focus analytics for today",
     "plan": "Trigger a morning planning session",
     "review": "Trigger an evening review session",

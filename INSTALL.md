@@ -44,6 +44,52 @@ This project requires setting up a few local and cloud components to function as
 5.  **Google Calendar API:**
     Place your `credentials.json` in the root directory. The first time you run the script, it will open a browser window for OAuth authentication and save a `token.json`.
 
+## LogSeq Setup
+
+If you use [LogSeq](https://logseq.com/) for note-taking, the assistant can read your pending tasks directly from your graph.
+
+### 1. Find your graph path
+
+Your LogSeq graph is a folder on disk that contains `journals/` and `pages/` subdirectories.
+
+| Platform | Typical location |
+|----------|-----------------|
+| Linux    | `/home/yourname/logseq/my-graph` |
+| macOS    | `/Users/yourname/Documents/LogSeq/my-graph` |
+| Windows  | `C:\Users\yourname\Documents\LogSeq\my-graph` |
+
+Open LogSeq → **Settings → Graphs** to see the exact path.
+
+### 2. Set LOGSEQ_DIR in .env / .config
+
+```
+# LOGSEQ_DIR: Path to your LogSeq graph folder (the one containing journals/ and pages/).
+# Linux example:  LOGSEQ_DIR=/home/yourname/logseq/my-graph
+# Mac example:    LOGSEQ_DIR=/Users/yourname/Documents/LogSeq/my-graph
+LOGSEQ_DIR=/home/yourname/logseq/my-graph
+```
+
+### 3. Task format
+
+The assistant parses tasks that start with `- LATER` or `- TODO` (standard LogSeq task markers):
+
+```markdown
+- LATER Write sprint retrospective notes
+- TODO Review pull request #42
+  :category: dev
+  :url: https://github.com/...
+```
+
+Optional indented properties (`:category:`, `:url:`, etc.) are picked up automatically.
+
+### 4. View your backlog
+
+```bash
+python3 main.py --backlog
+```
+
+This merges tasks from LogSeq journals (last 14 days), LogSeq pages, Obsidian, and Apple Reminders into one list.
+
 ## Running the Assistant
 
 ```bash

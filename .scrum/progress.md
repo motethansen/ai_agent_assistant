@@ -57,13 +57,32 @@ A personal AI assistant that runs from the command line, using local LLMs (Ollam
 ## Sprint History
 
 ### Sprint 01 — In Progress
-- **Dates**: 2026-03-14 → TBD
+- **Dates**: 2026-03-14 → 2026-03-21
 - **Team**: Claude CLI agents
 - **Goal**: Remove OpenClaw, make Ollama the default LLM, get LogSeq task reading working end-to-end
 - **Plan**: `.scrum/sprints/sprint-01/plan.md`
-- **Completed**: —
+- **Latest standup**: `.scrum/sprints/sprint-01/standup-2026-03-15.md`
+- **Completed (2/7)**:
+  - T01-01: OpenClaw removed from tests, scripts, agents ✅
+  - T01-02: OpenClaw removed from core (ai_orchestration.py, main.py, config) ✅
+- **Ready to implement (5/7)** — implementations documented in task output files, pending code application:
+  - T01-03: Ollama-first routing + `list_ollama_models()` + `/models` interactive selector
+  - T01-04: LogSeq TODO parsing + source attribution + `--backlog` CLI flag
+  - T01-05: `/add-task` and `/done` commands in CLI (depends on T01-04)
+  - T01-06: FastAPI webhook server + docker-compose (new files)
+  - T01-07: n8n workflow JSON templates + README_N8N.md (depends on T01-06)
 - **Deferred**: —
 - **Demo approved by PO**: Pending
+
+### Sprint 02 — Planned (2026-03-22 onward)
+- **Goal**: Obsidian task management, Google Calendar planning agent, clean CLI entry point
+- **BLIs**: BLI-010, BLI-011, BLI-012, BLI-013, BLI-014
+- **Details**: See backlog.md Sprint-02 Placeholder section
+
+### Sprint 03 — Planned (TBD)
+- **Goal**: Per-task model routing, config.example cleanup, evening review agent
+- **BLIs**: BLI-020, BLI-021, BLI-022
+- **Details**: See backlog.md Sprint-03 Placeholder section
 
 ---
 
@@ -71,7 +90,7 @@ A personal AI assistant that runs from the command line, using local LLMs (Ollam
 
 | ID | Description | Severity | Sprint introduced | Sprint resolved |
 |----|-------------|----------|-------------------|-----------------|
-| DEBT-001 | OpenClaw tightly coupled across 10+ files — removal needs careful ordering | High | Pre-sprint | Sprint-01 |
+| DEBT-001 | OpenClaw tightly coupled across 10+ files — removal needs careful ordering | High | Pre-sprint | ✅ Sprint-01 |
 | DEBT-002 | Apple Reminders integration only works on macOS — dead code on Linux | Med | Pre-sprint | — |
 | DEBT-003 | `main.py` is 867 lines — should be split into focused modules after OpenClaw removal | Med | Pre-sprint | — |
 | DEBT-004 | `app.py` (Streamlit) duplicates logic from `main.py` — divergence risk | Low | Pre-sprint | — |
@@ -82,6 +101,7 @@ A personal AI assistant that runs from the command line, using local LLMs (Ollam
 
 | Date | Handed from | Handed to | Sprint | Notes |
 |------|------------|-----------|--------|-------|
+| 2026-03-15 | Scrum Master (review) | Dev agents | Sprint-01 | File write permissions resolved. T01-03 through T01-07 ready to implement — apply code from task output files. Commit T01-01/T01-02 deletions first. |
 | 2026-03-14 | Product Owner (manual) | Claude CLI agents | Sprint-01 | Initial scrum setup |
 
 ---

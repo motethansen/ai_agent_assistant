@@ -1,5 +1,10 @@
 # Dev Agent Task Prompt — T01-03
 
+> **ACTION REQUIRED: You are a Claude Code agent with file-editing tools (Read, Edit, Write, Bash).**
+> **READ the actual source files in the project, then APPLY all changes directly to disk using your tools.**
+> **Do NOT output code as text blocks. Write changes to the actual files.**
+> **Project root: /home/michaelhansen/Projects/github/ai_agent_assistant**
+>
 > Self-contained — you have no other context. Read everything here carefully before acting.
 > PREREQUISITE: T01-02 must be complete (ai_orchestration.py already has no OpenClaw).
 
@@ -180,19 +185,15 @@ When user types `/models`:
 
 ---
 
-## Output Format
+## Completion Report
 
-### 1. Summary
+After applying all changes to the actual files, write a brief report covering:
 
-### 2. New / Modified Files
+### 1. Files modified
+List each file you edited/created.
 
-#### `ai_orchestration.py` [MODIFIED — show changed sections with 10 lines context]
+### 2. Acceptance criteria check
+Go through each AC item and confirm ✅ or ❌ with a one-line note.
 
-#### `main.py` [MODIFIED — show startup block and /models command handler only]
-
-### 3. Dependencies Added
-None (uses `subprocess` which is stdlib)
-
-### 4. Integration Notes
-
-### 5. Known Limitations
+### 3. Any issues or deviations
+Note anything you couldn't apply and why.

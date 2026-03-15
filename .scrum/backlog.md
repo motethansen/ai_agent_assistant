@@ -1,7 +1,7 @@
 # Product Backlog — AI Agent Assistant
 
 > Maintained by: Product Owner + Scrum Master
-> Last updated: 2026-03-14
+> Last updated: 2026-03-15
 > Format: ID | Priority | Story | Acceptance Criteria | Estimate | Status
 
 ---
@@ -27,20 +27,20 @@
 #### BLI-001
 - **Story**: As a developer, I want all OpenClaw references removed so the project has no dependency on an external gateway service
 - **Acceptance Criteria**:
-  - [ ] `ai_orchestration.py` — no OpenClaw imports, functions, or routing logic
-  - [ ] `monitoring_agent.py` — no OpenClaw health check
-  - [ ] `main.py` — no OpenClaw startup, key management, or status references
-  - [ ] `chat_ui.py` and `app.py` — no OpenClaw status rendering
-  - [ ] `config.template` — no OpenClaw settings
-  - [ ] `OPENCLAW_SETUP.md` deleted
-  - [ ] `test_openclaw_direct.py` deleted
-  - [ ] `scripts/check_ai_working.py` — OpenClaw sections removed
-  - [ ] `tests/` — all OpenClaw test cases removed or updated
-  - [ ] `README.md`, `INSTALL.md`, `PLAN.md` — all OpenClaw references removed
+  - [x] `ai_orchestration.py` — no OpenClaw imports, functions, or routing logic
+  - [x] `monitoring_agent.py` — no OpenClaw health check
+  - [x] `main.py` — no OpenClaw startup, key management, or status references
+  - [x] `chat_ui.py` and `app.py` — no OpenClaw status rendering
+  - [x] `config.template` — no OpenClaw settings
+  - [x] `OPENCLAW_SETUP.md` deleted
+  - [x] `test_openclaw_direct.py` deleted
+  - [x] `scripts/check_ai_working.py` — OpenClaw sections removed
+  - [x] `tests/` — all OpenClaw test cases removed or updated
+  - [x] `README.md`, `INSTALL.md` — all OpenClaw references removed
+  - [ ] `PLAN.md` — 8 historical references remain (low priority cleanup)
 - **Epic**: E01
 - **Estimate**: L
-- **Status**: Backlog
-- **Notes**: Remove in order: tests → scripts → agents → core (ai_orchestration.py last) → config → docs
+- **Status**: ✅ Done — 2026-03-14 (git commit pending for file deletions)
 
 #### BLI-002
 - **Story**: As a user, I want Ollama to be the primary local LLM so that all task processing, parsing, and chat runs locally without cloud dependency by default
@@ -53,8 +53,8 @@
   - [ ] `monitoring_agent.py` only checks Ollama health
 - **Epic**: E02
 - **Estimate**: M
-- **Status**: Backlog
-- **Notes**: Depends on BLI-001
+- **Status**: Sprint-01 — implementation ready in `tasks/T01-03-output.md`
+- **Notes**: Depends on BLI-001 (done)
 
 #### BLI-003
 - **Story**: As a user, I want to select from my installed Ollama models at startup or via a CLI command so I can switch between llama3, mistral, qwen2, etc. without editing config files
@@ -65,7 +65,7 @@
   - [ ] Graceful fallback message if Ollama is not running
 - **Epic**: E02
 - **Estimate**: M
-- **Status**: Backlog
+- **Status**: Sprint-01 — covered by T01-03 (implementation in `tasks/T01-03-output.md`)
 
 #### BLI-004
 - **Story**: As a user, I want a working LogSeq task integration so that tasks written as `LATER` or `TODO` in my journals and pages are read by the planning agent
@@ -78,7 +78,7 @@
   - [ ] A minimal working config snippet provided in INSTALL.md
 - **Epic**: E03
 - **Estimate**: M
-- **Status**: Backlog
+- **Status**: Sprint-01 — partially implemented (LATER parsing works; TODO + attribution + --backlog flag missing). Implementation in `tasks/T01-04-output.md`
 
 #### BLI-005
 - **Story**: As a user, I want to add and update tasks in LogSeq from the CLI so I can capture tasks without opening the LogSeq app
@@ -88,7 +88,7 @@
   - [ ] No LogSeq app needs to be running — operates on markdown files directly
 - **Epic**: E03
 - **Estimate**: M
-- **Status**: Backlog
+- **Status**: Sprint-01 — implementation ready in `tasks/T01-05-output.md`. Depends on BLI-004 (T01-04 applied first)
 
 ---
 
@@ -226,8 +226,37 @@
 
 ---
 
+## Sprint-02 Placeholder
+
+Sprint-02 will address the Priority 2 backlog items (BLI-010 through BLI-014). Planned scope:
+
+| Task | BLI | Title | Estimate |
+|------|-----|-------|----------|
+| T02-01 | BLI-010 | Obsidian task reading/writing via CLI | M |
+| T02-02 | BLI-011 | LogSeq → Obsidian task sync | L |
+| T02-03 | BLI-012 | Planning agent with Google Calendar scheduling | L |
+| T02-04 | BLI-013 | Scheduled/cron-triggered planning agent | M |
+| T02-05 | BLI-014 | Clean CLI entry point (`/backlog`, `/plan`, `/sync`, `/review`) | S |
+
+Sprint-02 start date: 2026-03-22 (after Sprint-01 review)
+
+## Sprint-03 Placeholder
+
+Sprint-03 will address Priority 3 backlog items (BLI-020 through BLI-022):
+
+| Task | BLI | Title | Estimate |
+|------|-----|-------|----------|
+| T03-01 | BLI-020 | Per-task Ollama model routing | M |
+| T03-02 | BLI-021 | config.example with sane defaults | S |
+| T03-03 | BLI-022 | Evening review agent | M |
+
+Sprint-03 start date: TBD (after Sprint-02 review)
+
+---
+
 ## Changelog
 
 | Date | Changed by | Change |
 |------|------------|--------|
+| 2026-03-15 | Scrum Master | Marked BLI-001 Done; updated BLI-002 through BLI-005, BLI-023, BLI-024 statuses to reflect Sprint-01 ready-to-implement state; added Sprint-02 and Sprint-03 placeholders |
 | 2026-03-14 | Product Owner | Initial backlog — OpenClaw removal, Ollama-first, LogSeq/Obsidian CLI, Calendar planning agent |

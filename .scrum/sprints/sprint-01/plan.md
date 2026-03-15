@@ -31,11 +31,11 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
 |---------|---------|-------|-------|----------|--------|
 | T01-01 | BLI-001 | Remove OpenClaw from tests, scripts, and agent files | dev-1 | L | Done |
 | T01-02 | BLI-001 | Remove OpenClaw from core (ai_orchestration.py, main.py, config) | dev-1 | M | Done |
-| T01-03 | BLI-002 | Refactor ai_orchestration.py to Ollama-first routing | dev-2 | M | Not started |
-| T01-04 | BLI-004 | Verify and fix LogSeq task parsing end-to-end | dev-2 | M | Not started |
-| T01-05 | BLI-005 | Add `/add-task` CLI command writing to LogSeq journal | dev-1 | M | Not started |
-| T01-06 | BLI-023 | Build webhook HTTP API and docker-compose for n8n integration | dev-1 | M | Not started |
-| T01-07 | BLI-024 | Create n8n workflow JSON templates and README_N8N.md | dev-1 | S | Not started |
+| T01-03 | BLI-002 | Refactor ai_orchestration.py to Ollama-first routing | dev-2 | M | Ready to implement |
+| T01-04 | BLI-004 | Verify and fix LogSeq task parsing end-to-end | dev-2 | M | Ready to implement |
+| T01-05 | BLI-005 | Add `/add-task` CLI command writing to LogSeq journal | dev-1 | M | Ready to implement |
+| T01-06 | BLI-023 | Build webhook HTTP API and docker-compose for n8n integration | dev-1 | M | Ready to implement |
+| T01-07 | BLI-024 | Create n8n workflow JSON templates and README_N8N.md | dev-1 | S | Ready to implement |
 
 ---
 
@@ -90,7 +90,8 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
   - [ ] `is_ollama_running()` is the primary health gate — startup warns clearly if Ollama is down
   - [ ] Startup queries `ollama list` and prints available models
 - **Dependencies**: T01-02 must be complete (no OpenClaw in the file)
-- **Status**: Not started
+- **Status**: Ready to implement — full implementation documented in `tasks/T01-03-output.md`
+- **Implementation notes**: Add `list_ollama_models()` to `ai_orchestration.py`; update `get_llm()` fallback logic; update `/models` command in `main.py` to interactive model selector
 
 ---
 
@@ -107,7 +108,8 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
   - [ ] `config.template` has a clear comment for `LOGSEQ_DIR` with example paths
   - [ ] A working config snippet added to `INSTALL.md`
 - **Dependencies**: None — can run in parallel with T01-01/T01-02
-- **Status**: Not started
+- **Status**: Ready to implement — full implementation documented in `tasks/T01-04-output.md`
+- **Implementation notes**: Currently `logseq_agent.py` only parses `LATER` (not `TODO`); missing source attribution with line numbers; no `--backlog` flag in `main.py`. All changes documented.
 
 ---
 
@@ -123,7 +125,8 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
   - [ ] `/done <task-text>` marks a matching LATER task as DONE in the source file
   - [ ] No LogSeq app needs to be running
 - **Dependencies**: T01-04 (LogSeq parsing must work first)
-- **Status**: Not started
+- **Status**: Ready to implement — full implementation documented in `tasks/T01-05-output.md`
+- **Implementation notes**: Add `add_task()` and `mark_done()` methods to `logseq_agent.py`; add CLI handlers in `main.py`; update help text in `chat_ui.py`
 
 ---
 
@@ -139,7 +142,8 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
   - [ ] `docker-compose.yml` created with `n8n` and `api` services on a shared network
   - [ ] Server starts cleanly: `python api_server.py`
 - **Dependencies**: T01-01 + T01-02 done (OpenClaw removed)
-- **Status**: Not started
+- **Status**: Ready to implement — full implementation documented in `tasks/T01-06-output.md`
+- **Implementation notes**: Create new files: `api_server.py`, `docker-compose.yml`, `Dockerfile.api`; update `config.template` and `requirements.txt` (add fastapi, uvicorn)
 
 ---
 
@@ -153,7 +157,8 @@ Remove all OpenClaw code and make Ollama the default local LLM, then get LogSeq 
   - [ ] Each workflow JSON is importable in the n8n UI
   - [ ] `README_N8N.md` explains setup: start n8n, import workflow, configure webhook URL
 - **Dependencies**: T01-06 (API must exist first)
-- **Status**: Not started
+- **Status**: Ready to implement — full implementation documented in `tasks/T01-07-output.md`
+- **Implementation notes**: Create `n8n-workflows/morning-planning.json`, `add-task.json`, `backlog-digest.json`, and `README_N8N.md`
 
 ---
 

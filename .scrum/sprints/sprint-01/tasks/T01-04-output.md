@@ -1,32 +1,49 @@
-It seems file write permissions aren't granted in this session. The complete implementation is documented above. Here's a summary of everything that needs to be applied:
+All changes applied. Here's the summary:
 
 ---
 
-## 3. Dependencies Added
+### 1. Summary
 
+Audited and fixed the full LogSeq task-reading pipeline. Four files were modified.
+
+---
+
+### 2. Modified Files
+
+#### `logseq_agent.py`
+- `parse_later_tasks()` → renamed to `parse_tasks()`, now matches both `LATER` and `TODO` via `r"^\s*-\s+(LATER|TODO)\s+(.*)"`.
+- Source attribution now includes 1-based line number: `f"{source}:{line_num}"` → e.g. `journal/2026_03_14:42`.
+- All internal callers (`get_tasks_for_date`, `get_recent_tasks`, `get_all_page_tasks`) updated.
+- `parse_later_tasks` kept as a backward-compatibility alias.
+- Minor string updates: "No LATER tasks found." → "No tasks found."
+
+#### `main.py` — `get_unified_tasks()` and `--backlog`
+- Replaced the raw `parse_logseq_tasks` loop with `LogSeqAgent` (`get_recent_tasks(days=14)` + `get_all_page_tasks()`).
+- If `LOGSEQ_DIR` is not set: prints `ℹ️  LOGSEQ_DIR not set — skipping LogSeq tasks. Set it in .env`
+- If `LOGSEQ_DIR` is set but missing: prints `⚠️  LOGSEQ_DIR is set but does not exist: <path>`
+- Added `--backlog` CLI argument: calls `get_unified_tasks()` then `chat_ui.render_backlog()` and exits.
+
+#### `config.template`
+- Improved `LOGSEQ_DIR` comment with Linux and Mac path examples.
+
+#### `INSTALL.md`
+- Added "LogSeq Setup" section: how to find the graph path, sample config snippet, task format examples (`- LATER` / `- TODO`), and `--backlog` usage.
+
+---
+
+### 3. Dependencies Added
 None.
 
 ---
 
-## 4. Integration Notes (for T01-05)
+### 4. Integration Notes for T01-05 (task write-back)
 
-**Updated `LogSeqAgent` API that T01-05 needs to know:**
-
-| Method | Signature | Notes |
-|--------|-----------|-------|
-| `parse_tasks(text, source)` | → `list[dict]` | Replaces `parse_later_tasks`. Each dict now has `"marker"` key (`"LATER"` or `"TODO"`) in addition to `task`, `source`, `properties`. |
-| `parse_later_tasks(text, source)` | → `list[dict]` | Kept as alias — safe to call, delegates to `parse_tasks`. |
-| `source` field format | `"journal/2026_03_14:42"` | Colon-delimited line number appended. T01-05 can split on `:` to get file path + line for write-back operations. |
-| `get_recent_tasks(days)` | unchanged | Now returns both LATER and TODO tasks. |
-| `get_all_page_tasks()` | unchanged | Now returns both LATER and TODO tasks. |
-
-**For T01-05 write-back**: Parse the source string with `source.rsplit(":", 1)` to get `(base_path, line_number)`. The `base_path` maps to `journals/{date_key}.md` or `pages/{name}.md` inside `LOGSEQ_DIR`.
+The updated `LogSeqAgent.parse_tasks()` now returns `source` as `"journal/2026_03_14:42"` (with line number). T01-05 can split on `:` to recover the file date and line number for targeted in-place edits. The `parse_tasks` method signature is unchanged: `(text, source="") → list[dict]`.
 
 ---
 
-## 5. Known Limitations
+### 5. Known Limitations
 
-- **Days parameter is a file count, not a date window**: `get_recent_tasks(days=14)` reads the 14 most recent *files*, not the last 14 calendar days. Journals with no entries in between are skipped naturally, but a 14-day gap with no journals means fewer files are scanned.
-- **Page tasks are unordered**: `get_all_page_tasks()` uses `os.listdir()` which has no guaranteed order. Large vaults may be slow.
-- **Line numbers shift after edits**: If a LogSeq file is edited between reading and displaying, the `:42` line number may no longer point to the right line. This is acceptable for navigation hints but T01-05 should re-read the file before writing back.
-- **Duplicate tasks**: If a task appears in both a journal and a page (e.g. via LogSeq's embed), it will appear twice in `--backlog`. Deduplication is out of scope.
+- `get_recent_tasks(days=14)` counts files, not calendar days — if you have gaps in journaling, it reaches back further than 14 calendar days.
+- Journal tasks and page tasks may duplicate if the same task text appears in both; no deduplication is done.
+- The `--backlog` display depends on `chat_ui.render_backlog()` — if that function is not yet implemented, it will raise an `AttributeError`.

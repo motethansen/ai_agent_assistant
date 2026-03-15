@@ -103,9 +103,11 @@ PROJECTS = {
 
 def build_claude_cmd(model: str) -> list[str]:
     """
-    claude -p              non-interactive print mode — exits after one response
-    --model MODEL          haiku | sonnet | opus
-    --output-format plain  plain text stdout — easiest to capture and save
+    claude -p                         non-interactive print mode — exits after one response
+    --model MODEL                     haiku | sonnet | opus
+    --output-format text              plain text stdout — easiest to capture and save
+    --dangerously-skip-permissions    allow all tool calls (file writes, bash, etc.)
+                                      without prompting — required for unattended agents
 
     Prompt is always passed via stdin to avoid shell-escaping issues with
     long prompts. No API key needed — uses your Claude.ai login via claude auth.
@@ -115,6 +117,7 @@ def build_claude_cmd(model: str) -> list[str]:
         "-p",
         "--model", model,
         "--output-format", "text",
+        "--dangerously-skip-permissions",
     ]
 
 

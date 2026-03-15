@@ -1,5 +1,10 @@
 # Dev Agent Task Prompt — T01-04
 
+> **ACTION REQUIRED: You are a Claude Code agent with file-editing tools (Read, Edit, Write, Bash).**
+> **READ the actual source files in the project, then APPLY all changes directly to disk using your tools.**
+> **Do NOT output code as text blocks. Write changes to the actual files.**
+> **Project root: /home/michaelhansen/Projects/github/ai_agent_assistant**
+>
 > Self-contained — you have no other context. Read everything here carefully before acting.
 > This task can run in parallel with T01-01 and T01-02 — it does not depend on them.
 

@@ -4,7 +4,7 @@ LogSeq Agent — reads journals and pages from a LogSeq graph directory.
 Journal files: journals/YYYY_MM_DD.md
 Pages files:   pages/<name>.md
 
-Tasks are identified by lines starting with "- LATER".
+Tasks are identified by lines starting with "- LATER" or "- TODO".
 """
 import os
 import re
@@ -41,18 +41,20 @@ class LogSeqAgent:
 
     # ── Task parsing ──────────────────────────────────────────────────────
 
-    def parse_later_tasks(self, text, source=""):
+    def parse_tasks(self, text, source=""):
         """
-        Extract LATER tasks from raw LogSeq markdown text.
+        Extract LATER and TODO tasks from raw LogSeq markdown text.
+        Source attribution includes 1-based line number: e.g. 'journal/2026_03_14:42'.
         Returns list of dicts: {task, source, properties}
         """
         tasks = []
         lines = text.splitlines()
         i = 0
         while i < len(lines):
-            m = re.match(r"^\s*-\s+LATER\s+(.*)", lines[i])
+            m = re.match(r"^\s*-\s+(LATER|TODO)\s+(.*)", lines[i])
             if m:
-                raw = m.group(1).strip()
+                line_num = i + 1  # 1-indexed
+                raw = m.group(2).strip()
                 # Strip LogSeq macros but keep URLs and plain text
                 raw = re.sub(r"\{\{(?:renderer|query|clojure|embed|include)\s+.*?\}\}", "", raw).strip()
                 # Strip bold markers (**) and unwanted timestamps like **11:23**
@@ -60,7 +62,7 @@ class LogSeqAgent:
                 # Strip [[quick capture]]: prefix
                 raw = re.sub(r"\[\[.*?\]\]:\s*", "", raw).strip()
 
-                task = {"task": raw, "source": source, "properties": {}}
+                task = {"task": raw, "source": f"{source}:{line_num}", "properties": {}}
 
                 # Collect indented property lines
                 j = i + 1
@@ -83,22 +85,26 @@ class LogSeqAgent:
                 i += 1
         return tasks
 
+    # Backward-compatibility alias
+    def parse_later_tasks(self, text, source=""):
+        return self.parse_tasks(text, source)
+
     # ── Journal access ────────────────────────────────────────────────────
 
     def get_tasks_for_date(self, date_key):
         """
-        Return LATER tasks for a specific journal date ('YYYY_MM_DD').
+        Return LATER/TODO tasks for a specific journal date ('YYYY_MM_DD').
         """
         path = self._journal_path(date_key)
         text = self._read(path)
         if not text:
             return None, []       # None = file not found
-        tasks = self.parse_later_tasks(text, source=f"journal/{date_key}")
+        tasks = self.parse_tasks(text, source=f"journal/{date_key}")
         return text, tasks
 
     def get_recent_tasks(self, days=7):
         """
-        Return LATER tasks from the most recent N journal files.
+        Return LATER/TODO tasks from the most recent N journal files.
         """
         all_tasks = []
         if not os.path.exists(self.journals_dir):
@@ -111,7 +117,7 @@ class LogSeqAgent:
             date_key = fname[:-3]
             path = os.path.join(self.journals_dir, fname)
             text = self._read(path)
-            tasks = self.parse_later_tasks(text, source=f"journal/{date_key}")
+            tasks = self.parse_tasks(text, source=f"journal/{date_key}")
             all_tasks.extend(tasks)
         return all_tasks
 
@@ -139,7 +145,7 @@ class LogSeqAgent:
         return None, ""
 
     def get_all_page_tasks(self):
-        """Return LATER tasks from all pages."""
+        """Return LATER/TODO tasks from all pages."""
         all_tasks = []
         if not os.path.exists(self.pages_dir):
             return all_tasks
@@ -147,7 +153,7 @@ class LogSeqAgent:
             if fname.endswith(".md"):
                 path = os.path.join(self.pages_dir, fname)
                 text = self._read(path)
-                tasks = self.parse_later_tasks(text, source=f"page/{fname[:-3]}")
+                tasks = self.parse_tasks(text, source=f"page/{fname[:-3]}")
                 all_tasks.extend(tasks)
         return all_tasks
 
@@ -178,7 +184,7 @@ class LogSeqAgent:
     def format_tasks(self, tasks):
         """Format task list as a numbered markdown list."""
         if not tasks:
-            return "No LATER tasks found."
+            return "No tasks found."
         lines = []
         for i, t in enumerate(tasks, 1):
             lines.append(f"{i}. {t['task']}  _(source: {t['source']})_")
@@ -187,20 +193,59 @@ class LogSeqAgent:
     def context_for_date(self, date_key):
         """Return a formatted context string for a specific journal date."""
         _, tasks = self.get_tasks_for_date(date_key)
-        header = f"LogSeq journal {date_key} — LATER tasks ({len(tasks)} found):"
+        header = f"LogSeq journal {date_key} — tasks ({len(tasks)} found):"
         return f"{header}\n{self.format_tasks(tasks)}"
 
     def context_for_recent(self, days=7):
         """Return formatted context for recent journal tasks."""
         tasks = self.get_recent_tasks(days)
-        header = f"LogSeq recent journals (last {days} days) — LATER tasks ({len(tasks)} found):"
+        header = f"LogSeq recent journals (last {days} days) — tasks ({len(tasks)} found):"
         return f"{header}\n{self.format_tasks(tasks)}"
 
     def context_for_all_page_tasks(self):
         """Return formatted context for all page tasks."""
         tasks = self.get_all_page_tasks()
-        header = f"LogSeq pages — LATER tasks ({len(tasks)} found):"
+        header = f"LogSeq pages — tasks ({len(tasks)} found):"
         return f"{header}\n{self.format_tasks(tasks)}"
+
+    def add_task(self, description: str, date_key: str = None) -> str:
+        """Append a LATER task to a journal file. Returns the path written to."""
+        if date_key is None:
+            date_key = datetime.datetime.now().strftime("%Y_%m_%d")
+        path = self._journal_path(date_key)
+        os.makedirs(self.journals_dir, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"\n- LATER {description}\n")
+        return path
+
+    def mark_done(self, task_text: str, days_back: int = 14) -> bool:
+        """Find a LATER/TODO task matching task_text in recent journals and mark it DONE.
+        Returns True if a match was found and updated, False otherwise."""
+        if not os.path.exists(self.journals_dir):
+            return False
+        files = sorted(
+            [f for f in os.listdir(self.journals_dir) if re.match(r"\d{4}_\d{2}_\d{2}\.md$", f)],
+            reverse=True
+        )
+        search = task_text.lower().strip()
+        for fname in files[:days_back]:
+            path = os.path.join(self.journals_dir, fname)
+            text = self._read(path)
+            lines = text.splitlines()
+            changed = False
+            new_lines = []
+            for line in lines:
+                m = re.match(r"^(\s*-\s+)(LATER|TODO)(\s+.*)", line)
+                if m and search in m.group(3).lower():
+                    new_lines.append(f"{m.group(1)}DONE{m.group(3)}")
+                    changed = True
+                else:
+                    new_lines.append(line)
+            if changed:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(new_lines))
+                return True
+        return False
 
 
 # ── Date parsing helper ────────────────────────────────────────────────────

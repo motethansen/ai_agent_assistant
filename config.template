@@ -32,9 +32,18 @@ APPLE_REMINDERS_LIST=Reminders
 # Example (Mac): /Users/yourname/Documents/ObsidianVault
 # Example (Linux): /home/yourname/Notes
 WORKSPACE_DIR=/path/to/your/markdown/notes
+# LOGSEQ_DIR: Path to your LogSeq graph folder (the one containing journals/ and pages/).
+# Linux example:  LOGSEQ_DIR=/home/yourname/logseq/my-graph
+# Mac example:    LOGSEQ_DIR=/Users/yourname/Documents/LogSeq/my-graph
 LOGSEQ_DIR=/path/to/your/logseq/graph
 BOOKS_DIR=/path/to/your/books/folder
 DEBOUNCE_SECONDS=5
+
+# --- n8n & Webhook Settings ---
+# WEBHOOK_PORT: Port the FastAPI webhook server listens on (used by n8n to call the agent)
+WEBHOOK_PORT=5678
+# N8N_PORT: Port to access the n8n UI in your browser
+N8N_PORT=5679
 
 # --- LLM Activation (Set to true or false) ---
 ENABLE_OLLAMA=true

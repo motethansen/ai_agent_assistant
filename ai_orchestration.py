@@ -93,6 +93,27 @@ def is_ollama_running():
     except:
         return False
 
+def list_ollama_models():
+    """Query Ollama for installed models. Returns list of model name strings."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["ollama", "list"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode != 0:
+            return []
+        lines = result.stdout.strip().splitlines()
+        # Skip header line "NAME   ID   SIZE   MODIFIED"
+        models = []
+        for line in lines[1:]:
+            parts = line.split()
+            if parts:
+                models.append(parts[0])  # e.g. "llama3:latest", "mistral:latest"
+        return models
+    except Exception:
+        return []
+
 def is_openai_available():
     """Checks if OpenAI API key is configured and enabled."""
     key = get_config_value("OPENAI_API_KEY", "")
@@ -175,10 +196,20 @@ def get_llm(model_type="chat", query=""):
     model_name = get_routing(model_type, query)
 
     if model_name == "ollama":
-        model = get_config_value("OLLAMA_MODEL", "qwen3:8b")
-        host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
-        ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "8192"))
-        return ChatOllama(model=model, base_url=host, num_ctx=ctx_size, temperature=0), f"ollama/{model}"
+        if not is_ollama_running():
+            print("⚠️  Ollama is not running. Start it with: ollama serve")
+            print("    Falling back to next available LLM.")
+            # Try priority fallback excluding ollama
+            priority_str = get_config_value("LLM_PRIORITY", "ollama,gemini,openai,claude")
+            for fallback in [m.strip().lower() for m in priority_str.split(",")]:
+                if fallback != "ollama" and _is_model_available(fallback):
+                    model_name = fallback
+                    break
+        if model_name == "ollama":
+            model = get_config_value("OLLAMA_MODEL", "qwen3:8b")
+            host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
+            ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "8192"))
+            return ChatOllama(model=model, base_url=host, num_ctx=ctx_size, temperature=0), f"ollama/{model}"
 
     elif model_name == "openai":
         from langchain_openai import ChatOpenAI

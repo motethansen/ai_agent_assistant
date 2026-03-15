@@ -118,16 +118,20 @@ def get_unified_tasks(obsidian_path):
     # 2. Parse LogSeq tasks if directory is provided
     logseq_tasks = []
     logseq_dir = get_config_value("LOGSEQ_DIR", None)
-    if logseq_dir:
-        # Scan journals and pages for pending tasks
-        for sub_dir in ["journals", "pages"]:
-            target_dir = os.path.join(logseq_dir, sub_dir)
-            if os.path.exists(target_dir):
-                for filename in os.listdir(target_dir):
-                    if filename.endswith(".md"):
-                        path = os.path.join(target_dir, filename)
-                        tasks = parse_logseq_tasks(path)
-                        logseq_tasks.extend(tasks)
+    if not logseq_dir:
+        print("ℹ️  LOGSEQ_DIR not set — skipping LogSeq tasks. Set it in .env")
+    elif not os.path.exists(logseq_dir):
+        print(f"⚠️  LOGSEQ_DIR is set but does not exist: {logseq_dir}")
+    else:
+        from logseq_agent import LogSeqAgent
+        ls_agent = LogSeqAgent(logseq_dir)
+        ls_tasks = ls_agent.get_recent_tasks(days=14) + ls_agent.get_all_page_tasks()
+        for t in ls_tasks:
+            logseq_tasks.append({
+                "task": t["task"],
+                "category": t["properties"].get("category", "Personal"),
+                "source": t["source"],
+            })
         if logseq_tasks:
             print(f"Extracted {len(logseq_tasks)} total tasks from LogSeq (journals + pages).")
 
@@ -458,6 +462,17 @@ def handle_chat_mode(obsidian_file):
     logseq_path = get_config_value("LOGSEQ_DIR", None)
 
     chat_ui.print_banner()
+
+    # Ollama startup check
+    if ai_orchestration.is_ollama_running():
+        models = ai_orchestration.list_ollama_models()
+        if models:
+            print(f"✅ Ollama models available: {', '.join(models)}")
+        else:
+            print("⚠️  No Ollama models found. Run: ollama pull llama3")
+    else:
+        print("⚠️  Ollama is not running. Start it with: ollama serve")
+
     history = chat_ui.load_history()
 
     # Use prompt_toolkit for better input if available
@@ -574,11 +589,28 @@ def handle_chat_mode(obsidian_file):
                     ollama_up = ai_orchestration.is_ollama_running()
                     chat_ui.render_services(ollama_up)
                 elif command == "models":
-                    models_status = {}
-                    for m, enabled in ai_orchestration.MODELS_ENABLED.items():
-                        available = ai_orchestration._is_model_available(m)
-                        models_status[m] = {"enabled": enabled, "available": available}
-                    chat_ui.render_models(models_status)
+                    ollama_models = ai_orchestration.list_ollama_models()
+                    if not ollama_models:
+                        chat_ui.render_warning("No Ollama models found. Run: ollama pull llama3")
+                    else:
+                        current_model = get_config_value("OLLAMA_MODEL", "llama3")
+                        print("\n🤖 Installed Ollama Models:")
+                        for i, m in enumerate(ollama_models, 1):
+                            marker = " (current)" if m == current_model or m.split(":")[0] == current_model else ""
+                            print(f"  {i}. {m}{marker}")
+                        try:
+                            selection = input("\nSelect a model number (or press Enter to keep current): ").strip()
+                            if selection:
+                                idx = int(selection) - 1
+                                if 0 <= idx < len(ollama_models):
+                                    selected_model = ollama_models[idx]
+                                    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".config")
+                                    _update_config_key(config_path, "OLLAMA_MODEL", selected_model)
+                                    chat_ui.render_success(f"Switched to {selected_model}. Effective immediately.")
+                                else:
+                                    chat_ui.render_warning("Invalid selection.")
+                        except (ValueError, KeyboardInterrupt):
+                            chat_ui.render_info("Selection cancelled.")
                 elif command == "model":
                     if len(parts) >= 3:
                         action, target = parts[1].lower(), parts[2].lower()
@@ -733,6 +765,36 @@ def handle_chat_mode(obsidian_file):
                             chat_ui.render_info("Usage: /gmail-filter <add/remove/list> [query]")
                     else:
                         chat_ui.render_info("Usage: /gmail-filter <add/remove/list> [query]")
+                elif command == "add-task":
+                    args_str = " ".join(parts[1:])
+                    if not args_str:
+                        chat_ui.render_warning("Usage: /add-task <task description>")
+                    else:
+                        logseq_dir = get_config_value("LOGSEQ_DIR", None)
+                        if not logseq_dir:
+                            chat_ui.render_error("LOGSEQ_DIR not set in .env")
+                        else:
+                            from logseq_agent import LogSeqAgent
+                            ls = LogSeqAgent(logseq_dir)
+                            path = ls.add_task(args_str)
+                            chat_ui.render_success(f"Added to LogSeq: {args_str}")
+                            chat_ui.render_info(f"  → {path}")
+                elif command == "done":
+                    args_str = " ".join(parts[1:])
+                    if not args_str:
+                        chat_ui.render_warning("Usage: /done <task text or partial match>")
+                    else:
+                        logseq_dir = get_config_value("LOGSEQ_DIR", None)
+                        if not logseq_dir:
+                            chat_ui.render_error("LOGSEQ_DIR not set in .env")
+                        else:
+                            from logseq_agent import LogSeqAgent
+                            ls = LogSeqAgent(logseq_dir)
+                            found = ls.mark_done(args_str)
+                            if found:
+                                chat_ui.render_success(f"Marked DONE: {args_str}")
+                            else:
+                                chat_ui.render_warning(f"No matching LATER/TODO task found for: {args_str}")
                 elif command == "settings":
                     config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".config")
                     if len(parts) >= 3 and parts[1].lower() == "set":
@@ -788,6 +850,7 @@ if __name__ == "__main__":
     parser.add_argument("--morning", action="store_true", help="Start morning planning mode")
     parser.add_argument("--evening", action="store_true", help="Start evening review mode")
     parser.add_argument("--chat", action="store_true", help="Start interactive chat mode")
+    parser.add_argument("--backlog", action="store_true", help="Print unified task backlog (Obsidian + LogSeq + Reminders) and exit")
     parser.add_argument("--file", type=str, help="Specific markdown file to process", default="daily_note.md")
     args = parser.parse_args()
 
@@ -795,6 +858,11 @@ if __name__ == "__main__":
         display_docs()
     elif args.stats:
         display_stats()
+    elif args.backlog:
+        import chat_ui
+        obsidian_path = get_config_value("WORKSPACE_DIR", ".")
+        tasks = get_unified_tasks(obsidian_path)
+        chat_ui.render_backlog(tasks)
     elif args.morning:
         handle_morning_planning(args.file)
     elif args.evening:

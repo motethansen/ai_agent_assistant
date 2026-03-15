@@ -1,0 +1,102 @@
+{
+  "name": "Friday Backlog Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 17 * * 5"
+            }
+          ]
+        }
+      },
+      "id": "cron-friday",
+      "name": "Friday 17:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://api:5678/webhook/backlog",
+        "options": {}
+      },
+      "id": "http-backlog",
+      "name": "Fetch Backlog",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const tasks = $input.first().json.tasks || [];\nconst lines = tasks.map(t => `- [${t.category}] ${t.task} (${t.source})`);\nreturn [{ json: { digest: lines.join('\\n'), count: tasks.length } }];"
+      },
+      "id": "code-format",
+      "name": "Format Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "output",
+              "value": "={{ \"Backlog digest (\" + $json.count + \" tasks):\\n\" + $json.digest }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-output",
+      "name": "Prepare Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Friday 17:00": {
+      "main": [
+        [
+          {
+            "node": "Fetch Backlog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Backlog": {
+      "main": [
+        [
+          {
+            "node": "Format Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Digest": {
+      "main": [
+        [
+          {
+            "node": "Prepare Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["agent", "backlog", "digest", "weekly"]
+}

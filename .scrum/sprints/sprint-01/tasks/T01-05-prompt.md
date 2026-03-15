@@ -1,5 +1,10 @@
 # Dev Agent Task Prompt — T01-05
 
+> **ACTION REQUIRED: You are a Claude Code agent with file-editing tools (Read, Edit, Write, Bash).**
+> **READ the actual source files in the project, then APPLY all changes directly to disk using your tools.**
+> **Do NOT output code as text blocks. Write changes to the actual files.**
+> **Project root: /home/michaelhansen/Projects/github/ai_agent_assistant**
+>
 > Self-contained — you have no other context. Read everything here carefully before acting.
 > PREREQUISITE: T01-04 must be complete (logseq_agent.py must have working parse_tasks()).
 
@@ -192,23 +197,18 @@ Also update the `/help` command output (or wherever commands are listed) to incl
 
 ---
 
-## Output Format
+## Completion Report
 
-### 1. Summary
+After applying all changes to the actual files, write a brief report covering:
 
-### 2. New / Modified Files
+### 1. Files modified
+List each file you edited/created.
 
-#### `logseq_agent.py` [MODIFIED]
-```python
-[complete file content]
-```
+### 2. Acceptance criteria check
+Go through each AC item and confirm ✅ or ❌ with a one-line note.
 
-#### `main.py` [MODIFIED — show only the /add-task and /done command blocks and /help update]
+### 3. Integration notes for Sprint-02
+What sprint-02 tasks need to know about the logseq_agent write API.
 
-### 3. Dependencies Added
-None
-
-### 4. Integration Notes
-[Anything sprint-02 tasks need to know about the logseq_agent write API]
-
-### 5. Known Limitations
+### 4. Any issues or deviations
+Note anything you couldn't apply and why.
