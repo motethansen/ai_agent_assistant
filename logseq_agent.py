@@ -62,23 +62,35 @@ class LogSeqAgent:
                 # Strip [[quick capture]]: prefix
                 raw = re.sub(r"\[\[.*?\]\]:\s*", "", raw).strip()
 
-                task = {"task": raw, "source": f"{source}:{line_num}", "properties": {}}
+                task = {"task": raw, "source": f"{source}:{line_num}", "properties": {}, "description": ""}
 
-                # Collect indented property lines
+                # Collect indented property lines and description text.
+                # Use indent comparison: stop when we reach the same or shallower indent
+                # as the task line itself (= a sibling or parent item).
                 j = i + 1
+                task_indent = len(re.match(r"^(\s*)", lines[i]).group(1))
+                description_parts = []
                 while j < len(lines):
                     nxt = lines[j]
+                    if not nxt.strip():
+                        break  # blank line ends the block
+                    line_indent = len(re.match(r"^(\s*)", nxt).group(1))
+                    if line_indent <= task_indent:
+                        break  # back to same/outer level — next task or parent
                     prop = re.match(r"^\s+:([\w-]+):\s*(.*)", nxt)
                     if prop:
                         k, v = prop.group(1).lower(), prop.group(2).strip()
                         task["properties"][k] = v
                         if k == "url" and v not in task["task"]:
                             task["task"] += f" ({v})"
-                        j += 1
-                    elif nxt.strip() == "" or re.match(r"^\s*-\s", nxt):
-                        break
                     else:
-                        j += 1
+                        # Indented plain text or sub-bullet — treat as description
+                        desc_text = re.sub(r"^\s*-\s+", "", nxt).strip()
+                        if desc_text:
+                            description_parts.append(desc_text)
+                    j += 1
+                if description_parts:
+                    task["description"] = " | ".join(description_parts)
                 i = j
                 tasks.append(task)
             else:

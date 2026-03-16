@@ -111,9 +111,13 @@ def get_unified_tasks(obsidian_path):
         ls_agent = LogSeqAgent(logseq_dir)
         ls_tasks = ls_agent.get_recent_tasks(days=14) + ls_agent.get_all_page_tasks()
         for t in ls_tasks:
+            task_text = t["task"]
+            if t.get("description"):
+                task_text = f"{task_text} — {t['description']}"
             logseq_tasks.append({
-                "task": t["task"],
+                "task": task_text,
                 "category": t["properties"].get("category", "Personal"),
+                "due_date": t["properties"].get("deadline") or t["properties"].get("scheduled"),
                 "source": t["source"],
             })
         if logseq_tasks:
