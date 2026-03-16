@@ -19,8 +19,18 @@ class ObsidianAgent:
     # Public API
     # ------------------------------------------------------------------
 
+    # Default directories to skip — templates, archives, attachments, etc.
+    DEFAULT_EXCLUDE_DIRS = {
+        "950 Templates", "900 Archive", "990 Attachments", "910 PDF_PNG",
+        "Clippings", "export", "whiteboards", "assets",
+        ".obsidian", ".stfolder", ".claude",
+    }
+
     def get_tasks(self, todo=True, done=False, format="dict"):
-        """Scan all .md files under workspace_dir and return matching tasks.
+        """Scan .md files under workspace_dir and return matching tasks.
+
+        Directories listed in OBSIDIAN_EXCLUDE_DIRS (comma-separated in .config)
+        are skipped. Defaults exclude Templates, Archive, Attachments, etc.
 
         Returns a list of dicts:
             {"text": str, "file": str (relative path), "line": int (1-indexed), "done": bool}
@@ -28,8 +38,16 @@ class ObsidianAgent:
         if not self.workspace_dir or not os.path.isdir(self.workspace_dir):
             return []
 
+        raw_exclude = get_config_value("OBSIDIAN_EXCLUDE_DIRS", "")
+        if raw_exclude:
+            exclude_dirs = {d.strip() for d in raw_exclude.split(",") if d.strip()}
+        else:
+            exclude_dirs = self.DEFAULT_EXCLUDE_DIRS
+
         tasks = []
-        for root, _, files in os.walk(self.workspace_dir):
+        for root, dirs, files in os.walk(self.workspace_dir):
+            # Prune excluded directories in-place so os.walk won't descend into them
+            dirs[:] = [d for d in dirs if d not in exclude_dirs]
             for filename in files:
                 if not filename.endswith(".md"):
                     continue

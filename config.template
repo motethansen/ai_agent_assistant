@@ -37,6 +37,9 @@ WORKSPACE_DIR=/home/michaelhansen/Documents/Obsidian
 # Linux example:  LOGSEQ_DIR=/home/yourname/logseq/my-graph
 # Mac example:    LOGSEQ_DIR=/Users/yourname/Documents/LogSeq/my-graph
 LOGSEQ_DIR=/path/to/your/logseq/graph
+# OBSIDIAN_EXCLUDE_DIRS: Comma-separated folder names (not paths) to skip when scanning for tasks.
+# Useful to exclude Templates, Archives, Attachments, Recipes, etc.
+OBSIDIAN_EXCLUDE_DIRS=950 Templates,900 Archive,990 Attachments,910 PDF_PNG,Clippings,export,whiteboards,assets
 # SYNC_TARGET_PAGE: Obsidian page (relative to WORKSPACE_DIR) where LogSeq tasks are synced
 SYNC_TARGET_PAGE=Inbox.md
 # AUTO_SYNC_LOGSEQ: Set to true to sync LogSeq tasks to Obsidian on every startup
