@@ -3,19 +3,17 @@ google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
 google-genai
-python-dotenv
 
-# LangChain & Ollama Integration
-langchain
-langchain-community
+# Direct LLM SDKs
+anthropic
+openai
+
+# LangChain — kept only for RAG (Chroma vector store + document loaders)
 langchain-core
-langchain-ollama
-langchain-openai
-langchain-google-genai
+langchain-community
 langchain-chroma
 langchain-text-splitters
-ollama
-
+langchain-ollama
 
 # Testing & Reporting
 pytest
@@ -42,6 +40,3 @@ requests
 # Rich Terminal UI & Input
 rich
 prompt_toolkit
-
-# Claude API (optional)
-langchain-anthropic
