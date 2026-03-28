@@ -17,6 +17,10 @@
 | E05 | Google Calendar Planning Agent | Regular planning agent that checks calendar and confirms scheduling with user | Sprint-02 |
 | E06 | CLI Personal Agent | Clean CLI entry point using local Ollama models, no Streamlit required | Sprint-02 |
 | E07 | n8n Workflow Integration | Event-driven agent triggers via n8n — expose HTTP API and provide workflow templates | Sprint-01 |
+| E08 | Agent Documentation & Scrum Registration | Register all agents added outside sprint process into backlog with full docs | Sprint-04 |
+| E09 | Code Quality & Maintainability | Split main.py, expand test suite, enforce structural hygiene | Sprint-04 |
+| E10 | Observability & Monitoring | Health dashboard, log rotation, and service status visibility | Sprint-04 |
+| E11 | Terminal Task Visibility | /today, /week calendar view, and terminal reminders via at/osascript | Sprint-04 |
 
 ---
 
@@ -216,6 +220,74 @@
 
 ---
 
+---
+
+### Sprint-04 Items
+
+#### BLI-025 — Register new agents in scrum
+- **Story**: As a team, we want the three agents added post-Sprint-03 properly documented in the scrum backlog so their purpose, config requirements, and entry points are tracked
+- **Acceptance Criteria**:
+  - [x] `datainput_agent.py` documented: reads Apple Reminders JSON → Obsidian planner, LLM organiser. Config: `WORKSPACE_DIR`, `OBSIDIAN_PLANNER_FILE`. Entry: `run(organise=True)`
+  - [x] `logseq_later_agent.py` documented: scans LogSeq LATER tasks → Obsidian planner block. Config: `LOGSEQ_DIR`, `WORKSPACE_DIR`. Entry: `run(write_to_obsidian=True, days=N)`
+  - [x] `calendar_planning_agent.py` documented: Gemini-only weekly plan from Calendar + Reminders + LogSeq → `datainput/calendar_suggestions.md`. Config: `ENABLE_GEMINI`, `GEMINI_API_KEY`, `DEEP_WORK_START/END`, `CHRONOTYPE`. Entry: `run(write_to_obsidian=False)`
+  - [x] `cron_job.py` orchestration documented: lockfile, timeout, agent order, `--agents` flag
+  - [x] PO has reviewed and confirmed description accuracy
+- **Epic**: E03 / E04
+- **Estimate**: S
+- **Status**: ✅ Done — 2026-03-27 (scrum docs updated by SM)
+
+#### BLI-026 — Split main.py into focused modules
+- **Story**: As a developer, I want `main.py` split into focused modules so the codebase is maintainable and functions are easy to find and test
+- **Acceptance Criteria**:
+  - [ ] `cli_commands.py` — all `handle_*()` functions and interactive chat command handlers
+  - [ ] `task_utils.py` — `get_unified_tasks()` and task-related helpers
+  - [ ] `session.py` — startup display, file watcher, background sync loop
+  - [ ] `main.py` reduced to ≤150 lines — thin orchestrator + argparse only
+  - [ ] All existing CLI arguments and chat commands still work after refactor
+  - [ ] No functional changes — this is purely structural
+- **Epic**: E06
+- **Estimate**: L
+- **Status**: 📋 Backlog
+
+#### BLI-027 — Expand test suite to cover all agents
+- **Story**: As a developer, I want tests for all agents and the cron orchestrator so regressions are caught before they reach production
+- **Acceptance Criteria**:
+  - [ ] `tests/test_datainput_agent.py` — sync new reminders, skip duplicates, organise planner (mock LLM)
+  - [ ] `tests/test_logseq_later_agent.py` — parse LATER tasks, deduplication, Obsidian write
+  - [ ] `tests/test_calendar_planning_agent.py` — mock Gemini response, file output
+  - [ ] `tests/test_cron_job.py` — lockfile prevents double-run, `--agents` flag runs subset
+  - [ ] `scripts/run_tests.sh` — single command to run full suite with coverage report
+  - [ ] All new tests pass with `pytest tests/ -v`
+- **Epic**: E03 / E04 / E05
+- **Estimate**: L
+- **Status**: 📋 Backlog
+
+#### BLI-028 — Monitoring and status dashboard
+- **Story**: As a user, I want a rich terminal status dashboard that shows the health of all services and data sources so I can diagnose issues at a glance
+- **Acceptance Criteria**:
+  - [ ] `update_manager.py` extended to check: Gemini API key present, Google Calendar token valid, LogSeq dir reachable, Obsidian vault reachable, last cron run time + result, last reminders sync time, `datainput/reminders.json` age
+  - [ ] `/status` CLI command renders a Rich-formatted dashboard (table or panel layout)
+  - [ ] `python scripts/status.py` runs the same dashboard standalone (no main.py required)
+  - [ ] `logs/system_status.json` updated to include all new checks with timestamps
+  - [ ] Log rotation: keep last 7 days of `cron_sync.log`, archive older files to `logs/archive/`
+- **Epic**: E06
+- **Estimate**: M
+- **Status**: 📋 Backlog
+
+#### BLI-029 — Terminal task and calendar visibility
+- **Story**: As a user, I want to see today's tasks and calendar events in a compact terminal view and get timed reminders so I have full task visibility without leaving the terminal
+- **Acceptance Criteria**:
+  - [ ] `/today` CLI command shows: today's calendar events (from `datainput/googlecalendar.yml`), tasks due today from Obsidian + LogSeq + Apple Reminders, and overdue tasks flagged in red
+  - [ ] `/week` CLI command shows a compact 7-day Rich table: date | events | tasks due
+  - [ ] `python main.py --today` equivalent to `/today` for scripting/cron use
+  - [ ] macOS terminal reminder: `python scripts/remind.py "Task text" "HH:MM"` uses `osascript` to trigger a macOS notification at the specified time via `at` command
+  - [ ] `scripts/remind.py` documented in INSTALL.md under "Terminal Reminders"
+- **Epic**: E05 / E06
+- **Estimate**: M
+- **Status**: 📋 Backlog
+
+---
+
 ## Deferred / Icebox
 
 | ID | Title | Reason deferred | Date |
@@ -252,12 +324,27 @@ Sprint-03 will address Priority 3 backlog items (BLI-020 through BLI-022):
 
 Sprint-03 start date: TBD (after Sprint-02 review)
 
+## Sprint-04 Plan
+
+Sprint-04 addresses DEBT-003 (main.py), DEBT-006 (tests), DEBT-007 (monitoring), and new BLI-028/BLI-029:
+
+| Task | BLI | Title | Estimate | Agent |
+|------|-----|-------|----------|-------|
+| T04-01 | BLI-026 | Split main.py into cli_commands, task_utils, session modules | L | dev-1 |
+| T04-02 | BLI-027 | Expand test suite — datainput, logseq_later, calendar_planning, cron_job | L | dev-2 |
+| T04-03 | BLI-028 | Monitoring dashboard — extended health checks + /status + log rotation | M | dev-3 |
+| T04-04 | BLI-029 | Terminal task/calendar view — /today, /week, scripts/remind.py | M | dev-2 |
+
+Sprint-04 start date: 2026-03-27
+
 ---
 
 ## Changelog
 
 | Date | Changed by | Change |
 |------|------------|--------|
+| 2026-03-27 | Scrum Master | Added BLI-025 (agent registration, marked Done), BLI-026 (main.py split), BLI-027 (test suite), BLI-028 (monitoring dashboard), BLI-029 (terminal task visibility). Updated DEBT table. |
+| 2026-03-15 | Scrum Master | Marked Sprint-03 BLI items Done: BLI-020 (T03-01), BLI-021 (T03-02), BLI-022 (T03-03). |
 | 2026-03-15 | Scrum Master | Marked Sprint-02 BLI items Done: BLI-010 (T02-01), BLI-011 (T02-02), BLI-012 (T02-03), BLI-013 (T02-04), BLI-014 (T02-05). All AC checkboxes updated. |
 | 2026-03-15 | Scrum Master | Marked BLI-001 Done; updated BLI-002 through BLI-005, BLI-023, BLI-024 statuses to reflect Sprint-01 ready-to-implement state; added Sprint-02 and Sprint-03 placeholders |
 | 2026-03-14 | Product Owner | Initial backlog — OpenClaw removal, Ollama-first, LogSeq/Obsidian CLI, Calendar planning agent |

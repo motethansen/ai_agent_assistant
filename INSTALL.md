@@ -194,6 +194,21 @@ In the interactive chat, use:
 
 The assistant checks LogSeq first, then Obsidian. It will report which system the task was marked done in.
 
+## Terminal Reminders
+
+Set a one-off reminder from the terminal:
+
+    python scripts/remind.py "Call dentist" "14:30"
+
+This will:
+- Schedule a macOS notification at the given time (macOS only, requires `at` command)
+- Log the reminder to `logs/reminders.log`
+- Send a webhook event to n8n if `N8N_WEBHOOK_URL` is configured
+
+To enable the `at` command on macOS:
+
+    sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.atrun.plist
+
 ## Running the Assistant
 
 ```bash

@@ -1,0 +1,42 @@
+{
+    "last_check": "2026-03-27T16:40:35.096632",
+    "git": {
+        "status": "up_to_date",
+        "message": "System is up to date"
+    },
+    "ollama": {
+        "status": "ok",
+        "message": "Ollama is running"
+    },
+    "venv": {
+        "status": "error",
+        "message": ".venv missing"
+    },
+    "gemini": {
+        "status": "ok",
+        "message": "Key present"
+    },
+    "google_calendar": {
+        "status": "warning",
+        "message": "Last updated 451.0h ago",
+        "age_hours": 451.01
+    },
+    "logseq_dir": {
+        "status": "ok",
+        "message": "/Users/michaelhansen/Library/Mobile Documents/iCloud~com~logseq~logseq/Documents"
+    },
+    "obsidian_vault": {
+        "status": "ok",
+        "message": "/Users/michaelhansen/Library/Mobile Documents/iCloud~md~obsidian/Documents"
+    },
+    "cron_last_run": {
+        "status": "warning",
+        "message": "Last run 151.0h ago",
+        "age_hours": 151.0
+    },
+    "reminders_sync": {
+        "status": "warning",
+        "message": "Last synced 673h ago",
+        "age_hours": 672.65
+    }
+}

@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import json
 import datetime
@@ -40,6 +41,89 @@ def check_venv_health():
         return {"status": "error", "message": ".venv missing"}
     return {"status": "ok", "message": "Environment looks good"}
 
+def check_gemini():
+    """GEMINI_API_KEY present in .config and non-empty."""
+    key = get_config_value("GEMINI_API_KEY", "")
+    if key:
+        return {"status": "ok", "message": "Key present"}
+    return {"status": "warning", "message": "GEMINI_API_KEY not set in .config"}
+
+
+def check_google_calendar():
+    """datainput/googlecalendar.yml exists; return age in hours. warning if >6h, error if missing."""
+    path = os.path.join("datainput", "googlecalendar.yml")
+    if not os.path.exists(path):
+        return {"status": "error", "message": "datainput/googlecalendar.yml missing"}
+    age_hours = (datetime.datetime.now().timestamp() - os.path.getmtime(path)) / 3600
+    if age_hours > 6:
+        return {"status": "warning", "message": f"Last updated {age_hours:.1f}h ago", "age_hours": round(age_hours, 2)}
+    return {"status": "ok", "message": f"Updated {age_hours:.1f}h ago", "age_hours": round(age_hours, 2)}
+
+
+def check_logseq_dir():
+    """LOGSEQ_DIR from config exists and is a directory."""
+    logseq_dir = get_config_value("LOGSEQ_DIR", "")
+    if not logseq_dir:
+        return {"status": "error", "message": "LOGSEQ_DIR not set in .config"}
+    if os.path.isdir(logseq_dir):
+        return {"status": "ok", "message": logseq_dir}
+    return {"status": "error", "message": f"Directory not found: {logseq_dir}"}
+
+
+def check_obsidian_vault():
+    """WORKSPACE_DIR from config exists and is a directory."""
+    workspace_dir = get_config_value("WORKSPACE_DIR", "")
+    if not workspace_dir:
+        return {"status": "error", "message": "WORKSPACE_DIR not set in .config"}
+    if os.path.isdir(workspace_dir):
+        return {"status": "ok", "message": workspace_dir}
+    return {"status": "error", "message": f"Directory not found: {workspace_dir}"}
+
+
+def check_cron_last_run():
+    """Parse last timestamp from logs/cron_sync.log. warning if >25h ago, error if log missing."""
+    log_path = os.path.join("logs", "cron_sync.log")
+    if not os.path.exists(log_path):
+        return {"status": "error", "message": "logs/cron_sync.log missing"}
+    # Match lines like: "Cron Sync Started at 2026-03-20 11:00:01"
+    # or "[2026-03-20 11:01:31] Cron Sync Complete."
+    ts_pattern = re.compile(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})')
+    last_ts = None
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                m = ts_pattern.search(line)
+                if m:
+                    try:
+                        ts = datetime.datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S")
+                        if last_ts is None or ts > last_ts:
+                            last_ts = ts
+                    except ValueError:
+                        pass
+    except Exception as e:
+        return {"status": "error", "message": f"Could not read log: {e}"}
+    if last_ts is None:
+        return {"status": "warning", "message": "No timestamps found in cron_sync.log"}
+    age_hours = (datetime.datetime.now() - last_ts).total_seconds() / 3600
+    if age_hours > 25:
+        return {"status": "warning", "message": f"Last run {age_hours:.1f}h ago", "age_hours": round(age_hours, 2)}
+    age_mins = int(age_hours * 60)
+    if age_mins < 60:
+        return {"status": "ok", "message": f"{age_mins} min ago", "age_hours": round(age_hours, 2)}
+    return {"status": "ok", "message": f"{age_hours:.1f}h ago", "age_hours": round(age_hours, 2)}
+
+
+def check_reminders_sync():
+    """Age of datainput/reminders.json in hours. warning if >48h, error if missing."""
+    path = os.path.join("datainput", "reminders.json")
+    if not os.path.exists(path):
+        return {"status": "error", "message": "datainput/reminders.json missing"}
+    age_hours = (datetime.datetime.now().timestamp() - os.path.getmtime(path)) / 3600
+    if age_hours > 48:
+        return {"status": "warning", "message": f"Last synced {age_hours:.0f}h ago", "age_hours": round(age_hours, 2)}
+    return {"status": "ok", "message": f"Last synced {age_hours:.1f}h ago", "age_hours": round(age_hours, 2)}
+
+
 def run_all_checks():
     # Attempt to start services if they are down
     if os.path.exists("scripts/manage_services.sh"):
@@ -50,12 +134,18 @@ def run_all_checks():
         "git": check_git_updates(),
         "ollama": check_ollama_health(),
         "venv": check_venv_health(),
+        "gemini": check_gemini(),
+        "google_calendar": check_google_calendar(),
+        "logseq_dir": check_logseq_dir(),
+        "obsidian_vault": check_obsidian_vault(),
+        "cron_last_run": check_cron_last_run(),
+        "reminders_sync": check_reminders_sync(),
     }
-    
+
     os.makedirs("logs", exist_ok=True)
     with open("logs/system_status.json", "w") as f:
         json.dump(status, f, indent=4)
-    
+
     return status
 
 if __name__ == "__main__":

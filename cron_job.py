@@ -25,6 +25,7 @@ import signal
 import datetime
 import argparse
 import atexit
+import subprocess
 
 from config_utils import get_config_value
 
@@ -233,6 +234,12 @@ def main():
             print(f"  Unknown agent: {name}")
 
     print(f"\n[{_ts()}] Cron Sync Complete.")
+
+    # Rotate logs — archive entries older than 7 days
+    rotate_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "rotate_logs.sh")
+    if os.path.exists(rotate_script):
+        subprocess.run(["bash", rotate_script], capture_output=True)
+
     return results
 
 
