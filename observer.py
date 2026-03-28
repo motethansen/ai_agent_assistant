@@ -22,13 +22,13 @@ def parse_markdown_tasks(file_path):
             match = re.search(r"^\s*-\s+\[([ xX])\]\s+(.*)", line)
             if match:
                 is_completed = match.group(1).lower() == 'x'
-                if is_completed: continue # Skip completed tasks for the backlog
                 
                 raw_task = match.group(2).strip()
                 task_data = {
                     "task": raw_task,
                     "category": "Uncategorized",
                     "due_date": None,
+                    "done": is_completed,
                     "source": "Obsidian",
                     "file": os.path.basename(file_path)
                 }

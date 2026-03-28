@@ -15,14 +15,14 @@ def test_ai_schedules_exercise_and_rest(mocker):
         "suggestions": []
     })
     
-    # Create a mock for the response object
+    # Mock the LLM and its invoke method
+    mock_llm = mocker.Mock()
     mock_response = mocker.Mock()
-    mock_response.text = mock_response_text
+    mock_response.content = mock_response_text
+    mock_llm.invoke.return_value = mock_response
     
-    # Mock the Client and the generate_content call
-    mock_client = mocker.Mock()
-    mocker.patch("ai_orchestration.genai.Client", return_value=mock_client)
-    mock_client.models.generate_content.return_value = mock_response
+    # Mock get_llm to return our mock LLM
+    mocker.patch("ai_orchestration.get_llm", return_value=(mock_llm, "mock-model"))
     
     tasks = [{"task": "Work on Book", "category": "Ref.team Book editing", "source": "Obsidian"}]
     busy = []
@@ -45,12 +45,14 @@ def test_category_mapping_logic(mocker):
         ]
     })
     
+    # Mock the LLM and its invoke method
+    mock_llm = mocker.Mock()
     mock_response = mocker.Mock()
-    mock_response.text = mock_response_text
+    mock_response.content = mock_response_text
+    mock_llm.invoke.return_value = mock_response
     
-    mock_client = mocker.Mock()
-    mocker.patch("ai_orchestration.genai.Client", return_value=mock_client)
-    mock_client.models.generate_content.return_value = mock_response
+    # Mock get_llm to return our mock LLM
+    mocker.patch("ai_orchestration.get_llm", return_value=(mock_llm, "mock-model"))
     
     tasks = [{"task": "Buy groceries", "category": "Uncategorized", "source": "Obsidian"}]
     busy = []

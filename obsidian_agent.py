@@ -107,6 +107,25 @@ class ObsidianAgent:
             with open(path, "w", encoding="utf-8") as f:
                 f.writelines(lines)
 
+    def read_file(self, file_path):
+        """Reads and returns the content of a markdown file."""
+        if not os.path.exists(file_path):
+            return None
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+
+    def create_file(self, file_path, content="", overwrite=False):
+        """Creates a markdown file with the given content."""
+        if os.path.exists(file_path) and not overwrite:
+            return False
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+        
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return True
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

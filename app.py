@@ -5,7 +5,8 @@ import datetime
 import calendar_manager
 import ai_orchestration
 import pandas as pd
-from main import get_unified_tasks, sync_calendar_to_markdown
+from task_utils import get_unified_tasks
+from cli_commands import sync_calendar_to_markdown
 from observer import update_markdown_plan
 from config_utils import get_config_value
 from calendar_agent import CalendarAgent, start_background_calendar_sync
