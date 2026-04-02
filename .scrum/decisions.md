@@ -96,6 +96,65 @@ When making a decision that affects:
 
 ---
 
+### ADR-007 — Google Tasks two-way sync via dedicated agent
+- **Date**: 2026-04-02
+- **Sprint**: Sprint-05
+- **Team**: Michael Hansen (PO)
+- **Status**: Accepted
+
+**Context**: The user adds tasks in Google Tasks and wants them automatically pulled into the local task list (Obsidian planner), and wants tasks marked done locally to flow back to Google Tasks. This is a two-way sync problem that must handle deduplication, task identity across systems, and auth.
+
+**Decision**: Build `google_tasks_agent.py` following the same pattern as `datainput_agent.py`:
+
+- **Pull** (`sync_to_obsidian()`): Fetch all incomplete tasks from the configured Google Tasks list. Deduplicate against `datainput/synced_google_tasks.json` (keyed by Google Tasks `task_id`). Write new tasks to the Obsidian planner under a `## Google Tasks` section as `- [ ] <title>`. Store `{task_id: {title, synced_date}}` in the JSON so we can later match them for completion.
+- **Push** (`sync_completions_to_google()`): Scan the Obsidian planner for `- [x]` lines whose text matches a title in `synced_google_tasks.json`. For each match, call `tasks().update(status='completed')` on Google Tasks. Remove the entry from the JSON to avoid re-processing.
+- **Identity**: Use Google Tasks `task_id` as the canonical key. Title-based matching for completion detection (normalised: strip whitespace, lowercase).
+- **Config flag**: `ENABLE_GOOGLE_TASKS=false` — all API calls skipped if not set to `true`. Follows same pattern as `ENABLE_GOOGLE_CALENDAR`.
+- **Auth**: Google Tasks requires the `https://www.googleapis.com/auth/tasks` scope. This scope must be added to `calendar_manager.py` (or a new `SCOPES` list). Existing `token.json` must be deleted and OAuth re-run to pick up the new scope. Document this in `INSTALL.md`.
+
+**Task list selection**: `GOOGLE_TASKS_LIST=@default` (the "My Tasks" list). User can override with a specific list name; agent resolves name → `list_id` at startup.
+
+**Scheduling**: Added as step in `cron_job.py` (`run_google_tasks_agent()`), gated on `ENABLE_GOOGLE_TASKS=true`. Runs after `datainput` and `logseq_later` steps. Sync interval determined by cron frequency (default: hourly).
+
+**Reasoning**: Two-way sync gives Google Tasks as an input channel (mobile-friendly capture) while keeping Obsidian as the planning surface. The JSON tracking file avoids duplicate entries and enables reliable completion writeback without modifying Obsidian task text.
+
+**Consequences**:
+- `token.json` must be regenerated with the new scope — document clearly in INSTALL.md
+- Title matching for completion sync is approximate — if the user edits a task title in Obsidian after syncing, it won't be found for writeback
+- `calendar_manager.py` SCOPES list needs `tasks` scope added, or a separate auth helper in `google_tasks_agent.py`
+
+**Affected files**: `google_tasks_agent.py` (new), `datainput/synced_google_tasks.json` (new, auto-created), `cron_job.py`, `config.example`, `INSTALL.md`
+
+---
+
+### ADR-006 — Replace Google Calendar API with local ICS calendar engine
+- **Date**: 2026-04-02
+- **Sprint**: Sprint-05
+- **Team**: Michael Hansen (PO)
+- **Status**: Accepted
+
+**Context**: BLI-012/013 implemented Google Calendar integration via OAuth2 (`token.json` + `credentials.json`). This creates a cloud dependency, requires manual token setup, and does not work without internet access. The user wants a local-first calendar system that works on any Linux/Unix machine.
+
+**Decision**: Replace Google Calendar API with a local ICS file engine (`local_calendar_agent.py`) backed by `datainput/local_calendar.ics`. The `.ics` file (RFC 5545 iCalendar format) is the single source of truth and doubles as the export artifact — it can be imported directly by Google Calendar, Apple Calendar, Outlook, or any compliant app.
+
+- **Add event**: append a new `VEVENT` with a stable `UID`, `DTSTART`, `DTEND`, `SUMMARY`, optional `DESCRIPTION`
+- **Remove event**: locate `VEVENT` by `UID` (preferred) or `SUMMARY` match and delete it from the file
+- **Export**: `datainput/local_calendar.ics` is always ready to import — no separate export step
+- **Import**: load an external `.ics` (e.g. exported from Google Calendar) and merge, deduplicating by `UID`
+- **Google Calendar**: demoted to optional import-only path — no live API calls required
+
+**Reasoning**: ICS is the universal calendar interchange format. A local file needs no auth, no internet, works on any OS, and is version-controllable. Users who need online sync can import the `.ics` into their preferred calendar app manually or via cron.
+
+**Consequences**:
+- `calendar_agent.py` and `datainput/googlecalendar.yml` are superseded — kept but no longer the primary path
+- ADR-005 (YAML cache auto-refresh) is superseded for the primary calendar path
+- `credentials.json` / `token.json` are no longer required for basic calendar use
+- `calendar_planning_agent.py` should be updated to read from local ICS instead of Google Calendar API
+
+**Affected files**: `local_calendar_agent.py` (new), `cli_commands.py`, `terminal_views.py`, `calendar_planning_agent.py`, `config.example`, `INSTALL.md`
+
+---
+
 ### ADR-005 — Calendar views use YAML cache with auto-refresh
 - **Date**: 2026-03-27
 - **Sprint**: Sprint-04
@@ -125,7 +184,8 @@ When making a decision that affects:
 | CLI / Terminal UI | Rich | `chat_ui.py`, status dashboard, `/today`, `/week` |
 | Web UI (optional) | Streamlit | `app.py` — not the primary interface |
 | Vector DB / RAG | Chroma via LangChain | `rag_agent.py` only — LangChain not used elsewhere |
-| Calendar | Google Calendar API | Auth via `token.json` + `credentials.json`. Cache: `datainput/googlecalendar.yml` |
+| Calendar (primary) | Local ICS file (`datainput/local_calendar.ics`) | RFC 5545. No auth required. Importable by Google/Apple/Outlook. See ADR-006. |
+| Calendar (optional import) | Google Calendar API | Legacy path. `token.json` + `credentials.json` still supported for one-time ICS import. |
 | Task sources | Obsidian (markdown), LogSeq (markdown), Apple Reminders (AppleScript→JSON) | All read via direct file/subprocess — no app required |
 | Automation | n8n (Docker, port 5678) | Webhooks via `n8n_client.py` |
 | API server | FastAPI | `api_server.py` — webhook endpoints for n8n |

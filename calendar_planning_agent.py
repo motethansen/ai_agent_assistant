@@ -24,7 +24,7 @@ Config keys used:
 import os
 import json
 import datetime
-from config_utils import get_config_value
+from config_utils import get_config_value, is_google_calendar_enabled
 import calendar_manager
 import ai_orchestration
 
@@ -42,6 +42,9 @@ def _get_week_events(days=7):
     Return all calendar events from today through today+days.
     Returns list of {summary, start, end, date} dicts.
     """
+    if not is_google_calendar_enabled():
+        print("[CalendarPlanningAgent] Google Calendar disabled (ENABLE_GOOGLE_CALENDAR=false). Skipping calendar fetch.")
+        return []
     service = calendar_manager.get_calendar_service()
     if not service:
         print("[CalendarPlanningAgent] Google Calendar not available.")

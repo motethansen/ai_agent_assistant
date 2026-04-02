@@ -1,7 +1,7 @@
 # Product Backlog — AI Agent Assistant
 
 > Maintained by: Product Owner + Scrum Master
-> Last updated: 2026-03-15
+> Last updated: 2026-04-02
 > Format: ID | Priority | Story | Acceptance Criteria | Estimate | Status
 
 ---
@@ -21,6 +21,8 @@
 | E09 | Code Quality & Maintainability | Split main.py, expand test suite, enforce structural hygiene | Sprint-04 |
 | E10 | Observability & Monitoring | Health dashboard, log rotation, and service status visibility | Sprint-04 |
 | E11 | Terminal Task Visibility | /today, /week calendar view, and terminal reminders via at/osascript | Sprint-04 |
+| E12 | Local ICS Calendar Engine | Replace Google Calendar API with local RFC 5545 ICS file — add, remove, export, import events | Sprint-05 |
+| E13 | Google Tasks Two-Way Sync | Pull tasks from Google Tasks into Obsidian; push Obsidian completions back to Google Tasks | Sprint-05 |
 
 ---
 
@@ -247,7 +249,7 @@
   - [ ] No functional changes — this is purely structural
 - **Epic**: E06
 - **Estimate**: L
-- **Status**: 📋 Backlog
+- **Status**: ✅ Done — 2026-04-02 (T04-01)
 
 #### BLI-027 — Expand test suite to cover all agents
 - **Story**: As a developer, I want tests for all agents and the cron orchestrator so regressions are caught before they reach production
@@ -260,7 +262,7 @@
   - [ ] All new tests pass with `pytest tests/ -v`
 - **Epic**: E03 / E04 / E05
 - **Estimate**: L
-- **Status**: 📋 Backlog
+- **Status**: ✅ Done — 2026-04-02 (T04-02) — 42 pass, 1 skipped; pre-existing failures fixed in `7f942ff`
 
 #### BLI-028 — Monitoring and status dashboard
 - **Story**: As a user, I want a rich terminal status dashboard that shows the health of all services and data sources so I can diagnose issues at a glance
@@ -272,7 +274,7 @@
   - [ ] Log rotation: keep last 7 days of `cron_sync.log`, archive older files to `logs/archive/`
 - **Epic**: E06
 - **Estimate**: M
-- **Status**: 📋 Backlog
+- **Status**: ✅ Done — 2026-04-02 (T04-03)
 
 #### BLI-029 — Terminal task and calendar visibility
 - **Story**: As a user, I want to see today's tasks and calendar events in a compact terminal view and get timed reminders so I have full task visibility without leaving the terminal
@@ -284,7 +286,94 @@
   - [ ] `scripts/remind.py` documented in INSTALL.md under "Terminal Reminders"
 - **Epic**: E05 / E06
 - **Estimate**: M
+- **Status**: ✅ Done — 2026-04-02 (T04-04)
+
+---
+
+### Sprint-05 Items
+
+#### BLI-030 — Local ICS calendar engine
+- **Story**: As a user, I want a local calendar that works without Google OAuth so I can manage tasks and events on any Linux/Unix machine without cloud dependency
+- **Supersedes**: BLI-012, BLI-013 (Google Calendar API replaced as primary calendar path — see ADR-006)
+- **Acceptance Criteria**:
+  - [ ] `local_calendar_agent.py` created — reads/writes `datainput/local_calendar.ics` using the `icalendar` Python library
+  - [ ] `add_event(summary, start_dt, end_dt, description=None)` — appends a new `VEVENT` with a stable UUID-based `UID`
+  - [ ] `remove_event(uid=None, summary=None)` — removes matching `VEVENT`(s); UID match is exact, summary match is case-insensitive substring
+  - [ ] `list_events(start_date=None, end_date=None)` — returns events in date range; defaults to next 7 days
+  - [ ] `get_today_events()` — returns events for today only
+  - [ ] Creates `datainput/local_calendar.ics` with correct VCALENDAR header if it does not exist
+  - [ ] `/add-event` CLI command: prompts for summary, date, start time, end time, optional description — calls `add_event()`
+  - [ ] `/remove-event` CLI command: lists upcoming events with index, user picks one to remove — calls `remove_event(uid=...)`
+  - [ ] `icalendar` added to `requirements.txt`
+- **Epic**: E05
+- **Estimate**: M
 - **Status**: 📋 Backlog
+
+#### BLI-031 — ICS export and import
+- **Story**: As a user, I want to export my local calendar as a standard `.ics` file and import events from an external `.ics` so I can sync with Google Calendar, Apple Calendar, or any compliant app
+- **Acceptance Criteria**:
+  - [ ] `/export-calendar [path]` CLI command: copies `datainput/local_calendar.ics` to the given path (default: `~/calendar_export.ics`); prints: `Exported N events to <path>`
+  - [ ] `/import-calendar <file>` CLI command: loads events from an external `.ics` file, merges into `datainput/local_calendar.ics`, deduplicates by `UID`; prints: `Imported N new events (M duplicates skipped)`
+  - [ ] Duplicate detection: if a `UID` already exists in the local calendar, the event is skipped (not overwritten)
+  - [ ] Import handles malformed or partial `.ics` files gracefully — logs warnings, continues
+  - [ ] `INSTALL.md` updated with a "Calendar Sync" section: how to import `.ics` into Google Calendar / Apple Calendar manually
+- **Epic**: E05
+- **Estimate**: S
+- **Status**: 📋 Backlog
+
+#### BLI-032 — Update terminal views and planning agent to use local ICS
+- **Story**: As a user, I want `/today`, `/week`, and the planning agent to use my local ICS calendar so all calendar features work without a Google API token
+- **Acceptance Criteria**:
+  - [ ] `terminal_views.py` — `render_today()` and `render_week()` read from `local_calendar_agent.list_events()` instead of `datainput/googlecalendar.yml`
+  - [ ] `calendar_planning_agent.py` — reads upcoming events from `local_calendar_agent.list_events()` as context for the LLM planning prompt; Google Calendar API call removed from the default path
+  - [ ] `/status` health check (`update_manager.py`) — replace Google Calendar cache age check with ICS file age check (`datainput/local_calendar.ics`)
+  - [ ] `config.example` — Google Calendar fields moved to optional/commented-out section; `LOCAL_CALENDAR_FILE` added (default: `datainput/local_calendar.ics`)
+  - [ ] Google Calendar API path (`calendar_agent.py`) remains intact as an optional import source — no deletion, just demotion
+  - [ ] `python main.py --today` works with zero Google credentials present
+- **Epic**: E05 / E10
+- **Estimate**: M
+- **Status**: 📋 Backlog
+
+#### BLI-033 — Google Tasks pull: fetch tasks → Obsidian planner
+- **Story**: As a user, I want tasks I add in Google Tasks to appear automatically in my Obsidian planner so Google Tasks works as a mobile capture tool feeding my local system
+- **Acceptance Criteria**:
+  - [ ] `google_tasks_agent.py` created with `_get_service()` — OAuth2 using `credentials.json`; scope: `https://www.googleapis.com/auth/tasks`
+  - [ ] `fetch_tasks(list_id)` — returns all non-completed tasks from the specified list as `[{id, title, due, notes}]`
+  - [ ] `get_task_lists()` — returns available task lists; used to resolve `GOOGLE_TASKS_LIST` name → `list_id`
+  - [ ] `sync_to_obsidian()` — pulls new tasks, appends to Obsidian planner under `## Google Tasks` as `- [ ] <title>` with optional `📅 <due>` and sub-bullet notes; deduplicates against `datainput/synced_google_tasks.json`
+  - [ ] `datainput/synced_google_tasks.json` written as `{task_id: {title, synced_date}}` after each pull
+  - [ ] `ENABLE_GOOGLE_TASKS=false` in `.config` skips all API calls silently
+  - [ ] `GOOGLE_TASKS_LIST=@default` — configurable; `@default` maps to "My Tasks"
+  - [ ] `INSTALL.md` updated: note that `token.json` must be deleted and re-auth run to pick up the `tasks` scope
+- **Epic**: E13
+- **Estimate**: M
+- **Status**: 📋 Backlog
+
+#### BLI-034 — Google Tasks push: mark tasks complete from Obsidian done status
+- **Story**: As a user, I want tasks I mark done in Obsidian to be automatically marked complete in Google Tasks so both systems stay in sync without manual updates
+- **Acceptance Criteria**:
+  - [ ] `sync_completions_to_google()` — scans Obsidian planner for `- [x] <title>` lines; normalises title (strip whitespace, lowercase) and matches against titles in `datainput/synced_google_tasks.json`
+  - [ ] For each match: calls `tasks().update()` with `status: completed` on Google Tasks; removes the entry from `synced_google_tasks.json`
+  - [ ] Tasks not found in `synced_google_tasks.json` are silently skipped (user may have other done tasks unrelated to Google Tasks)
+  - [ ] If Google Tasks API call fails for a task, log the error and continue — do not abort the full run
+  - [ ] `run(sync_back=True)` — calls `sync_to_obsidian()` then optionally `sync_completions_to_google()`; `sync_back=False` skips writeback
+- **Epic**: E13
+- **Estimate**: S
+- **Status**: 📋 Backlog
+- **Notes**: Depends on BLI-033 (agent + JSON tracking file must exist)
+
+#### BLI-035 — Google Tasks cron integration and CLI command
+- **Story**: As a user, I want Google Tasks sync to run automatically on schedule and be triggerable from the CLI so tasks are always up to date without manual intervention
+- **Acceptance Criteria**:
+  - [ ] `cron_job.py` — `run_google_tasks_agent()` function added; gated on `ENABLE_GOOGLE_TASKS=true`; runs after `run_logseq_later_agent()` in the default agent order
+  - [ ] `python cron_job.py --agents google_tasks` — runs only the Google Tasks agent
+  - [ ] `/google-tasks` CLI chat command: triggers `google_tasks_agent.run(sync_back=True)` and prints summary: `Pulled N new tasks, marked M complete in Google Tasks`
+  - [ ] `/status` dashboard (`update_manager.py`) — new `check_google_tasks()` health check: shows `ENABLE_GOOGLE_TASKS` status, age of `synced_google_tasks.json`, last sync timestamp
+  - [ ] `config.example` updated with `ENABLE_GOOGLE_TASKS=false` and `GOOGLE_TASKS_LIST=@default`
+- **Epic**: E13
+- **Estimate**: S
+- **Status**: 📋 Backlog
+- **Notes**: Depends on BLI-033 and BLI-034
 
 ---
 
@@ -337,12 +426,35 @@ Sprint-04 addresses DEBT-003 (main.py), DEBT-006 (tests), DEBT-007 (monitoring),
 
 Sprint-04 start date: 2026-03-27
 
+## Sprint-05 Placeholder
+
+Sprint-05 delivers two parallel tracks: local ICS calendar engine (ADR-006) and Google Tasks two-way sync (ADR-007).
+
+| Task | BLI | Title | Estimate | Agent | Track |
+|------|-----|-------|----------|-------|-------|
+| T05-01 | BLI-030 | Local ICS calendar engine (`local_calendar_agent.py`, `/add-event`, `/remove-event`) | M | dev-1 | ICS |
+| T05-02 | BLI-031 | ICS export + import (`/export-calendar`, `/import-calendar`) | S | dev-1 | ICS |
+| T05-03 | BLI-032 | Update `/today`, `/week`, planning agent to use local ICS | M | dev-2 | ICS |
+| T05-04 | BLI-033 | Google Tasks pull: `google_tasks_agent.py` + `sync_to_obsidian()` | M | dev-3 | Tasks |
+| T05-05 | BLI-034 | Google Tasks push: `sync_completions_to_google()` | S | dev-3 | Tasks |
+| T05-06 | BLI-035 | Cron + CLI (`/google-tasks`, `/status` check, `config.example`) | S | dev-3 | Tasks |
+
+**Dependency order**:
+- T05-01 → T05-02, T05-03 (ICS track sequential then parallel)
+- T05-04 → T05-05 → T05-06 (Tasks track sequential)
+- ICS track and Tasks track are fully independent — run in parallel
+
+Sprint-05 start date: TBD (awaiting PO confirmation)
+
 ---
 
 ## Changelog
 
 | Date | Changed by | Change |
 |------|------------|--------|
+| 2026-04-02 | Product Owner | Added BLI-033, BLI-034, BLI-035 — Google Tasks two-way sync (ADR-007). Sprint-05 updated with Tasks track. |
+| 2026-04-02 | Product Owner | Added BLI-030, BLI-031, BLI-032 — local ICS calendar engine replaces Google Calendar API (ADR-006). Sprint-05 placeholder added. |
+| 2026-04-02 | Scrum Master | Marked Sprint-04 items Done: BLI-026 (T04-01), BLI-027 (T04-02), BLI-028 (T04-03), BLI-029 (T04-04). Sprint-04 complete. |
 | 2026-03-27 | Scrum Master | Added BLI-025 (agent registration, marked Done), BLI-026 (main.py split), BLI-027 (test suite), BLI-028 (monitoring dashboard), BLI-029 (terminal task visibility). Updated DEBT table. |
 | 2026-03-15 | Scrum Master | Marked Sprint-03 BLI items Done: BLI-020 (T03-01), BLI-021 (T03-02), BLI-022 (T03-03). |
 | 2026-03-15 | Scrum Master | Marked Sprint-02 BLI items Done: BLI-010 (T02-01), BLI-011 (T02-02), BLI-012 (T02-03), BLI-013 (T02-04), BLI-014 (T02-05). All AC checkboxes updated. |

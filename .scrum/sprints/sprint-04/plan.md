@@ -134,10 +134,10 @@ Recommended execution order:
 ## Definition of Done
 
 - [x] T04-01 acceptance criteria met — all CLI flags and chat commands verified working
-- [ ] T04-02 acceptance criteria met — test suite passes
+- [x] T04-02 acceptance criteria met — test suite passes (42 pass, 1 skipped)
 - [x] T04-03 acceptance criteria met — /status, scripts/status.py, log rotation
 - [x] T04-04 acceptance criteria met — /today, /week, scripts/remind.py, INSTALL.md
 - [x] All new Python files syntax-clean (ast.parse verified)
-- [ ] `pytest tests/ -v` — all tests pass (0 failures)
-- [ ] `progress.md` updated with Sprint-04 results
-- [ ] `backlog.md` BLI items marked Done
+- [x] `pytest tests/ -v` — all tests pass (42 pass, 1 skipped)
+- [x] `progress.md` updated with Sprint-04 results
+- [x] `backlog.md` BLI items marked Done

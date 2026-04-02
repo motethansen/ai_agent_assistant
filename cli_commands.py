@@ -4,7 +4,7 @@ import sys
 import datetime
 import traceback
 import subprocess
-from config_utils import get_config_value
+from config_utils import get_config_value, is_google_calendar_enabled
 import calendar_manager
 import ai_orchestration
 import gmail_agent
@@ -65,10 +65,17 @@ def handle_morning_planning(obsidian_path):
     """
     print("🌅 --- Morning Planning Session ---")
     tasks = get_unified_tasks(obsidian_path)
-    calendar_id = get_config_value("CALENDAR_ID", "primary")
-    service = calendar_manager.get_calendar_service()
-    calendar_agent = CalendarAgent()
-    busy_slots = calendar_agent.get_busy_slots_from_yml()
+
+    busy_slots = []
+    service = None
+    calendar_id = None
+    if is_google_calendar_enabled():
+        calendar_id = get_config_value("CALENDAR_ID", "primary")
+        service = calendar_manager.get_calendar_service()
+        calendar_agent = CalendarAgent()
+        busy_slots = calendar_agent.get_busy_slots_from_yml()
+    else:
+        print("ℹ️  Google Calendar disabled — planning without calendar context.")
 
     print("AI is processing your backlog for today...")
     logseq_path = get_config_value("LOGSEQ_DIR", None)
@@ -94,12 +101,15 @@ def handle_morning_planning(obsidian_path):
             for item in schedule:
                 print(f"[{item['start'].split('T')[1][:5]}] {item['task']} ({item.get('category', 'Uncategorized')})")
 
-            confirm = input("\nAdd these items to your calendar? (y/n/skip): ").strip().lower()
-            if confirm == 'y':
-                planning_agent = PlanningAgent(service, calendar_id)
-                planning_agent.execute_plan(schedule, obsidian_path)
+            if is_google_calendar_enabled() and service:
+                confirm = input("\nAdd these items to your calendar? (y/n/skip): ").strip().lower()
+                if confirm == 'y':
+                    planning_agent = PlanningAgent(service, calendar_id)
+                    planning_agent.execute_plan(schedule, obsidian_path)
+                else:
+                    print("Skipped calendar sync.")
             else:
-                print("Skipped calendar sync.")
+                print("ℹ️  Enable ENABLE_GOOGLE_CALENDAR=true in .config to book these to a calendar.")
     else:
         print("Failed to generate schedule suggestion.")
 
@@ -112,32 +122,28 @@ def handle_planning_session(obsidian_path, dry_run=False):
     """
     is_interactive = sys.stdin.isatty()
 
-    # 1. Check credentials
-    if not os.path.exists("token.json"):
-        print("⚠️  Google Calendar not connected. Run the assistant once interactively to authenticate.")
-        print("    Missing: token.json")
-        return
-
-    # 2. Get tasks
+    # 1. Get tasks
     tasks = get_unified_tasks(obsidian_path)
     if not tasks:
         if is_interactive:
             print("ℹ️  No tasks found in backlog.")
         return
 
-    # 3. Connect to calendar
-    service = calendar_manager.get_calendar_service()
-    if not service:
-        print("⚠️  Could not connect to Google Calendar.")
-        return
-
-    # 4. Fetch busy slots for next 7 days
+    # 2. Fetch busy slots — only if Google Calendar is enabled
     busy_slots = []
-    for i in range(7):
-        day = (datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%Y-%m-%d")
-        busy_slots.extend(calendar_manager.get_busy_slots(service, date_str=day))
+    service = None
+    if is_google_calendar_enabled():
+        service = calendar_manager.get_calendar_service()
+        if not service:
+            print("⚠️  ENABLE_GOOGLE_CALENDAR=true but could not connect. Check credentials.json and token.json.")
+            return
+        for i in range(7):
+            day = (datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%Y-%m-%d")
+            busy_slots.extend(calendar_manager.get_busy_slots(service, date_str=day))
+    else:
+        print("ℹ️  Google Calendar disabled — planning without busy-slot data.")
 
-    # 5. Generate schedule via LLM
+    # 3. Generate schedule via LLM
     logseq_path = get_config_value("LOGSEQ_DIR", None)
     print("AI is generating your schedule...")
     result = ai_orchestration.generate_schedule(
@@ -164,7 +170,7 @@ def handle_planning_session(obsidian_path, dry_run=False):
         print(f"\nℹ️  Run interactively to confirm and book: python main.py --plan")
         return
 
-    # 6. Per-task confirmation
+    # 4. Per-task confirmation
     confirmed = []
     for item in result["schedule"]:
         date_part = item["start"].split("T")[0] if "T" in item["start"] else item["start"]
@@ -179,11 +185,15 @@ def handle_planning_session(obsidian_path, dry_run=False):
         elif choice == "s":
             break
 
-    # 7. Book confirmed items
+    # 5. Book confirmed items — only if Google Calendar is enabled
     if confirmed:
-        calendar_id = get_config_value("CALENDAR_ID", "primary")
-        calendar_manager.create_events(service, confirmed, calendar_id=calendar_id)
-        print(f"\n✅ Booked {len(confirmed)} event(s) to Google Calendar.")
+        if is_google_calendar_enabled() and service:
+            calendar_id = get_config_value("CALENDAR_ID", "primary")
+            calendar_manager.create_events(service, confirmed, calendar_id=calendar_id)
+            print(f"\n✅ Booked {len(confirmed)} event(s) to Google Calendar.")
+        else:
+            print(f"\nℹ️  {len(confirmed)} event(s) confirmed but not booked — Google Calendar is disabled.")
+            print("    Set ENABLE_GOOGLE_CALENDAR=true in .config to enable booking.")
     else:
         print("No events booked.")
 
@@ -461,50 +471,62 @@ def handle_chat_mode(obsidian_file):
                     subprocess.run(["python3", "debug_reminders.py"])
                     chat_ui.render_info("Manually triggering task sync...")
                     tasks = get_unified_tasks(obsidian_path)
-                    calendar_id = get_config_value("CALENDAR_ID", "primary")
-                    service = calendar_manager.get_calendar_service()
-                    if not service:
-                        chat_ui.render_error("Calendar service not available. Check credentials.")
-                        continue
-                    calendar_agent = CalendarAgent()
-                    busy_slots = calendar_agent.get_busy_slots_from_yml()
+                    busy_slots = []
+                    service = None
+                    if is_google_calendar_enabled():
+                        service = calendar_manager.get_calendar_service()
+                        if not service:
+                            chat_ui.render_error("ENABLE_GOOGLE_CALENDAR=true but calendar service unavailable.")
+                            continue
+                        calendar_agent = CalendarAgent()
+                        busy_slots = calendar_agent.get_busy_slots_from_yml()
                     logseq_path = get_config_value("LOGSEQ_DIR", None)
                     schedule = ai_orchestration.generate_schedule(
                         tasks, busy_slots,
                         workspace_dir=obsidian_path, logseq_dir=logseq_path
                     )
-                    confirm_sync = input("Sync to calendar? (y/n): ").strip().lower()
-                    if confirm_sync == 'y':
-                        planning_agent = PlanningAgent(service, calendar_id)
-                        planning_agent.execute_plan(schedule, obsidian_path)
-                        chat_ui.render_success("Scheduled!")
+                    if is_google_calendar_enabled() and service:
+                        confirm_sync = input("Sync to calendar? (y/n): ").strip().lower()
+                        if confirm_sync == 'y':
+                            calendar_id = get_config_value("CALENDAR_ID", "primary")
+                            planning_agent = PlanningAgent(service, calendar_id)
+                            planning_agent.execute_plan(schedule, obsidian_path)
+                            chat_ui.render_success("Scheduled!")
+                        else:
+                            chat_ui.render_info("Sync cancelled.")
                     else:
-                        chat_ui.render_info("Sync cancelled.")
+                        chat_ui.render_info("Schedule generated (Google Calendar disabled — set ENABLE_GOOGLE_CALENDAR=true to book).")
                 elif command == "pull":
-                    sync_calendar_to_markdown(obsidian_path)
+                    if is_google_calendar_enabled():
+                        sync_calendar_to_markdown(obsidian_path)
+                    else:
+                        chat_ui.render_info("Google Calendar is disabled. Set ENABLE_GOOGLE_CALENDAR=true in .config to pull events.")
                 elif command == "stats":
                     print("\n--- Today's Focus Stats ---")
-                    service = calendar_manager.get_calendar_service()
-                    calendar_id = get_config_value("CALENDAR_ID", "primary")
-                    if service:
-                        managed = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
-                        if managed:
-                            cat_hours = {}
-                            total_mins = 0
-                            for m in managed:
-                                start = datetime.datetime.fromisoformat(m['start'].replace('Z', ''))
-                                end = datetime.datetime.fromisoformat(m['end'].replace('Z', ''))
-                                mins = (end - start).total_seconds() / 60
-                                total_mins += mins
-                                cat = m.get('category', 'General')
-                                cat_hours[cat] = cat_hours.get(cat, 0) + mins
-                            for cat, mins in cat_hours.items():
-                                print(f"  - {cat:20}: {mins/60:4.1f} hours")
-                            print(f"  TOTAL PLANNED FOCUS: {total_mins/60:4.1f} hours")
-                        else:
-                            chat_ui.render_info("No AI-managed events found for today.")
+                    if not is_google_calendar_enabled():
+                        chat_ui.render_info("Google Calendar is disabled — no stats available. Set ENABLE_GOOGLE_CALENDAR=true in .config.")
                     else:
-                        chat_ui.render_error("Could not connect to Google Calendar.")
+                        service = calendar_manager.get_calendar_service()
+                        calendar_id = get_config_value("CALENDAR_ID", "primary")
+                        if service:
+                            managed = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
+                            if managed:
+                                cat_hours = {}
+                                total_mins = 0
+                                for m in managed:
+                                    start = datetime.datetime.fromisoformat(m['start'].replace('Z', ''))
+                                    end = datetime.datetime.fromisoformat(m['end'].replace('Z', ''))
+                                    mins = (end - start).total_seconds() / 60
+                                    total_mins += mins
+                                    cat = m.get('category', 'General')
+                                    cat_hours[cat] = cat_hours.get(cat, 0) + mins
+                                for cat, mins in cat_hours.items():
+                                    print(f"  - {cat:20}: {mins/60:4.1f} hours")
+                                print(f"  TOTAL PLANNED FOCUS: {total_mins/60:4.1f} hours")
+                            else:
+                                chat_ui.render_info("No AI-managed events found for today.")
+                        else:
+                            chat_ui.render_error("Could not connect to Google Calendar.")
                 elif command == "backlog":
                     tasks = get_unified_tasks(obsidian_path)
                     chat_ui.render_backlog(tasks)

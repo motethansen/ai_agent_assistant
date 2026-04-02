@@ -4,7 +4,7 @@ import subprocess
 import json
 import datetime
 import requests
-from config_utils import get_config_value
+from config_utils import get_config_value, is_google_calendar_enabled
 
 def check_git_updates():
     """Checks if there are updates available in the git repository."""
@@ -50,7 +50,9 @@ def check_gemini():
 
 
 def check_google_calendar():
-    """datainput/googlecalendar.yml exists; return age in hours. warning if >6h, error if missing."""
+    """datainput/googlecalendar.yml exists; return age in hours. Skipped if ENABLE_GOOGLE_CALENDAR=false."""
+    if not is_google_calendar_enabled():
+        return {"status": "disabled", "message": "Google Calendar disabled (ENABLE_GOOGLE_CALENDAR=false)"}
     path = os.path.join("datainput", "googlecalendar.yml")
     if not os.path.exists(path):
         return {"status": "error", "message": "datainput/googlecalendar.yml missing"}

@@ -3,7 +3,7 @@ import time
 import calendar_manager
 import ai_orchestration
 from watchdog.events import PatternMatchingEventHandler
-from config_utils import get_config_value
+from config_utils import get_config_value, is_google_calendar_enabled
 from calendar_agent import CalendarAgent
 from planning_agent import PlanningAgent
 from task_utils import get_unified_tasks
@@ -62,25 +62,26 @@ def display_stats():
 
     # Calendar Status
     print("\n📅 Calendar Integration:")
-    if os.path.exists('credentials.json'):
-        print("  credentials.json: ✓ Present")
+    if not is_google_calendar_enabled():
+        print("  Google Calendar: disabled (ENABLE_GOOGLE_CALENDAR=false in .config)")
     else:
-        print("  credentials.json: ✗ Missing")
-
-    if os.path.exists('token.json'):
-        print("  token.json: ✓ Authenticated")
-    else:
-        print("  token.json: ✗ Not authenticated")
-
-    try:
-        service = calendar_manager.get_calendar_service()
-        if service:
-            managed_events = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
-            print(f"  Today's AI-managed events: {len(managed_events) if managed_events else 0}")
+        if os.path.exists('credentials.json'):
+            print("  credentials.json: ✓ Present")
         else:
-            print("  Calendar service: ✗ Cannot connect")
-    except Exception as e:
-        print(f"  Calendar service: ✗ Error: {e}")
+            print("  credentials.json: ✗ Missing")
+        if os.path.exists('token.json'):
+            print("  token.json: ✓ Authenticated")
+        else:
+            print("  token.json: ✗ Not authenticated")
+        try:
+            service = calendar_manager.get_calendar_service()
+            if service:
+                managed_events = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
+                print(f"  Today's AI-managed events: {len(managed_events) if managed_events else 0}")
+            else:
+                print("  Calendar service: ✗ Cannot connect")
+        except Exception as e:
+            print(f"  Calendar service: ✗ Error: {e}")
 
     # File System Status
     print("\n📁 File System:")
@@ -128,12 +129,15 @@ class TaskSyncHandler(PatternMatchingEventHandler):
             print("No tasks found in current backlog. Skipping sync.")
             return
 
-        # 2. Get Calendar context
-        calendar_id = get_config_value("CALENDAR_ID", "primary")
-        service = calendar_manager.get_calendar_service()
-        # Fetch busy slots from YAML cache
-        calendar_agent = CalendarAgent()
-        busy_slots = calendar_agent.get_busy_slots_from_yml()
+        # 2. Get Calendar context (only if Google Calendar is enabled)
+        busy_slots = []
+        service = None
+        calendar_id = None
+        if is_google_calendar_enabled():
+            calendar_id = get_config_value("CALENDAR_ID", "primary")
+            service = calendar_manager.get_calendar_service()
+            calendar_agent = CalendarAgent()
+            busy_slots = calendar_agent.get_busy_slots_from_yml()
 
         # 3. AI Orchestration
         print("Consulting the AI scheduler...")
@@ -148,8 +152,11 @@ class TaskSyncHandler(PatternMatchingEventHandler):
 
         if schedule:
             # 4. Sync back to Google Calendar and Obsidian via Planning Agent
-            planning_agent = PlanningAgent(service, calendar_id)
-            planning_agent.execute_plan(schedule, event.src_path)
+            if is_google_calendar_enabled() and service:
+                planning_agent = PlanningAgent(service, calendar_id)
+                planning_agent.execute_plan(schedule, event.src_path)
+            else:
+                print("(Google Calendar disabled — schedule generated but not booked)")
             print("--- Sync Complete ---\n")
         else:
             print("Failed to generate schedule from AI.")

@@ -66,6 +66,9 @@ def search_books(query: str):
 @tool
 def list_calendar_events(days: int = 1):
     """Lists scheduled events from Google Calendar for the next N days."""
+    from config_utils import is_google_calendar_enabled
+    if not is_google_calendar_enabled():
+        return "Google Calendar is disabled. Set ENABLE_GOOGLE_CALENDAR=true in .config to enable."
     service = calendar_manager.get_calendar_service()
     if not service: return "Calendar service not available."
     calendar_id = get_config_value("CALENDAR_ID", "primary")
