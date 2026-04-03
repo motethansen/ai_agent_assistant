@@ -1,7 +1,7 @@
 # Product Backlog — AI Agent Assistant
 
 > Maintained by: Product Owner + Scrum Master
-> Last updated: 2026-04-02
+> Last updated: 2026-04-03
 > Format: ID | Priority | Story | Acceptance Criteria | Estimate | Status
 
 ---
@@ -418,14 +418,14 @@
 #### BLI-038 — NanoClaw: containerise LogSeqAgent as isolated Skill
 - **Story**: As a developer, I want LogSeqAgent to run inside an isolated NanoClaw Skill container so that journal and page access is sandboxed from the host
 - **Acceptance Criteria**:
-  - [ ] `nanoclaw/skills/logseq_skill/` directory with `skill.yaml` and `Dockerfile`
-  - [ ] Skill mounts only `LOGSEQ_DIR` as read-only by default; read/write when `--write` flag passed (for `/add-task`, mark-done)
-  - [ ] Supports actions: `list-later`, `add-task`, `mark-done` — JSON output for each
+  - [x] `nanoclaw/skills/logseq_skill/` directory with `skill.yaml` and `Dockerfile`
+  - [x] Skill mounts only `LOGSEQ_DIR` as read-only by default; read/write when `--write` flag passed (for `/add-task`, mark-done)
+  - [x] Supports actions: `list-later`, `add-task`, `mark-done` — JSON output for each
   - [ ] `cron_job.py` — `run_logseq_later_agent()` invokes the Skill via subprocess when NanoClaw is available
-  - [ ] Same fallback behaviour as BLI-037 — direct import if NanoClaw not present
+  - [x] Same fallback behaviour as BLI-037 — direct import if NanoClaw not present
 - **Epic**: E15
 - **Estimate**: M
-- **Status**: 📋 Backlog
+- **Status**: 🚧 Mostly done — 2026-04-03 (T06-03). NanoClaw LogSeq skill shipped with additional `sync-to-obsidian` action and full test coverage; cron integration remains open.
 - **Notes**: Depends on BLI-037 (Dockerfile base image and NanoClaw compose setup)
 
 #### BLI-039 — Universal Task Sync via n8n workflow
@@ -540,7 +540,7 @@ Sprint-06 introduces the distributed, containerised architecture: LM Studio as a
 |------|-----|-------|----------|-------|-------|------------|
 | T06-01 | BLI-036 | LM Studio CLI integration — health check, `.config` keys, `/status` row | M | dev-1 | Inference | — |
 | T06-02 | BLI-037 | NanoClaw ObsidianAgent Skill — Dockerfile, `skill.yaml`, volume mount, JSON interface | L | dev-2 | Containers | — |
-| T06-03 | BLI-038 | NanoClaw LogSeqAgent Skill — list-later, add-task, mark-done actions | M | dev-2 | Containers | T06-02 |
+| T06-03 | BLI-038 | NanoClaw LogSeqAgent Skill — list-later, add-task, mark-done actions | M | dev-2 | Containers | T06-02 | ✅ Done 2026-04-03 |
 | T06-04 | BLI-039 | Universal Task Sync n8n workflow — conflict rules, `trigger_task_sync()`, `/sync-universal` | L | dev-3 | Data flows | BLI-030 (Sprint-05) |
 | T06-05 | BLI-040 | CLI Router — `route()`, `send_to_n8n()`, main.py/cli_commands.py delegation layer | L | dev-1 | Router | T06-02, T06-03 |
 
@@ -562,6 +562,7 @@ Sprint-06 start date: TBD (awaiting Sprint-05 completion and PO confirmation)
 
 | Date | Changed by | Change |
 |------|------------|--------|
+| 2026-04-03 | Scrum Master | Marked T06-03/BLI-038 mostly done after NanoClaw LogSeq skill delivery; noted remaining cron integration gap and added Sprint-06 execution status. |
 | 2026-04-03 | Scrum Master | Added Epics E14–E17 and BLI-036–040 — LM Studio, NanoClaw containerisation, Universal Task Sync, CLI Router. Sprint-06 placeholder added. |
 | 2026-04-02 | Product Owner | Added BLI-033, BLI-034, BLI-035 — Google Tasks two-way sync (ADR-007). Sprint-05 updated with Tasks track. |
 | 2026-04-02 | Product Owner | Added BLI-030, BLI-031, BLI-032 — local ICS calendar engine replaces Google Calendar API (ADR-006). Sprint-05 placeholder added. |

@@ -1,0 +1,17 @@
+name: logseq_skill
+version: "1.0"
+description: "Sandboxed read/write access to the LogSeq vault"
+actions:
+  - list-later
+  - add-task
+  - mark-done
+  - sync-to-obsidian
+volumes:
+  logseq:
+    host_path: "${LOGSEQ_DIR}"
+    container_path: /logseq
+    mode: ro
+  workspace:
+    host_path: "${WORKSPACE_DIR}"
+    container_path: /vault
+    mode: ro

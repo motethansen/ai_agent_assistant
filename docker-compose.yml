@@ -36,6 +36,13 @@ services:
     profiles:
       - nanoclaw   # NOT built during normal `docker compose up` — only on explicit request
 
+  logseq_skill:
+    build:
+      context: ./nanoclaw/skills/logseq_skill
+    volumes: []
+    profiles:
+      - nanoclaw
+
 volumes:
   n8n_data:
 

@@ -10,6 +10,8 @@ Usage:
 
     result = run_skill("obsidian_skill", "find_tasks")
     result = run_skill("obsidian_skill", "create_file", "Note.md", "# Hello", write=True)
+    result = run_skill("logseq_skill", "list-later")
+    result = run_skill("logseq_skill", "sync-to-obsidian", write=True)
 """
 import json
 import subprocess
@@ -17,6 +19,37 @@ import subprocess
 from config_utils import get_config_value
 
 NANOCLAW_ENABLED = get_config_value("NANOCLAW_ENABLED", "false").lower() == "true"
+
+WRITE_ACTIONS = {
+    "obsidian_skill": {"create_file", "update_file"},
+    "logseq_skill": {"add-task", "mark-done", "sync-to-obsidian"},
+}
+
+
+def _build_mounts(skill_name: str, action: str, write: bool) -> list[str]:
+    mounts = []
+
+    if skill_name == "obsidian_skill":
+        workspace_dir = get_config_value("WORKSPACE_DIR", "")
+        mount_mode = "rw" if write else "ro"
+        mounts.extend(["--volume", f"{workspace_dir}:/vault:{mount_mode}"])
+        return mounts
+
+    if skill_name == "logseq_skill":
+        logseq_dir = get_config_value("LOGSEQ_DIR", "")
+        logseq_mode = "rw" if write else "ro"
+        mounts.extend(["--volume", f"{logseq_dir}:/logseq:{logseq_mode}"])
+
+        if action == "sync-to-obsidian":
+            workspace_dir = get_config_value("WORKSPACE_DIR", "")
+            mounts.extend(["--volume", f"{workspace_dir}:/vault:rw"])
+
+        return mounts
+
+    workspace_dir = get_config_value("WORKSPACE_DIR", "")
+    mount_mode = "rw" if write else "ro"
+    mounts.extend(["--volume", f"{workspace_dir}:/vault:{mount_mode}"])
+    return mounts
 
 
 def run_skill(skill_name: str, action: str, *args, write: bool = False) -> dict:
@@ -43,12 +76,14 @@ def run_skill(skill_name: str, action: str, *args, write: bool = False) -> dict:
             "Set NANOCLAW_ENABLED=true and rebuild the skill image to use containerised agents."
         )
 
-    workspace_dir = get_config_value("WORKSPACE_DIR", "")
-    mount_mode = "rw" if write else "ro"
+    if action in WRITE_ACTIONS.get(skill_name, set()) and not write:
+        raise RuntimeError(
+            f"Skill {skill_name}/{action} requires write=True to enable a read-write volume mount."
+        )
 
     cmd = [
         "docker", "compose", "run", "--rm",
-        "--volume", f"{workspace_dir}:/vault:{mount_mode}",
+        *_build_mounts(skill_name, action, write),
         skill_name,
         action,
         *[str(a) for a in args],

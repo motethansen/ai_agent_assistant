@@ -2,7 +2,7 @@
 
 **Sprint**: 06
 **Goal**: Introduce LM Studio as a second local inference backend, isolate ObsidianAgent and LogSeqAgent in NanoClaw containers, migrate Google Calendar auth to n8n Universal Task Sync, and reduce the Python host to a lightweight router.
-**Status**: 📋 Planned (awaiting Sprint-05 ICS engine + PO confirmation)
+**Status**: 🚧 In progress
 **Epics**: E14, E15, E16, E17
 
 ---
@@ -13,7 +13,7 @@
 |------|-----|-------|----------|-----------|------|
 | T06-01 | BLI-036 | LM Studio CLI integration — provider, health check, `/status` row | M | **Claude Code** | Wave 1 | ✅ Done 2026-04-03 |
 | T06-02 | BLI-037 | NanoClaw ObsidianAgent Skill — Dockerfile, skill.yaml, JSON interface | L | **Claude Code** | Wave 1 | ✅ Done 2026-04-03 |
-| T06-03 | BLI-038 | NanoClaw LogSeqAgent Skill — list-later, add-task, mark-done actions | M | **Codex** | Wave 2 |
+| T06-03 | BLI-038 | NanoClaw LogSeqAgent Skill — list-later, add-task, mark-done actions plus LogSeq→Obsidian sync | M | **Codex** | Wave 2 | ✅ Done 2026-04-03 |
 | T06-04 | BLI-039 | Universal Task Sync — n8n workflow JSON, conflict rules, `/sync-universal` | L | **Gemini** | Wave 3 |
 | T06-05 | BLI-040 | CLI Router — `route()`, `send_to_n8n()`, delegation layer in ai_orchestration.py | L | **Claude Code** | Wave 3 |
 
@@ -29,7 +29,7 @@ Wave 1 (parallel — start immediately):
   │ update_manager.py            │   │ docker-compose.yml                    │
   └──────────────────────────────┘   └──────────────────────────────────────┘
 
-Wave 2 (after T06-02 complete):
+Wave 2 (after T06-02 complete) — complete:
   ┌──────────────────────────────────────┐
   │ T06-03 NanoClaw LogSeqAgent (Codex)  │
   │ nanoclaw/skills/logseq_skill/        │
@@ -53,6 +53,21 @@ Wave 3 (after T06-02 + T06-03 + Sprint-05 ICS engine):
 
 ---
 
+## Current Status
+
+- Wave 1 complete: T06-01 and T06-02 done on 2026-04-03
+- Wave 2 complete: T06-03 done on 2026-04-03
+- T06-03 scope delivered:
+  - `list-later`, `add-task`, `mark-done`
+  - `sync-to-obsidian` action to move LogSeq `LATER` tasks into the Obsidian planner block
+  - host-side mount fix in `nanoclaw.client.run_skill()` so `logseq_skill` uses `LOGSEQ_DIR:/logseq`
+  - env-over-config precedence fix in `logseq_later_agent.py` for container execution
+- Wave 3 status:
+  - T06-04 still blocked by Sprint-05 ICS engine
+  - T06-05 is now unblocked from the NanoClaw dependency side
+
+---
+
 ## New Config Keys (Sprint-06)
 
 | Key | Default | Used by |
@@ -69,7 +84,7 @@ Wave 3 (after T06-02 + T06-03 + Sprint-05 ICS engine):
 - [ ] `pytest tests/ -v` — zero failures (run via `bash scripts/run_tests.sh`)
 - [ ] `python main.py` starts cleanly when all new config keys are `false`
 - [ ] `python scripts/status.py` shows LM Studio row
-- [ ] `nanoclaw/skills/` directory exists with both Skill manifests
+- [x] `nanoclaw/skills/` directory exists with both Skill manifests
 - [ ] `n8n-workflows/universal_task_sync.json` importable into n8n UI
 - [ ] All existing CLI commands unchanged when `NANOCLAW_ENABLED=false`
 - [ ] `config.example` updated with all three new keys (commented out)

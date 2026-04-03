@@ -11,7 +11,7 @@
 **Repository**: /home/michaelhansen/Projects/github/ai_agent_assistant
 **Started**: 2026-03-14
 **Product Owner**: Michael Hansen
-**Current Sprint**: Sprint-05 (planning) → Sprint-06 (architecture, proposed)
+**Current Sprint**: Sprint-06 (in progress)
 **Current Team**: Claude CLI (SM + dev agents)
 
 ---
@@ -32,7 +32,7 @@ A personal AI assistant that runs from the command line, using local LLMs (Ollam
 1. Read this file completely
 2. Read `.scrum/decisions.md` for architectural context
 3. Read `.scrum/backlog.md` for prioritized work
-4. Read current sprint plan: `.scrum/sprints/sprint-03/plan.md`
+4. Read current sprint plan: `.scrum/sprints/sprint-06/plan.md`
 5. Summarize your understanding to the Product Owner before starting
 
 ---
@@ -120,6 +120,7 @@ The following agents were added outside of the sprint process (commit `720f442`)
 
 | Date | Handed from | Handed to | Sprint | Notes |
 |------|------------|-----------|--------|-------|
+| 2026-04-03 | Dev agent | Scrum Master | Sprint-06 | T06-03 completed. NanoClaw LogSeq skill added with `list-later`, `add-task`, `mark-done`, and `sync-to-obsidian`; `run_skill()` mount routing fixed; full suite green. See `.scrum/sprints/sprint-06/handoff.md`. |
 | 2026-04-03 | Scrum Master | PO review | Sprint-06 | Sprint-06 architecture drafted. ADR-008/009/010 added. BLI-036–040 in backlog. Awaiting PO confirmation to plan Sprint-05 then Sprint-06. |
 | 2026-04-02 | Scrum Master | PO review | Sprint-04 | Sprint-04 complete. All 4 tasks done, 42 tests pass. Awaiting PO sign-off and Sprint-05 planning. |
 | 2026-03-27 | Scrum Master | PO review | Sprint-04 | Sprint-04 plan drafted. Awaiting PO review before dev starts. |
@@ -131,15 +132,16 @@ The following agents were added outside of the sprint process (commit `720f442`)
 
 ---
 
-### Sprint-06 Planning — Proposed (2026-04-03)
+### Sprint-06 Status — In Progress (2026-04-03)
 - **Goal**: Distributed, secure, containerised architecture — LM Studio, NanoClaw, n8n Universal Task Sync, CLI Router
-- **Status**: Backlog populated, ADRs drafted (ADR-008, ADR-009, ADR-010). Awaiting PO confirmation and Sprint-05 completion before dev starts.
+- **Status**: Wave 1 complete and Wave 2 complete. T06-01, T06-02, and T06-03 are done; Wave 3 remains blocked on Sprint-05 ICS engine for T06-04 and depends on completed NanoClaw skills for T06-05.
 - **Tracks**:
-  - **Inference**: T06-01 (LM Studio) — independent, can start any time
-  - **Containers/Security**: T06-02 → T06-03 → T06-05 (NanoClaw ObsidianAgent, LogSeqAgent, then Router)
-  - **Data flows**: T06-04 (Universal Task Sync) — requires Sprint-05 ICS engine
+  - **Inference**: T06-01 (LM Studio) — complete
+  - **Containers/Security**: T06-02 → T06-03 complete; T06-05 now unblocked from the NanoClaw side
+  - **Data flows**: T06-04 (Universal Task Sync) — still requires Sprint-05 ICS engine
 - **New config keys introduced**: `ENABLE_LM_STUDIO`, `LM_STUDIO_MODEL`, `NANOCLAW_ENABLED`
 - **Infrastructure requirement**: Docker must be running for NanoClaw Skills; n8n must be running for Universal Task Sync
+- **Wave 2 delivery note**: LogSeq NanoClaw now supports extracting `LATER` tasks from LogSeq and syncing them into the Obsidian planner block for manual organisation or later scheduling by the planning agent.
 
 ---
 

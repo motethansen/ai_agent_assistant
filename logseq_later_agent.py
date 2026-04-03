@@ -23,23 +23,29 @@ from config_utils import get_config_value
 from logseq_agent import LogSeqAgent
 
 
+def _config_or_env(key, default=None):
+    """Prefer an explicit environment override, then fall back to .config."""
+    return os.environ.get(key) or get_config_value(key, default)
+
+
 # ---------------------------------------------------------------------------
 # Core scan
 # ---------------------------------------------------------------------------
 
-def scan_all_later_tasks(days=None):
+def scan_later_tasks(days=None, logseq_dir=None):
     """
     Scan journals (last N days) and all pages for LATER tasks.
     Returns a deduplicated list of task dicts:
         {task, source, properties, date_key (for journal entries)}
     """
-    logseq_dir = get_config_value("LOGSEQ_DIR", None)
+    if logseq_dir is None:
+        logseq_dir = _config_or_env("LOGSEQ_DIR", "")
     if not logseq_dir or not os.path.exists(logseq_dir):
         print("[LogSeqLaterAgent] LOGSEQ_DIR not configured or not found.")
         return []
 
     if days is None:
-        days = int(get_config_value("LOGSEQ_JOURNAL_DAYS", "30"))
+        days = int(_config_or_env("LOGSEQ_JOURNAL_DAYS", "30"))
 
     agent = LogSeqAgent(logseq_dir)
     all_tasks = []
@@ -66,6 +72,11 @@ def scan_all_later_tasks(days=None):
     return deduped
 
 
+def scan_all_later_tasks(days=None):
+    """Backward-compatible wrapper around scan_later_tasks()."""
+    return scan_later_tasks(days=days)
+
+
 # ---------------------------------------------------------------------------
 # Optional: write summary to Obsidian
 # ---------------------------------------------------------------------------
@@ -78,10 +89,10 @@ def write_summary_to_obsidian(tasks):
     if not tasks:
         return
 
-    vault = get_config_value("WORKSPACE_DIR", None)
+    vault = _config_or_env("WORKSPACE_DIR")
     if not vault:
         return
-    rel     = get_config_value("OBSIDIAN_PLANNER_FILE", "Planner.md")
+    rel     = _config_or_env("OBSIDIAN_PLANNER_FILE", "Planner.md")
     planner = os.path.join(vault, rel)
 
     today   = datetime.date.today().isoformat()
@@ -136,7 +147,7 @@ def run(write_to_obsidian=True, days=None):
     Run the LogSeq LATER scan.
     Returns list of task dicts.
     """
-    tasks = scan_all_later_tasks(days=days)
+    tasks = scan_later_tasks(days=days)
     if write_to_obsidian and tasks:
         write_summary_to_obsidian(tasks)
     return tasks
