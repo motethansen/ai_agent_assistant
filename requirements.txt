@@ -37,6 +37,8 @@ beautifulsoup4
 pyyaml
 requests
 
+icalendar
+
 # Rich Terminal UI & Input
 rich
 prompt_toolkit

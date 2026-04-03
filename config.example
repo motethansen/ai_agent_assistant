@@ -13,6 +13,13 @@ OLLAMA_HOST=http://localhost:11434
 WORKSPACE_DIR=/path/to/your/obsidian/vault
 LOGSEQ_DIR=/path/to/your/logseq/graph
 
+# Local ICS calendar (primary calendar — no credentials required)
+LOCAL_CALENDAR_FILE=datainput/local_calendar.ics
+
+# Google Tasks two-way sync
+ENABLE_GOOGLE_TASKS=false
+GOOGLE_TASKS_LIST=@default
+
 # Google Calendar (optional — needs credentials.json from Google Cloud Console)
 # Set ENABLE_GOOGLE_CALENDAR=true to allow any part of the system to contact Google Calendar.
 # When false (default), all Google Calendar API calls are skipped silently.

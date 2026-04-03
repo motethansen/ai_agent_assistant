@@ -209,6 +209,29 @@ To enable the `at` command on macOS:
 
     sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.atrun.plist
 
+## Calendar Sync
+
+The local calendar is stored at `datainput/local_calendar.ics` in RFC 5545 `.ics` format.
+
+Export from the CLI:
+
+```text
+/export-calendar
+/export-calendar ~/myfile.ics
+```
+
+Import the exported file into other calendar apps:
+
+- Google Calendar: Settings → Import → select the `.ics` file
+- Apple Calendar: File → Import → select the `.ics` file
+
+To pull events from Google Calendar into the local calendar, first export the calendar from Google as an `.ics` file, then import it in the assistant:
+
+```text
+/import-calendar
+/import-calendar ~/Downloads/google-calendar.ics
+```
+
 ## LM Studio
 
 [LM Studio](https://lmstudio.ai/) is an optional second local inference backend alongside Ollama.

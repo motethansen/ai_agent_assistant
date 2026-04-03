@@ -19,6 +19,7 @@ console = Console()
 
 CALENDAR_CACHE = "datainput/googlecalendar.yml"
 CACHE_MAX_AGE_HOURS = 6
+ICS_FILE = "datainput/local_calendar.ics"
 
 
 # ---------------------------------------------------------------------------
@@ -47,30 +48,30 @@ def _ensure_calendar_cache():
 
 def _load_calendar_events():
     """
-    Load events from YAML cache.
-
-    The cache written by CalendarAgent has the structure::
-
-        last_updated: <ISO string>
-        busy_slots:
-          - summary: Team standup
-            start:   2026-03-27T09:00:00
-            end:     2026-03-27T09:30:00
-            source_calendar: primary
-
-    Returns a list of event dicts (empty list if cache is missing/unreadable).
+    Load events from local ICS calendar (primary) or YAML cache (fallback).
+    Returns list of dicts: {summary, start, end, description}.
     """
+    # Primary: local ICS
+    try:
+        from local_calendar_agent import list_events
+        today = datetime.date.today()
+        far = today + datetime.timedelta(days=14)
+        events = list_events(start_date=today, end_date=far)
+        return [{"summary": e["summary"],
+                 "start":   e["start"],
+                 "end":     e["end"],
+                 "description": e.get("description", "")} for e in events]
+    except Exception:
+        pass
+
+    # Fallback: existing YAML cache (Google Calendar)
     if not os.path.exists(CALENDAR_CACHE):
         return []
-
     try:
-        with open(CALENDAR_CACHE, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        if not data:
-            return []
-        return data.get("busy_slots", []) or []
-    except Exception as e:
-        console.print(f"[yellow]Warning: could not read calendar cache: {e}[/yellow]")
+        with open(CALENDAR_CACHE, "r") as f:
+            data = yaml.safe_load(f) or {}
+        return data.get("busy_slots", data.get("events", [])) or []
+    except Exception:
         return []
 
 
@@ -202,13 +203,10 @@ def handle_today_view():
     """
     Render today's calendar events and tasks as a Rich table.
 
-    - Refreshes the YAML cache if it is missing or >6 h old.
     - Only tasks WITH a due_date equal to today (or overdue) are shown.
     - Overdue tasks are highlighted in red.
     - Events are sorted by start time, followed by tasks.
     """
-    _ensure_calendar_cache()
-
     today = datetime.date.today()
     today_str = today.isoformat()
     day_name = today.strftime("%A %-d %B %Y")
@@ -290,8 +288,6 @@ def handle_week_view():
     Counts events and tasks-with-due-dates per calendar day.
     Only tasks that have a due_date within the 7-day window are counted.
     """
-    _ensure_calendar_cache()
-
     today = datetime.date.today()
     end_date = today + datetime.timedelta(days=6)
 

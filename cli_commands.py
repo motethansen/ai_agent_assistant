@@ -435,6 +435,97 @@ def handle_universal_sync():
         print("[red]Universal Task Sync failed — check that n8n is running and the task-sync webhook is active[/red]")
 
 
+def handle_google_tasks():
+    """Pull tasks from Google Tasks → Obsidian; push done tasks back."""
+    from config_utils import get_config_value
+    if get_config_value("ENABLE_GOOGLE_TASKS", "false").lower() != "true":
+        print("⚠️   Google Tasks is disabled. Set ENABLE_GOOGLE_TASKS=true in .config")
+        return
+    try:
+        import google_tasks_agent
+        result = google_tasks_agent.run(sync_back=True)
+        pulled = result.get("pulled", 0) if result else 0
+        pushed = result.get("pushed", 0) if result else 0
+        print(f"✅ Pulled {pulled} new tasks, marked {pushed} complete in Google Tasks")
+    except Exception as e:
+        print(f"❌ Google Tasks sync failed: {e}")
+
+
+def handle_add_event():
+    """Interactive prompt to add an event to the local ICS calendar."""
+    from local_calendar_agent import add_event
+    import datetime
+    print("Add calendar event (local ICS)")
+    summary = input("  Event name: ").strip()
+    if not summary:
+        print("Cancelled.")
+        return
+    date_str = input("  Date (YYYY-MM-DD): ").strip()
+    start_str = input("  Start time (HH:MM): ").strip()
+    end_str   = input("  End time   (HH:MM): ").strip()
+    desc      = input("  Description (optional): ").strip() or None
+    try:
+        date = datetime.date.fromisoformat(date_str)
+        start_dt = datetime.datetime.combine(date, datetime.time.fromisoformat(start_str))
+        end_dt   = datetime.datetime.combine(date, datetime.time.fromisoformat(end_str))
+        uid = add_event(summary, start_dt, end_dt, description=desc)
+        print(f"✅ Event added (uid: {uid[:8]}…): {summary} on {date_str} {start_str}–{end_str}")
+    except Exception as e:
+        print(f"❌ Failed to add event: {e}")
+
+
+def handle_remove_event():
+    """List upcoming events and prompt user to remove one by index."""
+    from local_calendar_agent import list_events, remove_event
+    import datetime
+    today = datetime.date.today()
+    events = list_events(start_date=today, end_date=today + datetime.timedelta(days=30))
+    if not events:
+        print("No upcoming events in the next 30 days.")
+        return
+    print("Upcoming events:")
+    for i, ev in enumerate(events):
+        print(f"  [{i}] {ev['start'][:10]}  {ev['summary']}")
+    choice = input("  Enter number to remove (or Enter to cancel): ").strip()
+    if not choice:
+        print("Cancelled.")
+        return
+    try:
+        ev = events[int(choice)]
+        removed = remove_event(uid=ev["uid"])
+        print(f"✅ Removed: {ev['summary']}")
+    except (ValueError, IndexError) as e:
+        print(f"❌ Invalid selection: {e}")
+
+
+def handle_export_calendar(args=None):
+    from local_calendar_agent import export_calendar, list_events
+    import datetime
+    dest = args[0] if args else None
+    try:
+        path = export_calendar(dest)
+        count = len(list_events(datetime.date(2000, 1, 1), datetime.date(2099, 12, 31)))
+        print(f"✅ Exported {count} events to {path}")
+    except Exception as e:
+        print(f"❌ Export failed: {e}")
+
+
+def handle_import_calendar(args=None):
+    from local_calendar_agent import import_calendar
+    if not args:
+        src = input("  Path to .ics file: ").strip()
+    else:
+        src = args[0]
+    if not src:
+        print("Cancelled.")
+        return
+    try:
+        imported, skipped = import_calendar(src)
+        print(f"✅ Imported {imported} new events ({skipped} duplicates skipped)")
+    except Exception as e:
+        print(f"❌ Import failed: {e}")
+
+
 def handle_chat_mode(obsidian_file):
     """
     Starts an interactive CLI chat loop with slash commands and Rich UI.
@@ -494,6 +585,7 @@ def handle_chat_mode(obsidian_file):
                     chat_ui.render_warning("Invalid command. Type /commands for help.")
                     continue
                 command = parts[0].lower()
+                args = parts[1:]
 
                 if command in ("exit", "quit"):
                     chat_ui.render_info("Goodbye!")
@@ -856,6 +948,16 @@ def handle_chat_mode(obsidian_file):
                 elif command == "week":
                     from terminal_views import handle_week_view
                     handle_week_view()
+                elif command == "add-event":
+                    handle_add_event()
+                elif command == "remove-event":
+                    handle_remove_event()
+                elif command == "export-calendar":
+                    handle_export_calendar(args)
+                elif command == "import-calendar":
+                    handle_import_calendar(args)
+                elif command == "google-tasks":
+                    handle_google_tasks()
                 else:
                     chat_ui.render_warning(f"Unknown command: /{command}. Type /commands for help.")
 

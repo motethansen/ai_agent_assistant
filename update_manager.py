@@ -3,6 +3,7 @@ import re
 import subprocess
 import json
 import datetime
+import time
 import requests
 from config_utils import get_config_value, is_google_calendar_enabled
 
@@ -71,17 +72,22 @@ def check_lm_studio():
         return {"status": "error", "message": f"LM Studio is not reachable: {e}"}
 
 
+def check_local_calendar():
+    """Local ICS calendar file exists and is readable."""
+    ics_path = get_config_value("LOCAL_CALENDAR_FILE", "datainput/local_calendar.ics")
+    if not os.path.exists(ics_path):
+        return {"status": "missing", "message": f"No local calendar at {ics_path} — run /add-event to create it"}
+    try:
+        age_hours = (time.time() - os.path.getmtime(ics_path)) / 3600
+        size = os.path.getsize(ics_path)
+        return {"status": "ok", "message": f"ICS file: {size} bytes, last modified {age_hours:.1f}h ago"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 def check_google_calendar():
-    """datainput/googlecalendar.yml exists; return age in hours. Skipped if ENABLE_GOOGLE_CALENDAR=false."""
-    if not is_google_calendar_enabled():
-        return {"status": "disabled", "message": "Google Calendar disabled (ENABLE_GOOGLE_CALENDAR=false)"}
-    path = os.path.join("datainput", "googlecalendar.yml")
-    if not os.path.exists(path):
-        return {"status": "error", "message": "datainput/googlecalendar.yml missing"}
-    age_hours = (datetime.datetime.now().timestamp() - os.path.getmtime(path)) / 3600
-    if age_hours > 6:
-        return {"status": "warning", "message": f"Last updated {age_hours:.1f}h ago", "age_hours": round(age_hours, 2)}
-    return {"status": "ok", "message": f"Updated {age_hours:.1f}h ago", "age_hours": round(age_hours, 2)}
+    """Local ICS calendar check (Google Calendar replaced by local ICS)."""
+    return check_local_calendar()
 
 
 def check_logseq_dir():
@@ -148,6 +154,24 @@ def check_reminders_sync():
     return {"status": "ok", "message": f"Last synced {age_hours:.1f}h ago", "age_hours": round(age_hours, 2)}
 
 
+def check_google_tasks():
+    """Google Tasks sync status — disabled check if ENABLE_GOOGLE_TASKS=false."""
+    enabled = get_config_value("ENABLE_GOOGLE_TASKS", "false").lower() == "true"
+    if not enabled:
+        return {"status": "disabled", "message": "ENABLE_GOOGLE_TASKS=false"}
+    synced_file = "datainput/synced_google_tasks.json"
+    if not os.path.exists(synced_file):
+        return {"status": "not_run", "message": "synced_google_tasks.json not found — run /google-tasks"}
+    age_hours = (time.time() - os.path.getmtime(synced_file)) / 3600
+    try:
+        with open(synced_file) as f:
+            data = json.load(f)
+        count = len(data)
+        return {"status": "ok", "message": f"{count} tasks tracked, last sync {age_hours:.1f}h ago"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 def run_all_checks():
     # Attempt to start services if they are down
     if os.path.exists("scripts/manage_services.sh"):
@@ -160,11 +184,12 @@ def run_all_checks():
         "lm_studio": check_lm_studio(),
         "venv": check_venv_health(),
         "gemini": check_gemini(),
-        "google_calendar": check_google_calendar(),
+        "local_calendar": check_local_calendar(),
         "logseq_dir": check_logseq_dir(),
         "obsidian_vault": check_obsidian_vault(),
         "cron_last_run": check_cron_last_run(),
         "reminders_sync": check_reminders_sync(),
+        "google_tasks": check_google_tasks(),
     }
 
     os.makedirs("logs", exist_ok=True)

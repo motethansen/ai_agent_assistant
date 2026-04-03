@@ -115,6 +115,25 @@ def run_logseq_later_agent():
         return []
 
 
+def run_google_tasks_agent():
+    """Pull Google Tasks → Obsidian, push Obsidian completions → Google Tasks."""
+    enabled = get_config_value("ENABLE_GOOGLE_TASKS", "false").lower() == "true"
+    if not enabled:
+        print(f"[{_ts()}] google_tasks: ENABLE_GOOGLE_TASKS=false — skipping")
+        return
+    print(f"\n[{_ts()}] === Google Tasks Agent ===")
+    try:
+        import google_tasks_agent
+        result = google_tasks_agent.run(sync_back=True)
+        pulled = result.get("pulled", 0) if result else 0
+        pushed = result.get("pushed", 0) if result else 0
+        print(f"[{_ts()}] google_tasks: pulled {pulled} tasks, pushed {pushed} completions")
+        return result
+    except Exception as e:
+        print(f"[{_ts()}] google_tasks: error — {e}")
+        return None
+
+
 def run_calendar_planning_agent():
     print(f"\n[{_ts()}] === Calendar Planning Agent (Gemini) ===")
     gemini_enabled = get_config_value("ENABLE_GEMINI", "false").lower() == "true"
@@ -198,12 +217,13 @@ def run_health_checks():
 AGENT_MAP = {
     "datainput":   run_datainput_agent,
     "logseq":      run_logseq_later_agent,
+    "google_tasks": run_google_tasks_agent,
     "calendar":    run_calendar_planning_agent,
     "legacy_sync": run_legacy_calendar_sync,
     "health":      run_health_checks,
 }
 
-ALL_AGENTS = ["datainput", "logseq", "calendar", "legacy_sync", "health"]
+ALL_AGENTS = ["datainput", "logseq", "google_tasks", "calendar", "legacy_sync", "health"]
 
 
 def main():
