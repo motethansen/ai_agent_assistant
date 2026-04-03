@@ -5,6 +5,10 @@
 OLLAMA_MODEL=llama3:latest
 OLLAMA_HOST=http://localhost:11434
 
+# LM Studio (optional — download from https://lmstudio.ai, load a model, enable local server on port 1234)
+# ENABLE_LM_STUDIO=false
+# LM_STUDIO_MODEL=your-model-name-here
+
 # Your notes directories
 WORKSPACE_DIR=/path/to/your/obsidian/vault
 LOGSEQ_DIR=/path/to/your/logseq/graph

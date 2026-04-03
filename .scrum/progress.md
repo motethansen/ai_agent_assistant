@@ -11,7 +11,7 @@
 **Repository**: /home/michaelhansen/Projects/github/ai_agent_assistant
 **Started**: 2026-03-14
 **Product Owner**: Michael Hansen
-**Current Sprint**: Sprint-04 (complete — awaiting Sprint-05 planning)
+**Current Sprint**: Sprint-05 (planning) → Sprint-06 (architecture, proposed)
 **Current Team**: Claude CLI (SM + dev agents)
 
 ---
@@ -120,6 +120,7 @@ The following agents were added outside of the sprint process (commit `720f442`)
 
 | Date | Handed from | Handed to | Sprint | Notes |
 |------|------------|-----------|--------|-------|
+| 2026-04-03 | Scrum Master | PO review | Sprint-06 | Sprint-06 architecture drafted. ADR-008/009/010 added. BLI-036–040 in backlog. Awaiting PO confirmation to plan Sprint-05 then Sprint-06. |
 | 2026-04-02 | Scrum Master | PO review | Sprint-04 | Sprint-04 complete. All 4 tasks done, 42 tests pass. Awaiting PO sign-off and Sprint-05 planning. |
 | 2026-03-27 | Scrum Master | PO review | Sprint-04 | Sprint-04 plan drafted. Awaiting PO review before dev starts. |
 | 2026-03-15 | Dev agents | Scrum Master | Sprint-03 | All Sprint-03 tasks verified complete. Commit pending PO sign-off. |
@@ -127,6 +128,18 @@ The following agents were added outside of the sprint process (commit `720f442`)
 | 2026-03-15 | Dev agents | Scrum Master | Sprint-02 | All Sprint-02 tasks verified complete. Committed c12f8ba. |
 | 2026-03-15 | Scrum Master (review) | Dev agents | Sprint-01 | File write permissions resolved. All 7 tasks applied and committed b445238. |
 | 2026-03-14 | Product Owner (manual) | Claude CLI agents | Sprint-01 | Initial scrum setup |
+
+---
+
+### Sprint-06 Planning — Proposed (2026-04-03)
+- **Goal**: Distributed, secure, containerised architecture — LM Studio, NanoClaw, n8n Universal Task Sync, CLI Router
+- **Status**: Backlog populated, ADRs drafted (ADR-008, ADR-009, ADR-010). Awaiting PO confirmation and Sprint-05 completion before dev starts.
+- **Tracks**:
+  - **Inference**: T06-01 (LM Studio) — independent, can start any time
+  - **Containers/Security**: T06-02 → T06-03 → T06-05 (NanoClaw ObsidianAgent, LogSeqAgent, then Router)
+  - **Data flows**: T06-04 (Universal Task Sync) — requires Sprint-05 ICS engine
+- **New config keys introduced**: `ENABLE_LM_STUDIO`, `LM_STUDIO_MODEL`, `NANOCLAW_ENABLED`
+- **Infrastructure requirement**: Docker must be running for NanoClaw Skills; n8n must be running for Universal Task Sync
 
 ---
 

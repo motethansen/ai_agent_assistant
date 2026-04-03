@@ -23,6 +23,10 @@
 | E11 | Terminal Task Visibility | /today, /week calendar view, and terminal reminders via at/osascript | Sprint-04 |
 | E12 | Local ICS Calendar Engine | Replace Google Calendar API with local RFC 5545 ICS file — add, remove, export, import events | Sprint-05 |
 | E13 | Google Tasks Two-Way Sync | Pull tasks from Google Tasks into Obsidian; push Obsidian completions back to Google Tasks | Sprint-05 |
+| E14 | LM Studio Local Inference | Integrate LM Studio CLI as an alternative local inference backend alongside Ollama | Sprint-06 |
+| E15 | NanoClaw Agent Containerisation | Run ObsidianAgent and LogSeqAgent as isolated NanoClaw Skills to prevent host filesystem risk | Sprint-06 |
+| E16 | Universal Task Sync via n8n | Use n8n as middleware for conflict resolution between local .md files and Google Calendar | Sprint-06 |
+| E17 | CLI Router Simplification | Reduce main.py + ai_orchestration.py to lightweight router — delegate reasoning to NanoClaw, data-flows to n8n | Sprint-06 |
 
 ---
 
@@ -377,6 +381,88 @@
 
 ---
 
+---
+
+### Sprint-06 Items
+
+#### BLI-036 — LM Studio CLI integration
+- **Story**: As a user, I want LM Studio to serve as a local inference backend so I can use its model management UI while still driving inference from the Python CLI
+- **Acceptance Criteria**:
+  - [ ] `ai_orchestration.py` supports `provider=lmstudio` — OpenAI-compatible HTTP calls to `localhost:1234/v1`
+  - [ ] `ENABLE_LM_STUDIO=false` in `.config`; when true, LM Studio is added to the fallback chain between Ollama and Gemini
+  - [ ] `LM_STUDIO_MODEL` in `.config` — sets the active model name (must match what is loaded in LM Studio)
+  - [ ] Health check before each request: `GET /v1/models` — if LM Studio is not running, falls through to next provider in chain; logs warning
+  - [ ] `update_manager.py` — new `check_lm_studio()` health check: server reachable, active model name, response latency
+  - [ ] `/status` dashboard updated to show LM Studio row
+  - [ ] `config.example` updated with commented-out `ENABLE_LM_STUDIO`, `LM_STUDIO_MODEL` entries
+  - [ ] `INSTALL.md` updated: how to start LM Studio server, enable the API server in LM Studio settings
+- **Epic**: E14
+- **Estimate**: M
+- **Status**: ✅ Done — 2026-04-03 (T06-01) — 4 tests pass, lmstudio in fallback chain, /status row added
+
+#### BLI-037 — NanoClaw: containerise ObsidianAgent as isolated Skill
+- **Story**: As a developer, I want ObsidianAgent to run inside an isolated NanoClaw Skill container so that file system access to the Obsidian vault is sandboxed and cannot affect host system integrity
+- **Acceptance Criteria**:
+  - [ ] `nanoclaw/skills/obsidian_skill/` directory created with `skill.yaml` manifest and `Dockerfile`
+  - [ ] Skill mounts only `WORKSPACE_DIR` as a read/write volume — no other host paths accessible
+  - [ ] `obsidian_agent.py` methods (`read_file`, `create_file`, `update_file`) remain unchanged — NanoClaw wraps the existing interface
+  - [ ] CLI host code calls the Skill via `nanoclaw run obsidian_skill <action> <args>` (subprocess) — no direct Python import needed at runtime
+  - [ ] Skill returns JSON to stdout; host code parses and prints result
+  - [ ] `docker-compose.yml` updated with `nanoclaw` service and volume definitions
+  - [ ] Fallback: if NanoClaw is not installed, code falls back to direct `obsidian_agent.py` import with a warning
+  - [ ] `INSTALL.md` — "NanoClaw Setup" section: prerequisites, `docker compose build nanoclaw`, test command
+- **Epic**: E15
+- **Estimate**: L
+- **Status**: ✅ Done — 2026-04-03 (T06-02) — 11 tests pass, Dockerfile + skill_runner + client, NANOCLAW_ENABLED fallback verified
+
+#### BLI-038 — NanoClaw: containerise LogSeqAgent as isolated Skill
+- **Story**: As a developer, I want LogSeqAgent to run inside an isolated NanoClaw Skill container so that journal and page access is sandboxed from the host
+- **Acceptance Criteria**:
+  - [ ] `nanoclaw/skills/logseq_skill/` directory with `skill.yaml` and `Dockerfile`
+  - [ ] Skill mounts only `LOGSEQ_DIR` as read-only by default; read/write when `--write` flag passed (for `/add-task`, mark-done)
+  - [ ] Supports actions: `list-later`, `add-task`, `mark-done` — JSON output for each
+  - [ ] `cron_job.py` — `run_logseq_later_agent()` invokes the Skill via subprocess when NanoClaw is available
+  - [ ] Same fallback behaviour as BLI-037 — direct import if NanoClaw not present
+- **Epic**: E15
+- **Estimate**: M
+- **Status**: 📋 Backlog
+- **Notes**: Depends on BLI-037 (Dockerfile base image and NanoClaw compose setup)
+
+#### BLI-039 — Universal Task Sync via n8n workflow
+- **Story**: As a user, I want n8n to act as the conflict-resolution middleware between my local .md task files and Google Calendar so that duplicate or conflicting entries are reconciled automatically rather than manually
+- **Acceptance Criteria**:
+  - [ ] `n8n-workflows/universal_task_sync.json` — n8n workflow importable via UI
+  - [ ] Workflow trigger: webhook `POST /webhook/task-sync` with payload `{source, tasks[], calendar_events[]}`
+  - [ ] Conflict rules (implemented as n8n Function nodes):
+    - Local `.md` task with matching calendar event title → no new calendar entry created; log `skipped (exists)`
+    - Local task without calendar match → create calendar event via Google Calendar node (if `ENABLE_GOOGLE_CALENDAR=true`)
+    - Calendar event without local task → emit `POST /webhook/add-task` to create the task in LogSeq
+  - [ ] Python side: `n8n_client.py` gains `trigger_task_sync(tasks, events)` helper — builds payload, calls `trigger("task-sync", payload)`
+  - [ ] `/sync-universal` CLI command triggers the full pipeline: load tasks from Obsidian+LogSeq, load events from local ICS, call `trigger_task_sync()`
+  - [ ] `api_server.py` — `POST /webhook/add-task` already exists (BLI-023) — verified it handles the n8n→Python direction
+  - [ ] `README_N8N.md` updated: import instructions, credential setup (Google Calendar node), conflict rule explanation
+- **Epic**: E16
+- **Estimate**: L
+- **Status**: 📋 Backlog
+- **Notes**: Depends on BLI-030 (local ICS engine) for the local calendar side
+
+#### BLI-040 — CLI Router: main.py + ai_orchestration.py as lightweight delegators
+- **Story**: As a developer, I want main.py and ai_orchestration.py reduced to a thin routing layer so that heavy reasoning is delegated to NanoClaw Skills and data-flows are delegated to n8n, keeping the Python host code minimal
+- **Acceptance Criteria**:
+  - [ ] `ai_orchestration.py` — `route(task_type, prompt)` function: if `NANOCLAW_ENABLED=true` and task requires file I/O (obsidian, logseq), dispatch to NanoClaw Skill; otherwise route through existing LLM chain
+  - [ ] `ai_orchestration.py` — `send_to_n8n(flow_type, payload)` helper: wraps `n8n_client.trigger()` with standard payload envelope `{flow_type, payload, timestamp}`
+  - [ ] `main.py` chat loop: all commands that previously called agent functions directly now call `route()` — no direct agent imports in `main.py`
+  - [ ] `cli_commands.py` — commands that trigger data flows (`/sync-logseq`, `/sync-universal`, `/plan`) call `send_to_n8n()` instead of direct agent functions
+  - [ ] `NANOCLAW_ENABLED=false` in `.config` — when false, router falls back to existing direct-import behaviour (zero regression)
+  - [ ] Architecture diagram added to `decisions.md` (ADR-011) showing Router → NanoClaw / n8n split
+  - [ ] All existing CLI commands and tests pass unchanged when `NANOCLAW_ENABLED=false`
+- **Epic**: E17
+- **Estimate**: L
+- **Status**: 📋 Backlog
+- **Notes**: Depends on BLI-037 and BLI-038 (NanoClaw Skills must exist before router can dispatch to them)
+
+---
+
 ## Deferred / Icebox
 
 | ID | Title | Reason deferred | Date |
@@ -446,12 +532,37 @@ Sprint-05 delivers two parallel tracks: local ICS calendar engine (ADR-006) and 
 
 Sprint-05 start date: TBD (awaiting PO confirmation)
 
+## Sprint-06 Placeholder
+
+Sprint-06 introduces the distributed, containerised architecture: LM Studio as an additional local inference backend, NanoClaw for isolated agent execution, n8n Universal Task Sync, and CLI Router simplification.
+
+| Task | BLI | Title | Estimate | Agent | Track | Depends on |
+|------|-----|-------|----------|-------|-------|------------|
+| T06-01 | BLI-036 | LM Studio CLI integration — health check, `.config` keys, `/status` row | M | dev-1 | Inference | — |
+| T06-02 | BLI-037 | NanoClaw ObsidianAgent Skill — Dockerfile, `skill.yaml`, volume mount, JSON interface | L | dev-2 | Containers | — |
+| T06-03 | BLI-038 | NanoClaw LogSeqAgent Skill — list-later, add-task, mark-done actions | M | dev-2 | Containers | T06-02 |
+| T06-04 | BLI-039 | Universal Task Sync n8n workflow — conflict rules, `trigger_task_sync()`, `/sync-universal` | L | dev-3 | Data flows | BLI-030 (Sprint-05) |
+| T06-05 | BLI-040 | CLI Router — `route()`, `send_to_n8n()`, main.py/cli_commands.py delegation layer | L | dev-1 | Router | T06-02, T06-03 |
+
+**Dependency order**:
+- T06-01 is independent — run in parallel with T06-02
+- T06-02 → T06-03 → T06-05 (Containers track, then Router)
+- T06-04 requires Sprint-05 ICS track (BLI-030) to be complete
+- T06-01 and T06-04 are fully independent — can run in parallel
+
+**Security & Infrastructure category** (new in Sprint-06):
+- T06-02 and T06-03 form the "Security & Infrastructure" workstream — sandboxed container execution
+- All NanoClaw Skills follow the pattern: read-only mounts by default, read/write only when explicitly flagged, no host networking beyond the mounted volume
+
+Sprint-06 start date: TBD (awaiting Sprint-05 completion and PO confirmation)
+
 ---
 
 ## Changelog
 
 | Date | Changed by | Change |
 |------|------------|--------|
+| 2026-04-03 | Scrum Master | Added Epics E14–E17 and BLI-036–040 — LM Studio, NanoClaw containerisation, Universal Task Sync, CLI Router. Sprint-06 placeholder added. |
 | 2026-04-02 | Product Owner | Added BLI-033, BLI-034, BLI-035 — Google Tasks two-way sync (ADR-007). Sprint-05 updated with Tasks track. |
 | 2026-04-02 | Product Owner | Added BLI-030, BLI-031, BLI-032 — local ICS calendar engine replaces Google Calendar API (ADR-006). Sprint-05 placeholder added. |
 | 2026-04-02 | Scrum Master | Marked Sprint-04 items Done: BLI-026 (T04-01), BLI-027 (T04-02), BLI-028 (T04-03), BLI-029 (T04-04). Sprint-04 complete. |

@@ -29,6 +29,13 @@ services:
       - agent_net
     restart: unless-stopped
 
+  obsidian_skill:
+    build:
+      context: ./nanoclaw/skills/obsidian_skill
+    volumes: []  # volumes are injected at runtime via `docker compose run --volume`
+    profiles:
+      - nanoclaw   # NOT built during normal `docker compose up` — only on explicit request
+
 volumes:
   n8n_data:
 

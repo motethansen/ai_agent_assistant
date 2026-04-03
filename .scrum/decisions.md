@@ -155,6 +155,81 @@ When making a decision that affects:
 
 ---
 
+### ADR-008 — LM Studio as secondary local inference backend
+- **Date**: 2026-04-03
+- **Sprint**: Sprint-06
+- **Team**: Scrum Master (SM prompt)
+- **Status**: Proposed
+
+**Context**: Ollama is the primary local LLM backend. Some users prefer LM Studio for its GUI-based model management, quantisation selection, and hardware acceleration tuning. LM Studio exposes an OpenAI-compatible API on `localhost:1234/v1`, making integration straightforward.
+
+**Decision**: Add LM Studio as an optional provider in `ai_orchestration.py`. When `ENABLE_LM_STUDIO=true`, it is inserted into the fallback chain between Ollama and Gemini: `ollama → lmstudio → gemini → openai → claude`. A health check (`GET /v1/models`) runs before each request; if the server is not running, the chain falls through silently.
+
+**Reasoning**: Zero new dependencies — LM Studio's OpenAI-compatible endpoint means the `openai` SDK already installed handles the calls. Users who run LM Studio for UI management get automatic integration with no code duplication.
+
+**Consequences**:
+- `LM_STUDIO_MODEL` must match the currently loaded model in LM Studio exactly; drift between config and LM Studio UI will cause failures
+- Health check adds a small latency overhead (~50ms) before each call if LM Studio is enabled but not running
+- `/status` dashboard must show LM Studio status to make the health state visible
+
+**Affected files**: `ai_orchestration.py`, `update_manager.py`, `config.example`, `INSTALL.md`
+
+---
+
+### ADR-009 — NanoClaw Skills for sandboxed agent execution
+- **Date**: 2026-04-03
+- **Sprint**: Sprint-06
+- **Team**: Scrum Master (SM prompt)
+- **Status**: Proposed
+
+**Context**: ObsidianAgent and LogSeqAgent operate directly on host filesystem paths (`WORKSPACE_DIR`, `LOGSEQ_DIR`). A bug or prompt injection in the LLM response could cause unintended file writes, deletions, or path traversal to areas outside the intended vault. Running agents in isolated containers eliminates this risk.
+
+**Decision**: Wrap ObsidianAgent and LogSeqAgent as NanoClaw Skills. Each Skill is a Docker container with:
+- Only the relevant directory mounted as a volume (`WORKSPACE_DIR` or `LOGSEQ_DIR`)
+- Read-only by default; read/write only when the `--write` flag is explicitly passed
+- JSON output contract — host code parses stdout, never executes arbitrary container output
+- Invoked via `nanoclaw run <skill_name> <action> [args]` subprocess call from the Python host
+
+The Python host retains a fallback path: if NanoClaw is not installed, existing direct-import behaviour is used unchanged (gated on `NANOCLAW_ENABLED=false` in `.config`).
+
+**Reasoning**: Containers provide a hard boundary — even if an LLM generates a malicious file path, the container filesystem prevents it from reaching the host. The JSON interface prevents code injection via stdout. The fallback ensures zero regression for users who don't need the security layer.
+
+**Consequences**:
+- Docker must be running for NanoClaw Skills to operate — document clearly in `INSTALL.md`
+- Performance: container startup adds ~200–500ms per agent invocation — acceptable for non-real-time cron use; not suitable for interactive chat commands without pre-warming
+- NanoClaw Skill manifests (`skill.yaml`) must be versioned alongside agent code — any agent API change requires a corresponding Skill update
+
+**Affected files**: `nanoclaw/skills/obsidian_skill/` (new), `nanoclaw/skills/logseq_skill/` (new), `docker-compose.yml`, `cron_job.py`, `ai_orchestration.py`, `INSTALL.md`
+
+---
+
+### ADR-010 — n8n as Universal Task Sync middleware
+- **Date**: 2026-04-03
+- **Sprint**: Sprint-06
+- **Team**: Scrum Master (SM prompt)
+- **Status**: Proposed
+
+**Context**: Google Calendar auth (`credentials.json`, `token.json`) and retry logic currently live in `calendar_manager.py`. When conflicts arise between local `.md` tasks and calendar events (e.g. same task exists in both with different state), resolution is undefined. A dedicated n8n workflow centralises this orchestration and makes the conflict rules visible and editable without touching Python code.
+
+**Decision**: Build a `universal_task_sync.json` n8n workflow that receives a unified payload of local tasks and calendar events, applies conflict resolution rules as n8n Function nodes, and calls back into the Python API server for any write operations. Google Calendar auth and retry logic are handled entirely within n8n's Google Calendar nodes — removed from `calendar_manager.py`. Python CLI triggers the flow via `n8n_client.trigger("task-sync", payload)`.
+
+**Conflict resolution rules** (encoded in n8n, not Python):
+1. Local task + matching calendar event → skip calendar write, log `exists`
+2. Local task, no calendar match → create Google Calendar event via n8n node
+3. Calendar event, no local task → webhook back to `POST /webhook/add-task` → creates LogSeq task
+
+**Reasoning**: n8n's visual workflow makes conflict rules inspectable and modifiable without code changes. Moving Google Calendar auth to n8n eliminates `token.json` from the Python runtime — credentials are stored in n8n's encrypted credential store instead. n8n's built-in retry/backoff handles transient API failures better than the current Python implementation.
+
+**Consequences**:
+- n8n must be running (Docker) for Universal Task Sync to function — degrade gracefully (log warning, skip sync) when n8n is unreachable
+- Google Calendar credentials must be re-entered in n8n's credential UI — one-time migration from `token.json`
+- `calendar_manager.py` auth/retry code can be removed after migration; keep the module for legacy ICS import path only
+- `/sync-universal` CLI command requires n8n to be reachable — document this dependency clearly
+
+**Affected files**: `n8n-workflows/universal_task_sync.json` (new), `n8n_client.py`, `cli_commands.py`, `calendar_manager.py`, `api_server.py`, `README_N8N.md`
+
+---
+
 ### ADR-005 — Calendar views use YAML cache with auto-refresh
 - **Date**: 2026-03-27
 - **Sprint**: Sprint-04
@@ -180,7 +255,9 @@ When making a decision that affects:
 | Layer | Technology | Notes |
 |-------|-----------|-------|
 | LLM (primary) | Ollama (local) | HTTP to `localhost:11434`. Model: `qwen2.5:14b` |
+| LLM (secondary local) | LM Studio | OpenAI-compatible API on `localhost:1234/v1`. Optional — `ENABLE_LM_STUDIO=true`. See ADR-008. |
 | LLM (cloud fallback) | Gemini (`google-genai`), OpenAI, Claude (`anthropic`) | Used only when Ollama unavailable or `ROUTING_*` overrides |
+| Agent isolation | NanoClaw (Docker Skills) | Containerised ObsidianAgent + LogSeqAgent. Gated on `NANOCLAW_ENABLED=true`. See ADR-009. |
 | CLI / Terminal UI | Rich | `chat_ui.py`, status dashboard, `/today`, `/week` |
 | Web UI (optional) | Streamlit | `app.py` — not the primary interface |
 | Vector DB / RAG | Chroma via LangChain | `rag_agent.py` only — LangChain not used elsewhere |

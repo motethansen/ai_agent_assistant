@@ -42,6 +42,7 @@ MODELS_ENABLED = {
     "openai": get_config_value("ENABLE_OPENAI", "false").lower() == "true",
     "claude": get_config_value("ENABLE_CLAUDE", "false").lower() == "true",
     "ollama": get_config_value("ENABLE_OLLAMA", "true").lower() == "true",
+    "lmstudio": get_config_value("ENABLE_LM_STUDIO", "false").lower() == "true",
 }
 
 # --- Tools for the AI Agent ---
@@ -117,6 +118,33 @@ def list_ollama_models():
     except Exception:
         return []
 
+def is_lmstudio_running():
+    """Checks if the LM Studio local server is responding."""
+    try:
+        response = requests.get("http://localhost:1234/v1/models", timeout=2)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+def _call_lmstudio(prompt, system=None, model=None):
+    """Call LM Studio local server via the openai SDK pointed at http://localhost:1234/v1."""
+    try:
+        health = requests.get("http://localhost:1234/v1/models", timeout=2)
+        if health.status_code != 200:
+            raise RuntimeError("LM Studio local server is not reachable")
+    except requests.exceptions.RequestException:
+        raise RuntimeError("LM Studio local server is not reachable")
+
+    import openai
+    model_id = model or get_config_value("LM_STUDIO_MODEL", "local-model")
+    client = openai.OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    response = client.chat.completions.create(model=model_id, messages=messages)
+    return response.choices[0].message.content, f"lmstudio/{model_id}"
+
 def is_openai_available():
     """Checks if OpenAI API key is configured and enabled."""
     key = get_config_value("OPENAI_API_KEY", "")
@@ -152,6 +180,8 @@ def _is_model_available(model, try_start=False):
     """Check if a model backend is both enabled and reachable."""
     if model == "ollama":
         return MODELS_ENABLED.get("ollama", False) and is_ollama_running()
+    if model == "lmstudio":
+        return MODELS_ENABLED.get("lmstudio", False) and is_lmstudio_running()
     if model == "gemini":
         return MODELS_ENABLED.get("gemini", False) and api_key and "your_gemini" not in api_key
     if model == "openai":
@@ -178,7 +208,7 @@ def get_routing(task_type="chat", query=""):
     complexity = classify_complexity(query) if query else "simple"
 
     if complexity == "simple":
-        for model in ["ollama", "gemini"]:
+        for model in ["ollama", "lmstudio", "gemini"]:
             if _is_model_available(model, try_start=True):
                 return model
     else:
@@ -187,7 +217,7 @@ def get_routing(task_type="chat", query=""):
                 return model
 
     # Fallback through priority list
-    priority_str = get_config_value("LLM_PRIORITY", "ollama,gemini,openai,claude")
+    priority_str = get_config_value("LLM_PRIORITY", "ollama,lmstudio,gemini,openai,claude")
     for model in [m.strip().lower() for m in priority_str.split(",")]:
         if _is_model_available(model, try_start=True):
             return model
@@ -455,6 +485,9 @@ def generate(prompt, system=None, task_type="chat"):
     """
     from langchain_core.messages import SystemMessage, HumanMessage
     try:
+        model_name = get_routing(task_type, prompt)
+        if model_name == "lmstudio":
+            return _call_lmstudio(prompt, system=system)
         llm, model_name = get_llm(task_type, prompt)
         messages = []
         if system:
@@ -492,6 +525,8 @@ def generate_with(provider, prompt, system=None):
             llm = ChatOllama(model=model_id, base_url=host)
             response = llm.invoke(messages)
             return response.content, f"ollama/{model_id}"
+        elif provider == "lmstudio":
+            return _call_lmstudio(prompt, system=system)
         elif provider == "openai":
             from langchain_openai import ChatOpenAI
             model_id = get_config_value("OPENAI_MODEL", "gpt-4o-mini")
