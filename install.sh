@@ -301,6 +301,6 @@ if ! PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py; then
 fi
 
 echo -e "\n${GREEN}🎉 SUCCESS! AI Agent Assistant is installed.${NC}"
-echo -e "To start the dashboard, run: ${YELLOW}make run-ui${NC}"
-echo -e "To chat with your agent, run: ${YELLOW}make run-chat${NC}"
+echo -e "To start the assistant, run:   ${YELLOW}python main.py${NC}"
+echo -e "To run all tests:              ${YELLOW}make test${NC}"
 echo ""

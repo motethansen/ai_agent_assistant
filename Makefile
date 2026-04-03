@@ -18,8 +18,8 @@ run:
 
 # Interactive chat mode
 run-chat:
-	@echo "Starting AI Agent Assistant interactive chat..."
-	@.venv/bin/python3 main.py --chat
+	@echo "Starting AI Agent Assistant..."
+	@.venv/bin/python3 main.py
 
 # Launch the Streamlit UI
 run-ui:

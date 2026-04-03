@@ -19,20 +19,8 @@ def test_ai_functioning():
     print(f"Testing Chat ({routing_chat})...")
     prompt = "Reply with 'OK' if you can hear me."
 
-    response = ""
-    if routing_chat == "ollama":
-        response = ai_orchestration.ollama_generate(prompt)
-    else:
-        # Gemini logic
-        import google.genai as genai
-        try:
-            client = genai.Client(api_key=ai_orchestration.api_key)
-            resp = client.models.generate_content(model='gemini-flash-latest', contents=prompt)
-            response = resp.text
-        except:
-            response = "Gemini failed."
-
-    print(f"Chat Response: {response.strip()}")
+    response, model_used = ai_orchestration.generate(prompt)
+    print(f"Chat Response ({model_used}): {response.strip()}")
 
     # 3. Test Scheduling (Lightweight)
     print(f"Testing Scheduling ({routing_scheduling})...")
