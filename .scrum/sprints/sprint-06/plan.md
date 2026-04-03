@@ -14,8 +14,8 @@
 | T06-01 | BLI-036 | LM Studio CLI integration — provider, health check, `/status` row | M | **Claude Code** | Wave 1 | ✅ Done 2026-04-03 |
 | T06-02 | BLI-037 | NanoClaw ObsidianAgent Skill — Dockerfile, skill.yaml, JSON interface | L | **Claude Code** | Wave 1 | ✅ Done 2026-04-03 |
 | T06-03 | BLI-038 | NanoClaw LogSeqAgent Skill — list-later, add-task, mark-done actions plus LogSeq→Obsidian sync | M | **Codex** | Wave 2 | ✅ Done 2026-04-03 |
-| T06-04 | BLI-039 | Universal Task Sync — n8n workflow JSON, conflict rules, `/sync-universal` | L | **Gemini** | Wave 3 |
-| T06-05 | BLI-040 | CLI Router — `route()`, `send_to_n8n()`, delegation layer in ai_orchestration.py | L | **Claude Code** | Wave 3 |
+| T06-04 | BLI-039 | Universal Task Sync — n8n workflow JSON, conflict rules, `/sync-universal` | L | **Gemini** | Wave 3 | ✅ Done 2026-04-03 |
+| T06-05 | BLI-040 | CLI Router — `route()`, `send_to_n8n()`, delegation layer in ai_orchestration.py | L | **Claude Code** | Wave 3 | ✅ Done 2026-04-03 |
 
 ---
 

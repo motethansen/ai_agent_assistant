@@ -1,0 +1,123 @@
+{
+  "name": "Universal Task Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "task-sync",
+        "options": {},
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-trigger",
+      "name": "Task Sync Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const tasks = $json.body.tasks || [];\nconst events = $json.body.calendar_events || [];\n\nconst eventMap = {};\nevents.forEach(e => {\n  const key = e.summary.trim().toLowerCase();\n  eventMap[key] = e;\n});\n\nconst toCreate = [];\nconst skipped = [];\n\ntasks.forEach(t => {\n  const key = t.title.trim().toLowerCase();\n  if (eventMap[key]) {\n    skipped.push(t);\n  } else {\n    toCreate.push(t);\n  }\n});\n\nconst taskMap = {};\ntasks.forEach(t => {\n  const key = t.title.trim().toLowerCase();\n  taskMap[key] = t;\n});\n\nconst toAddLocally = [];\nevents.forEach(e => {\n  const key = e.summary.trim().toLowerCase();\n  if (!taskMap[key]) {\n    toAddLocally.push(e);\n  }\n});\n\nreturn [{\n  json: {\n    toCreate,\n    skipped,\n    toAddLocally,\n    task_count: tasks.length,\n    event_count: events.length\n  }\n}];"
+      },
+      "id": "classify-tasks",
+      "name": "Classify Tasks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/webhook/add-event",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "events",
+              "value": "={{$json.toCreate}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-events",
+      "name": "Create Calendar Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5678/webhook/add-task",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"description\": \"={{$json.summary}}\", \"source\": \"calendar\"}",
+        "options": {}
+      },
+      "id": "add-local-tasks",
+      "name": "Add Local Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({synced_at: new Date().toISOString(), created_events: $node['Classify Tasks'].json.toCreate.length, added_tasks: $node['Classify Tasks'].json.toAddLocally.length, skipped: $node['Classify Tasks'].json.skipped.length})}}",
+        "options": {}
+      },
+      "id": "sync-response",
+      "name": "Sync Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Task Sync Trigger": {
+      "main": [
+        [
+          {
+            "node": "Classify Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Tasks": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Events",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Add Local Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sync Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    "agent",
+    "sync",
+    "universal"
+  ]
+}

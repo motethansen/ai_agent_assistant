@@ -443,8 +443,8 @@
   - [ ] `README_N8N.md` updated: import instructions, credential setup (Google Calendar node), conflict rule explanation
 - **Epic**: E16
 - **Estimate**: L
-- **Status**: 📋 Backlog
-- **Notes**: Depends on BLI-030 (local ICS engine) for the local calendar side
+- **Status**: ✅ Done — 2026-04-03 (T06-04) — trigger_task_sync(), handle_universal_sync(), /sync-universal command, universal_task_sync.json (5 nodes), README_N8N.md updated, 4 tests pass. local_calendar_agent fallback gracefully handled.
+- **Notes**: Depends on BLI-030 (local ICS engine) for the local calendar side — ICS events degrade to empty list until Sprint-05
 
 #### BLI-040 — CLI Router: main.py + ai_orchestration.py as lightweight delegators
 - **Story**: As a developer, I want main.py and ai_orchestration.py reduced to a thin routing layer so that heavy reasoning is delegated to NanoClaw Skills and data-flows are delegated to n8n, keeping the Python host code minimal
@@ -458,7 +458,7 @@
   - [ ] All existing CLI commands and tests pass unchanged when `NANOCLAW_ENABLED=false`
 - **Epic**: E17
 - **Estimate**: L
-- **Status**: 📋 Backlog
+- **Status**: ✅ Done — 2026-04-03 (T06-05) — route(), send_to_n8n() in ai_orchestration.py; fire-and-forget n8n calls in sync_logseq_to_obsidian() and handle_morning_planning(); NANOCLAW_ENABLED=false verified zero regression; 6 tests pass
 - **Notes**: Depends on BLI-037 and BLI-038 (NanoClaw Skills must exist before router can dispatch to them)
 
 ---

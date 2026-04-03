@@ -554,6 +554,58 @@ def ollama_generate(prompt, model=None):
     except Exception as e:
         return f"Error: {e}"
 
+def route(task_type: str, prompt: str = None, action: str = None, args: list = None, **kwargs):
+    """
+    Route a task to a NanoClaw Skill (when NANOCLAW_ENABLED=true and task_type
+    is 'obsidian' or 'logseq') or to the existing LLM chain.
+
+    For Skill dispatch: returns the parsed JSON dict from run_skill().
+    For LLM dispatch: returns (response_text, model_name) from generate().
+    Falls back to LLM silently if NanoClaw raises RuntimeError.
+    """
+    import logging
+    _log = logging.getLogger(__name__)
+    nanoclaw_enabled = get_config_value("NANOCLAW_ENABLED", "false").lower() == "true"
+    args = args or []
+    write = kwargs.get("write", False)
+
+    if nanoclaw_enabled and task_type in ("obsidian", "logseq"):
+        try:
+            from nanoclaw.client import run_skill
+            return run_skill(f"{task_type}_skill", action, *args, write=write)
+        except RuntimeError as exc:
+            _log.warning("NanoClaw dispatch failed (%s/%s), falling back to LLM: %s",
+                         task_type, action, exc)
+
+    if prompt:
+        return generate(prompt, task_type=task_type)
+    return None
+
+
+def send_to_n8n(flow_type: str, payload: dict) -> bool:
+    """
+    Send a data-flow event to n8n with a standard envelope.
+    Returns True if accepted. Returns False silently if n8n is down — never raises.
+    """
+    import logging
+    import datetime as _dt
+    _log = logging.getLogger(__name__)
+    try:
+        from n8n_client import trigger, is_n8n_running
+        if not is_n8n_running():
+            _log.warning("send_to_n8n: n8n not reachable — '%s' not sent", flow_type)
+            return False
+        envelope = {
+            "flow_type": flow_type,
+            "sent_at": _dt.datetime.now().isoformat(),
+            **payload,
+        }
+        return trigger(flow_type, envelope)
+    except Exception as exc:
+        _log.warning("send_to_n8n error (%s): %s", flow_type, exc)
+        return False
+
+
 if __name__ == "__main__":
     test_tasks = [{"task": "Review WineDragons wireframes", "source": "Obsidian"}]
     test_busy = []

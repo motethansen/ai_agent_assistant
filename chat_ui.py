@@ -137,6 +137,7 @@ COMMAND_DESCRIPTIONS = {
     "add-task": "Add a LATER task to today's LogSeq journal  e.g. /add-task Write tests",
     "done": "Mark a matching task done in LogSeq or Obsidian  e.g. /done Write tests",
     "sync-logseq": "Sync LogSeq tasks to Obsidian Inbox",
+    "sync-universal": "Sync local tasks and calendar through n8n conflict resolution",
     "review": "Show tasks completed today (file scan, no LLM)",
     "models": "Show and select installed Ollama models",
     "sync": "Manually trigger task sync from Obsidian and Reminders",

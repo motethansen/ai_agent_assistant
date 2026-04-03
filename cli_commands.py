@@ -112,6 +112,13 @@ def handle_morning_planning(obsidian_path):
                 print("ℹ️  Enable ENABLE_GOOGLE_CALENDAR=true in .config to book these to a calendar.")
     else:
         print("Failed to generate schedule suggestion.")
+    # Fire-and-forget n8n notification — safe if n8n is down
+    try:
+        import datetime as _dt
+        from ai_orchestration import send_to_n8n
+        send_to_n8n("morning-plan", {"plan_date": str(_dt.date.today())})
+    except Exception:
+        pass
 
 
 def handle_planning_session(obsidian_path, dry_run=False):
@@ -381,7 +388,51 @@ def sync_logseq_to_obsidian():
     synced = len(new_lines)
     target_name = os.path.basename(target_path)
     print(f"✅ Synced {synced} tasks, skipped {skipped} duplicates → {target_name}")
+    # Fire-and-forget n8n notification — safe if n8n is down
+    try:
+        from ai_orchestration import send_to_n8n
+        send_to_n8n("logseq-synced", {"tasks_synced": synced, "tasks_skipped": skipped})
+    except Exception:
+        pass
     return synced, skipped, target_path
+
+
+def handle_universal_sync():
+    """Collect local tasks + ICS calendar events and trigger n8n Universal Task Sync."""
+    from n8n_client import trigger_task_sync, is_n8n_running
+    from config_utils import get_config_value
+
+    if not is_n8n_running():
+        print("[yellow]n8n is not running. Start it with: docker compose up -d[/yellow]")
+        return
+
+    workspace = get_config_value("WORKSPACE_DIR", "")
+    from task_utils import get_unified_tasks
+    raw_tasks = get_unified_tasks(workspace)
+    tasks = [
+        {
+            "title": t.get("title", t.get("task", t.get("text", ""))).strip(),
+            "source": t.get("source", "local"),
+            "due": t.get("due") or t.get("due_date"),
+        }
+        for t in raw_tasks
+        if t.get("title") or t.get("task") or t.get("text")
+    ]
+
+    events = []
+    try:
+        from local_calendar_agent import list_events
+        import datetime
+        today = datetime.date.today()
+        events = list_events(start_date=today, end_date=today + datetime.timedelta(days=7))
+    except (ImportError, Exception):
+        pass  # ICS agent not yet available — send tasks only
+
+    ok = trigger_task_sync(tasks, events)
+    if ok:
+        print(f"[green]Universal Task Sync triggered — {len(tasks)} tasks, {len(events)} events sent to n8n[/green]")
+    else:
+        print("[red]Universal Task Sync failed — check that n8n is running and the task-sync webhook is active[/red]")
 
 
 def handle_chat_mode(obsidian_file):
@@ -795,6 +846,8 @@ def handle_chat_mode(obsidian_file):
                 elif command == "sync-logseq":
                     chat_ui.render_info("Syncing LogSeq tasks → Obsidian...")
                     sync_logseq_to_obsidian()
+                elif command == "sync-universal":
+                    handle_universal_sync()
                 elif command == "status":
                     subprocess.run([sys.executable, "scripts/status.py"])
                 elif command == "today":

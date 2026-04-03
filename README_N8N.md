@@ -119,3 +119,32 @@ The output nodes in each workflow are intentionally left as `Set` nodes (a no-op
 - **Webhook**: forward to any other service
 
 Connect the new node to the last existing node in the workflow.
+
+---
+
+## Universal Task Sync
+
+The `universal_task_sync.json` workflow provides a conflict-resolved sync between your local Markdown tasks and a calendar.
+
+### 1. Import
+Follow the instructions in section 3 to import `n8n-workflows/universal_task_sync.json`.
+
+### 2. Conflict Rules
+The workflow implements three main rules in the **Classify Tasks** node:
+- **Local task + Calendar event match**: Skip (already synced).
+- **Local task only**: Create a new calendar event (Node 3).
+- **Calendar event only**: Add a new local task (Node 4).
+
+### 3. Network Configuration
+- **host.docker.internal**: This is the standard Docker DNS name to reach the host machine from inside an n8n container. 
+- **Linux Users**: If `host.docker.internal` is not resolved, use the host IP (usually `172.17.0.1`) or add `--add-host=host-gateway:host-gateway` to your Docker run/compose command.
+
+### 4. Google Calendar Dependency
+The **Create Calendar Events** node is currently a placeholder. It is designed to call the local ICS API (Sprint-05 dependency) when it becomes available.
+
+### 5. Testing
+Run the following command in the AI Agent Assistant CLI to trigger the sync manually:
+```bash
+/sync-universal
+```
+You can then watch the live execution in the n8n UI.

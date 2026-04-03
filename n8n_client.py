@@ -55,3 +55,21 @@ def is_n8n_running() -> bool:
         return requests.get(health_url, timeout=3).status_code == 200
     except Exception:
         return False
+
+
+def trigger_task_sync(tasks: list, events: list) -> bool:
+    """
+    Send unified task + calendar event payload to the n8n Universal Task Sync workflow.
+
+    tasks:  list of dicts with at minimum {"title": str, "source": str, "due": str|None}
+    events: list of dicts with at minimum {"uid": str, "summary": str, "start": str}
+
+    Returns True if n8n accepted the payload, False on any error (never raises).
+    """
+    import datetime
+    payload = {
+        "tasks": tasks,
+        "calendar_events": events,
+        "synced_at": datetime.datetime.now().isoformat(),
+    }
+    return trigger("task-sync", payload)
