@@ -11,7 +11,7 @@
 **Repository**: /home/michaelhansen/Projects/github/ai_agent_assistant
 **Started**: 2026-03-14
 **Product Owner**: Michael Hansen
-**Current Sprint**: Sprint-06 (in progress)
+**Current Sprint**: Sprint-05 ✅ + Sprint-06 ✅ — both complete 2026-04-03
 **Current Team**: Claude CLI (SM + dev agents)
 
 ---
@@ -113,6 +113,20 @@ The following agents were added outside of the sprint process (commit `720f442`)
 | DEBT-005 | New agents (datainput, logseq_later, calendar_planning) not registered in scrum backlog | Med | Post-Sprint-03 | ✅ Sprint-04 |
 | DEBT-006 | Test suite does not cover new agents or cron orchestration | Med | Post-Sprint-03 | ✅ Sprint-04 |
 | DEBT-007 | `system_status.json` only checks git/Ollama/venv — insufficient for full health picture | Low | Post-Sprint-03 | ✅ Sprint-04 |
+
+---
+
+### Sprint-05 — ✅ Complete (2026-04-03)
+- **Goal**: Local ICS calendar engine + Google Tasks two-way sync
+- **Delivered**: All 6 tasks — BLI-030 through BLI-035
+  - `local_calendar_agent.py`: add/remove/list/today events, auto-creates `.ics`, no OAuth
+  - `/add-event`, `/remove-event`, `/export-calendar`, `/import-calendar` CLI commands
+  - `/today` and `/week` now read from local ICS first, fall back to Google YAML cache
+  - `google_tasks_agent.py`: pull tasks → Obsidian, push `[x]` completions → Google Tasks
+  - `cron_job.py`: `google_tasks` agent added to AGENT_MAP; `/google-tasks` CLI command
+  - `check_local_calendar()` + `check_google_tasks()` in `/status` dashboard
+- **Commit**: `908395d` | **Tests**: 95 passed, 1 skipped (22 new tests)
+- **Side-effect**: T06-04 Universal Task Sync ICS path now unblocked
 
 ---
 

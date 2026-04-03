@@ -311,7 +311,7 @@
   - [ ] `icalendar` added to `requirements.txt`
 - **Epic**: E05
 - **Estimate**: M
-- **Status**: 📋 Backlog
+- **Status**: ✅ Done — 2026-04-03 (Sprint-05)
 
 #### BLI-031 — ICS export and import
 - **Story**: As a user, I want to export my local calendar as a standard `.ics` file and import events from an external `.ics` so I can sync with Google Calendar, Apple Calendar, or any compliant app
@@ -323,7 +323,7 @@
   - [ ] `INSTALL.md` updated with a "Calendar Sync" section: how to import `.ics` into Google Calendar / Apple Calendar manually
 - **Epic**: E05
 - **Estimate**: S
-- **Status**: 📋 Backlog
+- **Status**: ✅ Done — 2026-04-03 (Sprint-05)
 
 #### BLI-032 — Update terminal views and planning agent to use local ICS
 - **Story**: As a user, I want `/today`, `/week`, and the planning agent to use my local ICS calendar so all calendar features work without a Google API token
@@ -336,7 +336,7 @@
   - [ ] `python main.py --today` works with zero Google credentials present
 - **Epic**: E05 / E10
 - **Estimate**: M
-- **Status**: 📋 Backlog
+- **Status**: ✅ Done — 2026-04-03 (Sprint-05)
 
 #### BLI-033 — Google Tasks pull: fetch tasks → Obsidian planner
 - **Story**: As a user, I want tasks I add in Google Tasks to appear automatically in my Obsidian planner so Google Tasks works as a mobile capture tool feeding my local system
@@ -351,7 +351,7 @@
   - [ ] `INSTALL.md` updated: note that `token.json` must be deleted and re-auth run to pick up the `tasks` scope
 - **Epic**: E13
 - **Estimate**: M
-- **Status**: 📋 Backlog
+- **Status**: ✅ Done — 2026-04-03 (Sprint-05)
 
 #### BLI-034 — Google Tasks push: mark tasks complete from Obsidian done status
 - **Story**: As a user, I want tasks I mark done in Obsidian to be automatically marked complete in Google Tasks so both systems stay in sync without manual updates
@@ -363,7 +363,7 @@
   - [ ] `run(sync_back=True)` — calls `sync_to_obsidian()` then optionally `sync_completions_to_google()`; `sync_back=False` skips writeback
 - **Epic**: E13
 - **Estimate**: S
-- **Status**: 📋 Backlog
+- **Status**: ✅ Done — 2026-04-03 (Sprint-05)
 - **Notes**: Depends on BLI-033 (agent + JSON tracking file must exist)
 
 #### BLI-035 — Google Tasks cron integration and CLI command
@@ -376,7 +376,7 @@
   - [ ] `config.example` updated with `ENABLE_GOOGLE_TASKS=false` and `GOOGLE_TASKS_LIST=@default`
 - **Epic**: E13
 - **Estimate**: S
-- **Status**: 📋 Backlog
+- **Status**: ✅ Done — 2026-04-03 (Sprint-05)
 - **Notes**: Depends on BLI-033 and BLI-034
 
 ---
