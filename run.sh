@@ -1,5 +1,14 @@
 #!/bin/bash
-# AI Agent Assistant launcher — always uses the project venv.
+# AI Agent Assistant — venv-aware launcher
+#
+# ./run.sh          → interactive chat (recommended for daily use)
+# ./run.sh --today  → show today's tasks and exit
+# ./run.sh --plan   → run planning session
+# ./run.sh --help   → all available flags
+#
+# To run the background file-watcher daemon:
+#   ./service.sh start       (background, logs to logs/daemon.log)
+#   ./service.sh install     (install as launchd/systemd service)
 
 set -e
 
@@ -29,5 +38,9 @@ if [ "$MAJ" -lt "$MIN_MAJOR" ] || { [ "$MAJ" -eq "$MIN_MAJOR" ] && [ "$MIN" -lt 
     exit 1
 fi
 
-# ── Launch ───────────────────────────────────────────────────────────────────
+# ── Default to interactive chat ───────────────────────────────────────────────
+if [ $# -eq 0 ]; then
+    exec "$VENV_PYTHON" main.py --chat
+fi
+
 exec "$VENV_PYTHON" main.py "$@"

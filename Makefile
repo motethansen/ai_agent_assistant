@@ -11,12 +11,22 @@ setup:
 	@echo "Launching Setup Wizard..."
 	@.venv/bin/streamlit run setup_wizard.py
 
-# Start the assistant (uses run.sh to enforce venv Python)
+# Interactive chat (default daily use)
 run:
 	@./run.sh
 
-run-chat:
-	@./run.sh
+# Background file-watcher daemon
+service:
+	@./service.sh start
+
+service-stop:
+	@./service.sh stop
+
+service-status:
+	@./service.sh status
+
+service-install:
+	@./service.sh install
 
 # Launch the Streamlit UI
 run-ui:
