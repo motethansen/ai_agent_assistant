@@ -1,5 +1,5 @@
 #!/bin/bash
 set -e
 cd "$(dirname "$0")/.."
-source .venv/bin/activate 2>/dev/null || true
+if [ -f .venv/bin/activate ]; then source .venv/bin/activate; fi
 pytest tests/ -v --tb=short "$@"
