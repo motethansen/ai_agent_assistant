@@ -28,6 +28,7 @@
 | E16 | Universal Task Sync via n8n | Use n8n as middleware for conflict resolution between local .md files and Google Calendar | Sprint-06 |
 | E17 | CLI Router Simplification | Reduce main.py + ai_orchestration.py to lightweight router — delegate reasoning to NanoClaw, data-flows to n8n | Sprint-06 |
 | E18 | Google Connector Migration to n8n | Remove direct Python OAuth for Google Calendar and Google Tasks; route all Google API calls through n8n credential store | Sprint-07 |
+| E19 | LM Studio Native Integration | Replace OpenAI-compat HTTP calls to LM Studio with the official `lmstudio` Python SDK and `lms` CLI for model/server lifecycle management | Sprint-07 |
 
 ---
 
@@ -522,6 +523,34 @@ python scripts/status.py
 - `api_server.py` connection refused → n8n cannot reach Python on port 5678; check firewall or use `docker network inspect agent_net`
 
 - **Notes**: n8n data (workflows, credentials) is stored in Docker volume `n8n_data` — survives container restarts. To reset: `docker volume rm ai_agent_assistant_n8n_data`. Port can be changed via `N8N_PORT` in `.config`.
+
+#### BLI-044 — Replace `_call_lmstudio()` with `lmstudio` Python SDK
+- **Story**: As a developer, I want the LM Studio integration to use the official Python SDK so we get proper tool calling, streaming, embeddings, and timeout support without maintaining a raw HTTP wrapper
+- **Acceptance Criteria**:
+  - [ ] `pip install lmstudio` added to `requirements.txt`
+  - [ ] `ai_orchestration.py` — `_call_lmstudio()` rewritten using `lms.llm(model).respond(prompt)` from the `lmstudio` SDK
+  - [ ] `is_lmstudio_running()` replaced with SDK client check (catches connection error gracefully)
+  - [ ] Streaming path added: `generate_stream()` uses `lms.llm().respond_stream()` when provider is lmstudio
+  - [ ] `rag_agent.py` — explore LM Studio embeddings as optional source alongside Chroma (spike only, no full replacement)
+  - [ ] All existing tests pass; new test for `_call_lmstudio()` mocking the SDK
+- **Epic**: E19
+- **Estimate**: M
+- **Status**: 🔲 Not started
+- **Notes**: `lmstudio` SDK connects to LM Studio daemon on `ws://localhost:1234` (WebSocket, not HTTP). Timeout default is 60s (SDK 1.5.0+). Requires LM Studio installed and run at least once.
+
+#### BLI-045 — Integrate `lms` CLI into service lifecycle management
+- **Story**: As a user, I want `manage_services.sh` and `install.sh` to manage LM Studio's server and model loading via the `lms` CLI so I don't need to open the GUI manually
+- **Acceptance Criteria**:
+  - [ ] `scripts/manage_services.sh` — new `start_lmstudio()` function: calls `lms server start`, then `lms load <LM_STUDIO_MODEL>` if model not already loaded (`lms ps`)
+  - [ ] `install.sh` `run_service_checks()` — uses `lms ps` for LM Studio health (model loaded = ready) instead of raw HTTP check
+  - [ ] `install.sh` `detect_container_runtime()` — also checks if `lms` is available; if not, prints install link
+  - [ ] `service.sh` — `start` subcommand optionally starts LM Studio daemon (`lms daemon start`) if `ENABLE_LM_STUDIO=true`
+  - [ ] `INSTALL.md` updated: LM Studio section includes `lms daemon start` for headless Linux use
+  - [ ] All changes gated on `ENABLE_LM_STUDIO=true` — zero effect when disabled
+- **Epic**: E19
+- **Estimate**: S
+- **Status**: 🔲 Not started
+- **Notes**: `lms` ships with LM Studio; no separate install. Must run LM Studio GUI once before `lms` works. `lms daemon` enables headless operation on Linux laptop (no GUI required after first setup).
 
 ---
 
