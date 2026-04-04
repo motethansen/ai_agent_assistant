@@ -14,9 +14,8 @@ This project requires setting up a few local and cloud components to function as
 ## Prerequisites
 
 - Python 3.10+
-- Google Cloud Project with Calendar API enabled.
-- `credentials.json` (OAuth Client ID) from Google Cloud Console.
 - [Ollama](https://ollama.com/) installed locally.
+- [Docker](https://www.docker.com/) (to run n8n for calendar/automation).
 
 ## Setup Instructions
 
@@ -50,8 +49,21 @@ This project requires setting up a few local and cloud components to function as
     - `GEMINI_API_KEY`: Optional cloud fallback.
     - `CALENDAR_ID`: Usually 'primary' or a specific ID.
 
-5.  **Google Calendar API:**
-    Place your `credentials.json` in the root directory. The first time you run the script, it will open a browser window for OAuth authentication and save a `token.json`.
+5. **Google Calendar (via n8n):**
+    Google Calendar credentials live in n8n's credential store, not in Python.
+    - Open your local n8n instance (http://localhost:5679)
+    - Go to **Credentials** → **Add Credential** → **Google Calendar OAuth2 API**
+    - Follow the n8n guide to link your Google Cloud Project.
+    - Python agents will read from the n8n-synced `datainput/googlecalendar.yml` cache.
+
+6. **Google Tasks (via n8n):**
+    Google Tasks sync is handled by n8n.
+    - Open your local n8n instance (http://localhost:5679)
+    - Go to **Credentials** → **Add Credential** → **Google Tasks OAuth2 API**
+    - Follow the n8n guide to link your Google Cloud Project.
+    - Import `n8n-workflows/google_tasks_sync.json`.
+    - Set `ENABLE_GOOGLE_TASKS=true` in `.config`.
+
 
 ## LogSeq Setup
 
@@ -259,13 +271,82 @@ LM_STUDIO_MODEL=mistral-7b-instruct-v0.3
 
 LM Studio appears between Ollama and Gemini in the default fallback chain, so it is tried automatically when Ollama is unavailable.
 
-### 5. Verify
+### 5. Headless use (Linux server)
+
+For Linux servers without a GUI, the LM Studio inference engine can run headlessly:
+
+```bash
+lms daemon start
+```
+
+This starts the inference engine without the GUI. You must have run the LM Studio GUI on the machine at least once first to register the `lms` CLI and accept the licence.
+
+### 6. Verify
 
 ```bash
 python scripts/status.py
 ```
 
 Look for `lm_studio: ok` in the output.
+
+## n8n Setup (workflow automation)
+
+n8n runs as a Docker container and handles event-driven workflows between your
+local data sources and external services (calendar, tasks, morning plans).
+
+### 1. Start n8n
+
+```bash
+docker compose up -d n8n
+```
+
+UI: http://localhost:5679 (port controlled by `N8N_PORT` in `.config`)
+
+### 2. Import workflows
+
+1. Open http://localhost:5679
+2. Top-right menu → **Import from file**
+3. Import each file from `n8n-workflows/`:
+   - `morning-planning.json`
+   - `add-task.json`
+   - `backlog-digest.json`
+   - `universal_task_sync.json`
+   - `google_tasks_sync.json`
+4. Open each imported workflow → toggle **Active** (top-right switch)
+
+### 3. Start the Python API server (n8n callback target)
+
+```bash
+python api_server.py
+```
+
+Listens on port 5678 (`WEBHOOK_PORT` in `.config`). n8n workflows call back to
+this server to add tasks, fetch the backlog, and trigger planning.
+
+### 4. Verify
+
+```bash
+./run.sh
+/sync-universal
+```
+
+n8n logs should show: `POST /webhook/task-sync received`
+
+Check service health:
+
+```bash
+python scripts/status.py
+```
+
+### 5. Persistent service
+
+```bash
+./service.sh install   # macOS launchd / Linux systemd unit
+```
+
+The daemon starts the API server and keeps it running across reboots.
+
+---
 
 ## NanoClaw Setup (optional — containerised agent isolation)
 

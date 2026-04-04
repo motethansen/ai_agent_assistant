@@ -471,6 +471,25 @@ run_service_checks() {
         ADVICE+=("Start Ollama: ollama serve   or open the Ollama app")
     fi
 
+    # --- LM Studio ---
+    LMS_ENABLED=$(awk -F'=' '/^ENABLE_LM_STUDIO[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    if [ "$LMS_ENABLED" == "true" ]; then
+        if command -v lms > /dev/null 2>&1; then
+            LMS_MODEL=$(awk -F'=' '/^LM_STUDIO_MODEL[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+            if lms ps 2>/dev/null | grep -qF "${LMS_MODEL:-model}"; then
+                echo -e "  ${GREEN}✓ LM Studio model loaded: ${LMS_MODEL}${NC}"
+            else
+                echo -e "  ${YELLOW}⚠ LM Studio enabled but no model loaded (lms ps shows nothing)${NC}"
+                ISSUES+=("LM Studio model not loaded")
+                ADVICE+=("Run: lms server start && lms load ${LMS_MODEL:-<model>}")
+            fi
+        else
+            echo -e "  ${YELLOW}⚠ LM Studio enabled but lms CLI not found${NC}"
+            ISSUES+=("lms CLI not in PATH (ENABLE_LM_STUDIO=true)")
+            ADVICE+=("Open LM Studio at least once to register the lms CLI, then re-run install.sh")
+        fi
+    fi
+
     # --- n8n ---
     N8N_PORT=$(awk -F'=' '/^N8N_PORT[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
     [ -z "$N8N_PORT" ] && N8N_PORT="5679"

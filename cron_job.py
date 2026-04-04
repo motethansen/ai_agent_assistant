@@ -125,9 +125,10 @@ def run_google_tasks_agent():
     try:
         import google_tasks_agent
         result = google_tasks_agent.run(sync_back=True)
-        pulled = result.get("pulled", 0) if result else 0
-        pushed = result.get("pushed", 0) if result else 0
-        print(f"[{_ts()}] google_tasks: pulled {pulled} tasks, pushed {pushed} completions")
+        # ADR-010: n8n handles the actual work; result is success/fail of triggers
+        pulled = "triggered" if result and result.get("pulled") else "failed/skipped"
+        pushed = "triggered" if result and result.get("pushed") else "failed/skipped"
+        print(f"[{_ts()}] google_tasks: pull {pulled}, push {pushed}")
         return result
     except Exception as e:
         print(f"[{_ts()}] google_tasks: error — {e}")

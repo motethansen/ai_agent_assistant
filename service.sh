@@ -38,6 +38,13 @@ cmd_start() {
         echo "ERROR: Virtual environment not found. Run: ./install.sh"
         exit 1
     fi
+    # Start LM Studio daemon for headless use (Linux) if enabled
+    LMS_ENABLED=$(awk -F'=' '/^ENABLE_LM_STUDIO[ ]*=/ {print $2}' "$SCRIPT_DIR/.config" 2>/dev/null | tr -d ' \r')
+    if [ "$LMS_ENABLED" == "true" ] && command -v lms > /dev/null 2>&1; then
+        echo "Starting LM Studio daemon..."
+        lms daemon start || true
+    fi
+
     echo "Starting AI Agent Assistant daemon..."
     nohup "$VENV_PYTHON" main.py >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"

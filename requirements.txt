@@ -7,6 +7,7 @@ google-genai
 # Direct LLM SDKs
 anthropic
 openai
+lmstudio
 
 # LangChain — kept only for RAG (Chroma vector store + document loaders)
 langchain-core

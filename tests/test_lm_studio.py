@@ -1,39 +1,81 @@
+import sys
 import pytest
 from unittest.mock import patch, MagicMock
-import requests
 
 
 def test_call_lmstudio_success():
-    """_call_lmstudio returns response text when server is reachable."""
-    mock_health = MagicMock()
-    mock_health.status_code = 200
+    """_call_lmstudio returns response text when SDK call succeeds."""
+    mock_lms = MagicMock()
+    mock_model = MagicMock()
+    mock_lms.llm.return_value = mock_model
+    mock_model.respond.return_value = "Hello from LM Studio"
 
-    mock_completion = MagicMock()
-    mock_completion.choices[0].message.content = "Hello from LM Studio"
-
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_completion
-
-    mock_openai_module = MagicMock()
-    mock_openai_module.OpenAI.return_value = mock_client
-
-    import sys
-    with patch("ai_orchestration.requests.get", return_value=mock_health), \
-         patch("ai_orchestration.get_config_value", return_value="test-model"), \
-         patch.dict(sys.modules, {"openai": mock_openai_module}):
+    with patch.dict(sys.modules, {"lmstudio": mock_lms}), \
+         patch("ai_orchestration.get_config_value", return_value="test-model"):
         import ai_orchestration
         text, model_name = ai_orchestration._call_lmstudio("Say hello", system="Be brief")
 
     assert text == "Hello from LM Studio"
-    assert "lmstudio" in model_name
+    assert model_name == "lmstudio/test-model"
+    # system message should have been prepended
+    call_args = mock_model.respond.call_args[0][0]
+    assert call_args[0] == {"role": "system", "content": "Be brief"}
+    assert call_args[1] == {"role": "user", "content": "Say hello"}
 
 
-def test_call_lmstudio_unreachable():
-    """_call_lmstudio raises RuntimeError with 'not reachable' when server is down."""
-    with patch("ai_orchestration.requests.get", side_effect=requests.exceptions.ConnectionError):
+def test_call_lmstudio_no_system():
+    """_call_lmstudio omits system message when none provided."""
+    mock_lms = MagicMock()
+    mock_model = MagicMock()
+    mock_lms.llm.return_value = mock_model
+    mock_model.respond.return_value = "response"
+
+    with patch.dict(sys.modules, {"lmstudio": mock_lms}), \
+         patch("ai_orchestration.get_config_value", return_value="my-model"):
         import ai_orchestration
-        with pytest.raises(RuntimeError, match="not reachable"):
-            ai_orchestration._call_lmstudio("Hello")
+        text, model_name = ai_orchestration._call_lmstudio("Hello")
+
+    call_args = mock_model.respond.call_args[0][0]
+    assert call_args == [{"role": "user", "content": "Hello"}]
+    assert model_name == "lmstudio/my-model"
+
+
+def test_call_lmstudio_sdk_error_returns_tuple():
+    """_call_lmstudio returns error tuple (no raise) when SDK raises."""
+    mock_lms = MagicMock()
+    mock_lms.llm.side_effect = Exception("connection refused")
+
+    with patch.dict(sys.modules, {"lmstudio": mock_lms}), \
+         patch("ai_orchestration.get_config_value", return_value=""):
+        import ai_orchestration
+        text, model_name = ai_orchestration._call_lmstudio("Hello")
+
+    assert text.startswith("LLM error:")
+    assert model_name == "lmstudio/unknown"
+
+
+def test_is_lmstudio_running_true():
+    """is_lmstudio_running returns True when SDK call succeeds."""
+    mock_lms = MagicMock()
+    mock_lms.list_downloaded_models.return_value = []
+
+    with patch.dict(sys.modules, {"lmstudio": mock_lms}):
+        import ai_orchestration
+        result = ai_orchestration.is_lmstudio_running()
+
+    assert result is True
+
+
+def test_is_lmstudio_running_false():
+    """is_lmstudio_running returns False when SDK raises a connection error."""
+    mock_lms = MagicMock()
+    mock_lms.list_downloaded_models.side_effect = Exception("could not connect")
+
+    with patch.dict(sys.modules, {"lmstudio": mock_lms}):
+        import ai_orchestration
+        result = ai_orchestration.is_lmstudio_running()
+
+    assert result is False
 
 
 def test_check_lm_studio_disabled():
@@ -48,6 +90,8 @@ def test_check_lm_studio_disabled():
 
 def test_check_lm_studio_error():
     """check_lm_studio returns error status when server is unreachable."""
+    import requests
+
     def cfg_side_effect(key, default):
         if key == "ENABLE_LM_STUDIO":
             return "true"

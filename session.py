@@ -62,26 +62,21 @@ def display_stats():
 
     # Calendar Status
     print("\n📅 Calendar Integration:")
-    if not is_google_calendar_enabled():
-        print("  Google Calendar: disabled (ENABLE_GOOGLE_CALENDAR=false in .config)")
+    print(f"  Local Calendar (ICS): {'✓ Present' if os.path.exists('datainput/local_calendar.ics') else '✗ Missing'}")
+    
+    yml_path = 'datainput/googlecalendar.yml'
+    if os.path.exists(yml_path):
+        import yaml
+        with open(yml_path, 'r', encoding='utf-8') as f:
+            try:
+                data = yaml.safe_load(f)
+                last_upd = data.get('last_updated', 'Unknown')
+                slots = len(data.get('busy_slots', []))
+                print(f"  n8n YAML Cache: ✓ Present (Last updated: {last_upd}, Slots: {slots})")
+            except:
+                print("  n8n YAML Cache: ✗ Corrupt")
     else:
-        if os.path.exists('credentials.json'):
-            print("  credentials.json: ✓ Present")
-        else:
-            print("  credentials.json: ✗ Missing")
-        if os.path.exists('token.json'):
-            print("  token.json: ✓ Authenticated")
-        else:
-            print("  token.json: ✗ Not authenticated")
-        try:
-            service = calendar_manager.get_calendar_service()
-            if service:
-                managed_events = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
-                print(f"  Today's AI-managed events: {len(managed_events) if managed_events else 0}")
-            else:
-                print("  Calendar service: ✗ Cannot connect")
-        except Exception as e:
-            print(f"  Calendar service: ✗ Error: {e}")
+        print("  n8n YAML Cache: ✗ Missing (Run n8n sync to populate)")
 
     # File System Status
     print("\n📁 File System:")
@@ -129,15 +124,21 @@ class TaskSyncHandler(PatternMatchingEventHandler):
             print("No tasks found in current backlog. Skipping sync.")
             return
 
-        # 2. Get Calendar context (only if Google Calendar is enabled)
+        # 2. Get Calendar context (YAML cache + local ICS)
         busy_slots = []
-        service = None
-        calendar_id = None
-        if is_google_calendar_enabled():
-            calendar_id = get_config_value("CALENDAR_ID", "primary")
-            service = calendar_manager.get_calendar_service()
-            calendar_agent = CalendarAgent()
-            busy_slots = calendar_agent.get_busy_slots_from_yml()
+        calendar_agent = CalendarAgent()
+        busy_slots.extend(calendar_agent.get_busy_slots_from_yml())
+        
+        try:
+            from local_calendar_agent import get_today_events
+            for le in get_today_events():
+                busy_slots.append({
+                    "summary": le["summary"],
+                    "start": le["start"],
+                    "end": le["end"]
+                })
+        except:
+            pass
 
         # 3. AI Orchestration
         print("Consulting the AI scheduler...")
@@ -151,12 +152,9 @@ class TaskSyncHandler(PatternMatchingEventHandler):
         )
 
         if schedule:
-            # 4. Sync back to Google Calendar and Obsidian via Planning Agent
-            if is_google_calendar_enabled() and service:
-                planning_agent = PlanningAgent(service, calendar_id)
-                planning_agent.execute_plan(schedule, event.src_path)
-            else:
-                print("(Google Calendar disabled — schedule generated but not booked)")
+            # 4. Sync back to Local Calendar and Obsidian via Planning Agent
+            planning_agent = PlanningAgent()
+            planning_agent.execute_plan(schedule, event.src_path)
             print("--- Sync Complete ---\n")
         else:
             print("Failed to generate schedule from AI.")

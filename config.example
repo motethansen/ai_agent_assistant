@@ -20,10 +20,7 @@ LOCAL_CALENDAR_FILE=datainput/local_calendar.ics
 ENABLE_GOOGLE_TASKS=false
 GOOGLE_TASKS_LIST=@default
 
-# Google Calendar (optional — needs credentials.json from Google Cloud Console)
-# Set ENABLE_GOOGLE_CALENDAR=true to allow any part of the system to contact Google Calendar.
-# When false (default), all Google Calendar API calls are skipped silently.
-ENABLE_GOOGLE_CALENDAR=false
+# Google Calendar is managed via n8n — see INSTALL.md
 CALENDAR_ID=primary
 
 # LLM routing — which model handles each task type

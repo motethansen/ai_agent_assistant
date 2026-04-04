@@ -11,7 +11,6 @@ from googleapiclient.errors import HttpError
 # If modifying these scopes, delete the file token.json.
 # We need Gmail readonly to see emails and filters
 SCOPES = [
-    'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/gmail.readonly'
 ]
 

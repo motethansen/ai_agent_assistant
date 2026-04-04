@@ -40,42 +40,43 @@ def _update_config_key(config_path, key, value):
 
 def sync_calendar_to_markdown(obsidian_path):
     """
-    Pulls 'AI: ' events from Google Calendar and updates the markdown file.
-    (Two-Way Sync: Calendar -> Markdown)
+    Pulls 'AI: ' events from the local calendar and updates the markdown file.
+    (Two-Way Sync: Local ICS -> Markdown)
     """
-    print(f"🔄 Pulling latest AI events from Google Calendar to {os.path.basename(obsidian_path)}...")
+    print(f"🔄 Syncing latest events from local calendar to {os.path.basename(obsidian_path)}...")
 
-    calendar_id = get_config_value("CALENDAR_ID", "primary")
-    service = calendar_manager.get_calendar_service()
-    if not service:
-        print("❌ Could not connect to Google Calendar.")
-        return
-
-    managed_events = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
-    if managed_events:
-        update_markdown_plan(obsidian_path, managed_events)
-        print(f"✅ Successfully synced {len(managed_events)} events from Calendar to Markdown.")
+    from local_calendar_agent import get_today_events
+    events = get_today_events()
+    
+    if events:
+        update_markdown_plan(obsidian_path, events)
+        print(f"✅ Successfully synced {len(events)} events from local calendar to Markdown.")
     else:
-        print("ℹ️ No AI-managed events found in today's calendar.")
+        print("ℹ️ No events found in today's local calendar.")
 
 
 def handle_morning_planning(obsidian_path):
     """
-    Runs an interactive morning planning session.
+    Runs an interactive morning planning session using local calendar data.
     """
     print("🌅 --- Morning Planning Session ---")
     tasks = get_unified_tasks(obsidian_path)
 
-    busy_slots = []
-    service = None
-    calendar_id = None
-    if is_google_calendar_enabled():
-        calendar_id = get_config_value("CALENDAR_ID", "primary")
-        service = calendar_manager.get_calendar_service()
-        calendar_agent = CalendarAgent()
-        busy_slots = calendar_agent.get_busy_slots_from_yml()
-    else:
-        print("ℹ️  Google Calendar disabled — planning without calendar context.")
+    calendar_agent = CalendarAgent()
+    busy_slots = calendar_agent.get_busy_slots_from_yml()
+    
+    # Also add local ICS events to busy slots
+    try:
+        from local_calendar_agent import get_today_events
+        local_events = get_today_events()
+        for le in local_events:
+            busy_slots.append({
+                "summary": le["summary"],
+                "start": le["start"],
+                "end": le["end"]
+            })
+    except Exception:
+        pass
 
     print("AI is processing your backlog for today...")
     logseq_path = get_config_value("LOGSEQ_DIR", None)
@@ -101,15 +102,12 @@ def handle_morning_planning(obsidian_path):
             for item in schedule:
                 print(f"[{item['start'].split('T')[1][:5]}] {item['task']} ({item.get('category', 'Uncategorized')})")
 
-            if is_google_calendar_enabled() and service:
-                confirm = input("\nAdd these items to your calendar? (y/n/skip): ").strip().lower()
-                if confirm == 'y':
-                    planning_agent = PlanningAgent(service, calendar_id)
-                    planning_agent.execute_plan(schedule, obsidian_path)
-                else:
-                    print("Skipped calendar sync.")
+            confirm = input("\nAdd these items to your local calendar and Markdown? (y/n/skip): ").strip().lower()
+            if confirm == 'y':
+                planning_agent = PlanningAgent()
+                planning_agent.execute_plan(schedule, obsidian_path)
             else:
-                print("ℹ️  Enable ENABLE_GOOGLE_CALENDAR=true in .config to book these to a calendar.")
+                print("Skipped scheduling.")
     else:
         print("Failed to generate schedule suggestion.")
     # Fire-and-forget n8n notification — safe if n8n is down
@@ -136,18 +134,23 @@ def handle_planning_session(obsidian_path, dry_run=False):
             print("ℹ️  No tasks found in backlog.")
         return
 
-    # 2. Fetch busy slots — only if Google Calendar is enabled
+    # 2. Fetch busy slots from YAML cache and local ICS
     busy_slots = []
-    service = None
-    if is_google_calendar_enabled():
-        service = calendar_manager.get_calendar_service()
-        if not service:
-            print("⚠️  ENABLE_GOOGLE_CALENDAR=true but could not connect. Check credentials.json and token.json.")
-            return
-        for i in range(7):
-            day = (datetime.datetime.now() + datetime.timedelta(days=i)).strftime("%Y-%m-%d")
-            busy_slots.extend(calendar_manager.get_busy_slots(service, date_str=day))
-    else:
+    calendar_agent = CalendarAgent()
+    busy_slots.extend(calendar_agent.get_busy_slots_from_yml())
+    
+    try:
+        from local_calendar_agent import list_events
+        today = datetime.date.today()
+        local_events = list_events(start_date=today, end_date=today + datetime.timedelta(days=7))
+        for le in local_events:
+            busy_slots.append({
+                "summary": le["summary"],
+                "start": le["start"],
+                "end": le["end"]
+            })
+    except Exception:
+        pass
         print("ℹ️  Google Calendar disabled — planning without busy-slot data.")
 
     # 3. Generate schedule via LLM
@@ -192,15 +195,21 @@ def handle_planning_session(obsidian_path, dry_run=False):
         elif choice == "s":
             break
 
-    # 5. Book confirmed items — only if Google Calendar is enabled
+    # 5. Book confirmed items to local calendar
     if confirmed:
-        if is_google_calendar_enabled() and service:
-            calendar_id = get_config_value("CALENDAR_ID", "primary")
-            calendar_manager.create_events(service, confirmed, calendar_id=calendar_id)
-            print(f"\n✅ Booked {len(confirmed)} event(s) to Google Calendar.")
-        else:
-            print(f"\nℹ️  {len(confirmed)} event(s) confirmed but not booked — Google Calendar is disabled.")
-            print("    Set ENABLE_GOOGLE_CALENDAR=true in .config to enable booking.")
+        try:
+            from local_calendar_agent import add_event
+            import datetime
+            for item in confirmed:
+                # Basic parsing of the ISO start/end if they are strings
+                # local_calendar_agent.add_event expects datetime objects
+                start_dt = datetime.datetime.fromisoformat(item['start'].replace('Z', '+00:00'))
+                end_dt = datetime.datetime.fromisoformat(item['end'].replace('Z', '+00:00'))
+                add_event(item['task'], start_dt, end_dt)
+            print(f"\n✅ Booked {len(confirmed)} event(s) to local calendar (datainput/local_calendar.ics).")
+            print("    n8n will sync these to Google Calendar if configured.")
+        except Exception as e:
+            print(f"\n❌ Error booking to local calendar: {e}")
     else:
         print("No events booked.")
 

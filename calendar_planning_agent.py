@@ -24,7 +24,7 @@ Config keys used:
 import os
 import json
 import datetime
-from config_utils import get_config_value, is_google_calendar_enabled
+from config_utils import get_config_value
 import calendar_manager
 import ai_orchestration
 
@@ -41,57 +41,43 @@ def _get_week_events(days=7):
     """
     Return all calendar events from today through today+days.
     Returns list of {summary, start, end, date} dicts.
-    Tries local ICS first; falls back to Google Calendar if ICS returns nothing.
+    Tries local ICS and YAML cache (from n8n).
     """
-    # Try local ICS calendar first (no credentials needed)
     events = []
+    
+    # 1. Try local ICS calendar first (no credentials needed)
     try:
         from local_calendar_agent import list_events
         today = datetime.date.today()
-        events = list_events(start_date=today, end_date=today + datetime.timedelta(days=days))
-        if events:
-            print(f"[CalendarPlanningAgent] Loaded {len(events)} events from local ICS calendar.")
-            return [{"date":    e["start"][:10],
-                     "summary": e["summary"],
-                     "start":   e["start"],
-                     "end":     e["end"] or ""} for e in events]
-    except Exception:
-        pass  # fall through to Google Calendar if ICS not available
+        local_ics_events = list_events(start_date=today, end_date=today + datetime.timedelta(days=days))
+        for e in local_ics_events:
+            events.append({"date":    e["start"][:10],
+                           "summary": e["summary"],
+                           "start":   e["start"],
+                           "end":     e["end"] or ""})
+        if local_ics_events:
+            print(f"[CalendarPlanningAgent] Loaded {len(local_ics_events)} events from local ICS calendar.")
+    except Exception as e:
+        print(f"[CalendarPlanningAgent] Could not load local ICS: {e}")
 
-    # If ICS returned nothing, try Google Calendar (existing path)
-    if not events:
-        try:
-            if not is_google_calendar_enabled():
-                print("[CalendarPlanningAgent] Google Calendar disabled (ENABLE_GOOGLE_CALENDAR=false). Skipping calendar fetch.")
-                return []
-            service = calendar_manager.get_calendar_service()
-            if not service:
-                print("[CalendarPlanningAgent] Google Calendar not available.")
-                return []
+    # 2. Add events from n8n YAML cache
+    try:
+        from calendar_agent import CalendarAgent
+        agent = CalendarAgent()
+        busy_slots = agent.get_busy_slots_from_yml()
+        if busy_slots:
+            for s in busy_slots:
+                events.append({
+                    "date":    s.get("start", "")[:10],
+                    "summary": s.get("summary", "Busy"),
+                    "start":   s.get("start", ""),
+                    "end":     s.get("end", ""),
+                })
+            print(f"[CalendarPlanningAgent] Loaded {len(busy_slots)} events from n8n YAML cache.")
+    except Exception as e:
+        print(f"[CalendarPlanningAgent] Could not load YAML cache: {e}")
 
-            calendar_id = get_config_value("CALENDAR_ID", "primary")
-            now = datetime.datetime.now()
-            google_events = []
-
-            for offset in range(days):
-                day = now + datetime.timedelta(days=offset)
-                date_str = day.strftime("%Y-%m-%d")
-                slots = calendar_manager.get_busy_slots(service, calendar_ids=[calendar_id],
-                                                        date_str=date_str)
-                for s in slots:
-                    google_events.append({
-                        "date":    date_str,
-                        "summary": s.get("summary", "Busy"),
-                        "start":   s.get("start", ""),
-                        "end":     s.get("end", ""),
-                    })
-
-            print(f"[CalendarPlanningAgent] Fetched {len(google_events)} events for next {days} days.")
-            return google_events
-        except Exception:
-            pass
-
-    return []
+    return events
 
 
 # ---------------------------------------------------------------------------

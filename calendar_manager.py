@@ -1,182 +1,23 @@
-import os.path
-import datetime
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google.auth.exceptions import RefreshError
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+"""
+Legacy module — Google Calendar auth moved to n8n (ADR-010).
+Use local_calendar_agent.py for calendar operations.
+"""
+import os
+import yaml
+from local_calendar_agent import import_calendar
 
-# If modifying these scopes, delete the file token.json.
-SCOPES = [
-    'https://www.googleapis.com/auth/calendar',
-    'https://www.googleapis.com/auth/gmail.readonly'
-]
-
-def get_calendar_service():
-    """Shows basic usage of the Google Calendar API.
-    Lists the next 10 events on the user's calendar.
-    """
-    creds = None
-    # The file token.json stores the user's access and refresh tokens, and is
-    # created automatically when the authorization flow completes for the first
-    # time.
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    # If there are no (valid) credentials available, let the user log in.
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            try:
-                creds.refresh(Request())
-            except RefreshError:
-                # Token has been expired or revoked, delete it to trigger a new login flow
-                print("⚠️ Token has been expired or revoked. Re-authenticating...")
-                if os.path.exists('token.json'):
-                    os.remove('token.json')
-                creds = None
-        
-        # If creds is still invalid (either never existed or was cleared due to RefreshError)
-        if not creds or not creds.valid:
-            if not os.path.exists('credentials.json'):
-                print("Error: 'credentials.json' not found. Please download it from Google Cloud Console.")
-                return None
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-            # Save the credentials for the next run
-            with open('token.json', 'w') as token:
-                token.write(creds.to_json())
-
-    try:
-        service = build('calendar', 'v3', credentials=creds)
-        return service
-    except HttpError as error:
-        print(f'An error occurred: {error}')
-        if "invalid_scope" in str(error):
-            print("💡 TIP: You likely have an old 'token.json'. Delete it and run the script again to re-authenticate.")
-        return None
-
-
-def get_busy_slots(service, calendar_ids=['primary'], date_str=None):
-    """
-    Fetches events for the specified date and returns a list of busy time slots from multiple calendars.
-    calendar_ids should be a list of calendar IDs.
-    """
-    if not service:
+def get_busy_slots_from_yaml(yml_path="datainput/googlecalendar.yml"):
+    """Reads the busy slots from the YAML file (cached from Google/n8n)."""
+    if not os.path.exists(yml_path):
         return []
-
-    if date_str:
-        day = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-    else:
-        day = datetime.datetime.now()
-
-    # Define the start and end of the day
-    start_of_day = day.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z'
-    end_of_day = day.replace(hour=23, minute=59, second=59, microsecond=0).isoformat() + 'Z'
-
-    all_busy_slots = []
-    
-    if isinstance(calendar_ids, str):
-        calendar_ids = [calendar_ids]
-
-    for calendar_id in calendar_ids:
+    with open(yml_path, 'r', encoding='utf-8') as f:
         try:
-            events_result = service.events().list(calendarId=calendar_id, timeMin=start_of_day,
-                                                timeMax=end_of_day, singleEvents=True,
-                                                orderBy='startTime').execute()
-            events = events_result.get('items', [])
-
-            for event in events:
-                start = event['start'].get('dateTime', event['start'].get('date'))
-                end = event['end'].get('dateTime', event['end'].get('date'))
-                # Filter out all-day events or format them properly if needed
-                if 'T' in start:  # It's a dateTime event
-                    all_busy_slots.append({
-                        'summary': event.get('summary', 'No Title'),
-                        'start': start,
-                        'end': end,
-                        'source_calendar': calendar_id
-                    })
+            data = yaml.safe_load(f)
+            return data.get("busy_slots", [])
         except Exception as e:
-            print(f"Error fetching slots from {calendar_id}: {e}")
-    
-    return all_busy_slots
+            print(f"Error reading YAML {yml_path}: {e}")
+            return []
 
-def get_managed_events(service, calendar_id='primary', date_str=None):
-    """
-    Fetches events for the specified date and returns only those prefixed with 'AI: '.
-    """
-    if not service:
-        return []
-
-    if date_str:
-        day = datetime.datetime.strptime(date_str, '%Y-%m-%d')
-    else:
-        day = datetime.datetime.now()
-
-    start_of_day = day.replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z'
-    end_of_day = day.replace(hour=23, minute=59, second=59, microsecond=0).isoformat() + 'Z'
-
-    events_result = service.events().list(calendarId=calendar_id, timeMin=start_of_day,
-                                        timeMax=end_of_day, singleEvents=True,
-                                        orderBy='startTime').execute()
-    events = events_result.get('items', [])
-
-    managed_events = []
-    for event in events:
-        summary = event.get('summary', '')
-        if summary.startswith("AI: "):
-            start = event['start'].get('dateTime', event['start'].get('date'))
-            end = event['end'].get('dateTime', event['end'].get('date'))
-            if 'T' in start:
-                managed_events.append({
-                    'task': summary.replace("AI: ", "").strip(),
-                    'start': start,
-                    'end': end
-                })
-    
-    return managed_events
-
-def create_events(service, schedule, calendar_id='primary'):
-    """
-    Creates calendar events from a list of scheduled tasks.
-    """
-    if not service or not schedule:
-        return
-
-    print(f"Syncing {len(schedule)} tasks to Google Calendar: {calendar_id}...")
-    
-    # Get local timezone offset (e.g., +07:00)
-    now = datetime.datetime.now().astimezone()
-    local_tz = now.strftime('%z')
-    if len(local_tz) == 5: # e.g., +0700
-        local_tz = local_tz[:3] + ':' + local_tz[3:]
-
-    for item in schedule:
-        start_time = item['start']
-        end_time = item['end']
-        
-        # Simple check for missing timezone offset
-        # If it has 'T' but no 'Z' and no '+' or '-' after the time part
-        if 'T' in start_time and 'Z' not in start_time and '+' not in start_time[10:] and '-' not in start_time[10:]:
-            start_time += local_tz
-        if 'T' in end_time and 'Z' not in end_time and '+' not in end_time[10:] and '-' not in end_time[10:]:
-            end_time += local_tz
-
-        event = {
-            'summary': f"AI: {item['task']}",
-            'start': {'dateTime': start_time},
-            'end': {'dateTime': end_time},
-        }
-        try:
-            event_result = service.events().insert(calendarId=calendar_id, body=event).execute()
-            print(f"Created: {event_result.get('htmlLink')}")
-        except Exception as e:
-            print(f"Error creating event for {item['task']}: {e}")
-
-if __name__ == '__main__':
-    service = get_calendar_service()
-    if service:
-        slots = get_busy_slots(service)
-        for slot in slots:
-            print(f"BUSY: {slot['summary']} ({slot['start']} to {slot['end']})")
+def import_ics_from_google_export(path):
+    """Import an ICS file (exported from Google) into the local calendar."""
+    return import_calendar(path)

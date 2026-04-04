@@ -2,8 +2,7 @@ import os
 import time
 import argparse
 from watchdog.observers import Observer
-from config_utils import get_config_value, is_google_calendar_enabled
-from calendar_agent import start_background_calendar_sync
+from config_utils import get_config_value
 from task_utils import get_unified_tasks
 from cli_commands import (
     handle_morning_planning,
@@ -61,8 +60,6 @@ if __name__ == "__main__":
     elif args.evening:
         handle_evening_review(args.file)
     elif args.chat:
-        if is_google_calendar_enabled():
-            start_background_calendar_sync()
         handle_chat_mode(args.file)
     else:
         obsidian_path = get_config_value("WORKSPACE_DIR", ".")
@@ -87,9 +84,6 @@ if __name__ == "__main__":
                 print(f"Monitoring LogSeq journals: {os.path.abspath(journals_path)}")
 
         print(f"🚀 AI Agent Assistant is active and monitoring for changes...")
-        # Start calendar background sync only if Google Calendar is enabled
-        if is_google_calendar_enabled():
-            start_background_calendar_sync()
 
         observer.start()
         try:

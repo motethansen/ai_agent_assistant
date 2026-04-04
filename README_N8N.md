@@ -7,6 +7,9 @@ This guide explains how to use the included n8n workflow templates with AI Agent
 - Docker and Docker Compose installed
 - AI Agent Assistant running (see main `README.md`)
 
+> **macOS with OrbStack**: use `docker compose` directly — OrbStack provides
+> full Docker CLI compatibility and no extra configuration is needed.
+
 ---
 
 ## 1. Starting n8n

@@ -11,26 +11,6 @@ def test_calendar_agent_init(tmp_path):
     assert os.path.exists(data_dir)
     assert agent.yml_path == os.path.join(str(data_dir), "googlecalendar.yml")
 
-@patch('calendar_manager.get_calendar_service')
-@patch('calendar_manager.get_busy_slots')
-def test_fetch_and_store_calendar(mock_get_slots, mock_get_service, tmp_path):
-    data_dir = tmp_path / "datainput"
-    agent = CalendarAgent(data_dir=str(data_dir))
-    
-    mock_service = MagicMock()
-    mock_get_service.return_value = mock_service
-    
-    test_slots = [{"summary": "Meeting", "start": "2026-03-01T10:00:00Z", "end": "2026-03-01T11:00:00Z"}]
-    mock_get_slots.return_value = test_slots
-    
-    agent.fetch_and_store_calendar()
-    
-    assert os.path.exists(agent.yml_path)
-    with open(agent.yml_path, 'r') as f:
-        data = yaml.safe_load(f)
-        assert data["busy_slots"] == test_slots
-        assert "last_updated" in data
-
 def test_get_busy_slots_from_yml(tmp_path):
     data_dir = tmp_path / "datainput"
     os.makedirs(data_dir)

@@ -21,8 +21,8 @@ def get_config_value(key, default):
     return default
 
 def is_google_calendar_enabled():
-    """Returns True only if ENABLE_GOOGLE_CALENDAR=true in .config."""
-    return get_config_value("ENABLE_GOOGLE_CALENDAR", "false").lower() == "true"
+    """Legacy stub: Google Calendar direct OAuth is disabled (ADR-010)."""
+    return False
 
 # Auto-load HF_TOKEN on import to ensure it's available for other modules
 get_config_value("HF_TOKEN", None)

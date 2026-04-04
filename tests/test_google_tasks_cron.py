@@ -22,9 +22,9 @@ def test_run_google_tasks_agent_skips_when_disabled():
 
 
 def test_run_google_tasks_agent_calls_run(capsys):
-    """run_google_tasks_agent() calls google_tasks_agent.run() when enabled and logs counts."""
+    """run_google_tasks_agent() calls google_tasks_agent.run() when enabled and logs success."""
     mock_agent = MagicMock()
-    mock_agent.run.return_value = {"pulled": 2, "pushed": 1}
+    mock_agent.run.return_value = {"pulled": True, "pushed": True}
 
     def cfg(key, default):
         if key == "ENABLE_GOOGLE_TASKS":
@@ -37,7 +37,7 @@ def test_run_google_tasks_agent_calls_run(capsys):
 
     mock_agent.run.assert_called_once_with(sync_back=True)
     captured = capsys.readouterr()
-    assert "pulled 2" in captured.out
+    assert "pull triggered" in captured.out
 
 
 def test_check_google_tasks_disabled():

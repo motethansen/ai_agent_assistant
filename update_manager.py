@@ -5,7 +5,7 @@ import json
 import datetime
 import time
 import requests
-from config_utils import get_config_value, is_google_calendar_enabled
+from config_utils import get_config_value
 
 def check_git_updates():
     """Checks if there are updates available in the git repository."""

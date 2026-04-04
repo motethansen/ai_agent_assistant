@@ -66,14 +66,33 @@ def search_books(query: str):
 
 @tool
 def list_calendar_events(days: int = 1):
-    """Lists scheduled events from Google Calendar for the next N days."""
-    from config_utils import is_google_calendar_enabled
-    if not is_google_calendar_enabled():
-        return "Google Calendar is disabled. Set ENABLE_GOOGLE_CALENDAR=true in .config to enable."
-    service = calendar_manager.get_calendar_service()
-    if not service: return "Calendar service not available."
-    calendar_id = get_config_value("CALENDAR_ID", "primary")
-    events = calendar_manager.get_managed_events(service, calendar_id=calendar_id)
+    """Lists scheduled events from the local calendar and n8n cache for the next N days."""
+    events = []
+    
+    # 1. Try n8n YAML cache
+    from calendar_agent import CalendarAgent
+    agent = CalendarAgent()
+    busy_slots = agent.get_busy_slots_from_yml()
+    if busy_slots:
+        events.extend(busy_slots)
+        
+    # 2. Try local ICS
+    try:
+        from local_calendar_agent import list_events
+        today = datetime.date.today()
+        local_events = list_events(start_date=today, end_date=today + datetime.timedelta(days=days))
+        for le in local_events:
+            events.append({
+                "summary": le["summary"],
+                "start": le["start"],
+                "end": le["end"]
+            })
+    except Exception:
+        pass
+        
+    if not events:
+        return "No calendar events found."
+        
     return json.dumps(events)
 
 @tool
@@ -119,31 +138,27 @@ def list_ollama_models():
         return []
 
 def is_lmstudio_running():
-    """Checks if the LM Studio local server is responding."""
+    """Checks if the LM Studio daemon is reachable via the lmstudio SDK."""
     try:
-        response = requests.get("http://localhost:1234/v1/models", timeout=2)
-        return response.status_code == 200
+        import lmstudio as lms
+        lms.list_downloaded_models()
+        return True
     except Exception:
         return False
 
 def _call_lmstudio(prompt, system=None, model=None):
-    """Call LM Studio local server via the openai SDK pointed at http://localhost:1234/v1."""
+    """Call LM Studio via the official lmstudio Python SDK (WebSocket-based)."""
     try:
-        health = requests.get("http://localhost:1234/v1/models", timeout=2)
-        if health.status_code != 200:
-            raise RuntimeError("LM Studio local server is not reachable")
-    except requests.exceptions.RequestException:
-        raise RuntimeError("LM Studio local server is not reachable")
-
-    import openai
-    model_id = model or get_config_value("LM_STUDIO_MODEL", "local-model")
-    client = openai.OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
-    response = client.chat.completions.create(model=model_id, messages=messages)
-    return response.choices[0].message.content, f"lmstudio/{model_id}"
+        import lmstudio as lms
+        model_id = model or get_config_value("LM_STUDIO_MODEL", "")
+        m = lms.llm(model_id)
+        chat = [{"role": "user", "content": prompt}]
+        if system:
+            chat.insert(0, {"role": "system", "content": system})
+        result = m.respond(chat)
+        return str(result), f"lmstudio/{model_id}"
+    except Exception as e:
+        return f"LLM error: {e}", "lmstudio/unknown"
 
 def is_openai_available():
     """Checks if OpenAI API key is configured and enabled."""
