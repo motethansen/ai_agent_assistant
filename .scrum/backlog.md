@@ -1,7 +1,7 @@
 # Product Backlog — AI Agent Assistant
 
 > Maintained by: Product Owner + Scrum Master
-> Last updated: 2026-04-03
+> Last updated: 2026-04-04
 > Format: ID | Priority | Story | Acceptance Criteria | Estimate | Status
 
 ---
@@ -27,6 +27,7 @@
 | E15 | NanoClaw Agent Containerisation | Run ObsidianAgent and LogSeqAgent as isolated NanoClaw Skills to prevent host filesystem risk | Sprint-06 |
 | E16 | Universal Task Sync via n8n | Use n8n as middleware for conflict resolution between local .md files and Google Calendar | Sprint-06 |
 | E17 | CLI Router Simplification | Reduce main.py + ai_orchestration.py to lightweight router — delegate reasoning to NanoClaw, data-flows to n8n | Sprint-06 |
+| E18 | Google Connector Migration to n8n | Remove direct Python OAuth for Google Calendar and Google Tasks; route all Google API calls through n8n credential store | Sprint-07 |
 
 ---
 
@@ -460,6 +461,37 @@
 - **Estimate**: L
 - **Status**: ✅ Done — 2026-04-03 (T06-05) — route(), send_to_n8n() in ai_orchestration.py; fire-and-forget n8n calls in sync_logseq_to_obsidian() and handle_morning_planning(); NANOCLAW_ENABLED=false verified zero regression; 6 tests pass
 - **Notes**: Depends on BLI-037 and BLI-038 (NanoClaw Skills must exist before router can dispatch to them)
+
+#### BLI-041 — Remove direct Google Calendar OAuth from Python; route via n8n
+- **Story**: As a user, I want Google Calendar integration handled entirely by n8n so that no OAuth tokens or credentials live in the Python runtime
+- **Acceptance Criteria**:
+  - [ ] `calendar_manager.py` — OAuth flow and `get_calendar_service()` removed; file kept only for ICS import helper
+  - [ ] `calendar_agent.py` — `start_background_calendar_sync()` removed; file can be deleted or emptied
+  - [ ] `main.py` — import of `start_background_calendar_sync` removed (already gated, now fully deleted)
+  - [ ] `token.json` and `credentials.json` no longer required for any Python code path
+  - [ ] Google Calendar credential configured in n8n credential UI instead
+  - [ ] `config.example` — `ENABLE_GOOGLE_CALENDAR` key removed (no longer meaningful)
+  - [ ] `INSTALL.md` updated — Google Calendar section points to n8n credential setup, not `credentials.json`
+  - [ ] All existing tests pass; no new test failures
+- **Epic**: E18
+- **Estimate**: M
+- **Status**: 🔲 Not started
+- **Notes**: Depends on n8n Universal Task Sync (BLI-039) being configured and running. `ENABLE_GOOGLE_CALENDAR=false` in `.config` is the interim gate until this is complete.
+
+#### BLI-042 — Remove direct Google Tasks OAuth from Python; route via n8n
+- **Story**: As a user, I want Google Tasks sync handled by n8n so that Google API credentials are managed in one place (n8n) not spread across Python token files
+- **Acceptance Criteria**:
+  - [ ] `google_tasks_agent.py` — OAuth flow removed; sync logic replaced by `n8n_client.trigger("google-tasks-sync", payload)`
+  - [ ] n8n workflow added: receives trigger, fetches Google Tasks via n8n Google Tasks node, POSTs new tasks to `api_server.py` `/webhook/add-task` endpoint
+  - [ ] `cron_job.py` — `run_google_tasks_agent()` updated to call n8n trigger instead of direct agent
+  - [ ] `ENABLE_GOOGLE_TASKS` flag still respected — when false, n8n trigger is skipped
+  - [ ] `datainput/synced_google_tasks.json` dedup file still written (by api_server handler, not Python agent)
+  - [ ] `INSTALL.md` updated — Google Tasks section points to n8n credential setup
+  - [ ] All existing tests pass
+- **Epic**: E18
+- **Estimate**: M
+- **Status**: 🔲 Not started
+- **Notes**: Depends on BLI-041 (Google Calendar migration pattern established first). n8n Google Tasks node requires Google OAuth credential configured in n8n UI.
 
 ---
 
