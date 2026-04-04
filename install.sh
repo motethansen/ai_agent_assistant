@@ -1,16 +1,18 @@
 #!/bin/bash
 
 # AI Agent Assistant: Guided Installation Script
-# Supports macOS (Darwin) and Linux (Ubuntu).
+# Supports macOS (Darwin) with OrbStack or Docker Desktop, and Linux with Docker.
 
 set -e
 
-# ANSI Color Codes for better UI
+# ANSI Color Codes
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
 
 echo -e "${BLUE}#######################################${NC}"
 echo -e "${BLUE}#                                     #${NC}"
@@ -24,24 +26,79 @@ OS_TYPE=$(uname -s)
 echo -e "Detected Operating System: ${GREEN}$OS_TYPE${NC}"
 
 # Progress Tracking
-TOTAL_STEPS=6
+TOTAL_STEPS=8
 CURRENT_STEP=0
 
 show_progress() {
     CURRENT_STEP=$((CURRENT_STEP + 1))
     PERCENT=$((CURRENT_STEP * 100 / TOTAL_STEPS))
-    echo -e "${YELLOW}[Step $CURRENT_STEP/$TOTAL_STEPS - $PERCENT%] $1${NC}"
+    echo -e "\n${YELLOW}[Step $CURRENT_STEP/$TOTAL_STEPS - $PERCENT%] $1${NC}"
 }
 
-# 0. Upgrade Check
+# Global: container runtime command (set by detect_container_runtime)
+DOCKER_CMD=""
+
+# ─────────────────────────────────────────────
+# Helper: update or append a KEY=value in .config
+# ─────────────────────────────────────────────
+set_config_key() {
+    local key="$1"
+    local value="$2"
+    local file=".config"
+    if grep -qE "^#?\s*${key}=" "$file" 2>/dev/null; then
+        sed -i.bak "s|^#\?\s*${key}=.*|${key}=${value}|" "$file" && rm -f "${file}.bak"
+    else
+        echo "${key}=${value}" >> "$file"
+    fi
+}
+
+# ─────────────────────────────────────────────
+# Helper: call Ollama for contextual advice
+# Returns empty string if Ollama is not ready.
+# ─────────────────────────────────────────────
+ask_ollama() {
+    local prompt="$1"
+    local model
+    model=$(awk -F'=' '/^OLLAMA_MODEL[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    [ -z "$model" ] && model="llama3"
+
+    local host
+    host=$(awk -F'=' '/^OLLAMA_HOST[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    [ -z "$host" ] && host="http://localhost:11434"
+
+    # Quick reachability check (1s timeout)
+    if ! curl -sf --max-time 1 "${host}/api/tags" > /dev/null 2>&1; then
+        echo ""
+        return
+    fi
+
+    local payload
+    payload=$(printf '{"model":"%s","prompt":"%s","stream":false}' \
+        "$model" \
+        "$(echo "$prompt" | sed 's/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/\\n$//')")
+
+    curl -s --max-time 20 -X POST "${host}/api/generate" \
+        -H "Content-Type: application/json" \
+        -d "$payload" 2>/dev/null \
+        | python3 -c "import sys,json
+try:
+    d=json.load(sys.stdin)
+    print(d.get('response','').strip())
+except:
+    pass" 2>/dev/null || true
+}
+
+# ─────────────────────────────────────────────
+# Step 0: Upgrade check
+# ─────────────────────────────────────────────
 check_upgrade() {
-    show_progress "Checking for updates..."
+    show_progress "Checking for project updates..."
     if [ -d ".git" ]; then
         echo -e "${BLUE}Git repository detected. Checking for remote updates...${NC}"
-        git fetch origin --quiet
-        LOCAL=$(git rev-parse HEAD)
-        REMOTE=$(git rev-parse @{u})
-        if [ "$LOCAL" != "$REMOTE" ]; then
+        git fetch origin --quiet 2>/dev/null || true
+        LOCAL=$(git rev-parse HEAD 2>/dev/null || echo "")
+        REMOTE=$(git rev-parse @{u} 2>/dev/null || echo "")
+        if [ -n "$LOCAL" ] && [ -n "$REMOTE" ] && [ "$LOCAL" != "$REMOTE" ]; then
             echo -e "${YELLOW}New updates available!${NC}"
             read -p "Would you like to upgrade to the latest version? (y/n): " do_upgrade
             if [[ "$do_upgrade" == "y"* ]]; then
@@ -49,16 +106,17 @@ check_upgrade() {
                 echo -e "${GREEN}Project updated successfully.${NC}"
             fi
         else
-            echo -e "${GREEN}Project is already up to date.${NC}"
+            echo -e "${GREEN}Project is up to date.${NC}"
         fi
     fi
 }
 
-# 1. Dependency Checks & Auto-Installation
+# ─────────────────────────────────────────────
+# Step 1: Python + Git
+# ─────────────────────────────────────────────
 check_dependencies() {
     show_progress "Checking System Dependencies..."
-    
-    # Try to find an existing Python 3.11+
+
     PYTHON_CMD=""
     for cmd in "python3.12" "python3.11" "python3"; do
         if command -v $cmd &> /dev/null; then
@@ -74,57 +132,54 @@ check_dependencies() {
 
     if [ -z "$PYTHON_CMD" ]; then
         echo -e "${YELLOW}Python 3.11+ not found. Attempting to install Python 3.12...${NC}"
-        
         if [ "$OS_TYPE" == "Darwin" ]; then
             if ! command -v brew &> /dev/null; then
                 echo "Homebrew not found. Installing Homebrew first..."
                 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
                 eval "$(/opt/homebrew/bin/brew shellenv)"
             fi
-            echo "Installing Python 3.12 via Homebrew..."
             brew install python@3.12
             PYTHON_CMD=$(brew --prefix)/bin/python3.12
         else
-            echo "Installing Python 3.12 via apt..."
-            sudo apt update
-            sudo apt install software-properties-common -y
-            sudo add-apt-repository ppa:deadsnakes/ppa -y
-            sudo apt update
-            sudo apt install python3.12 python3.12-venv -y
+            sudo apt update -q
+            sudo apt install -y software-properties-common
+            sudo add-apt-repository -y ppa:deadsnakes/ppa
+            sudo apt update -q
+            sudo apt install -y python3.12 python3.12-venv
             PYTHON_CMD="/usr/bin/python3.12"
         fi
     fi
 
     if [ -z "$PYTHON_CMD" ] || ! $PYTHON_CMD --version &> /dev/null; then
-        echo -e "${RED}Error: Failed to secure a Python 3.11+ environment.${NC}"
+        echo -e "${RED}✗ Failed to secure Python 3.11+.${NC}"
+        echo -e "  Manual fix: install Python 3.11 or 3.12 from https://python.org"
         exit 1
     fi
 
-    echo -e "Using Python: ${GREEN}$($PYTHON_CMD --version)${NC}"
-    # Export for use in venv creation
-    export FINAL_PYTHON=$PYTHON_CMD
+    echo -e "  Python:  ${GREEN}$($PYTHON_CMD --version)${NC}"
 
-    # Check Git
     if ! command -v git &> /dev/null; then
-        echo -e "${RED}Error: Git is not installed.${NC}"
+        echo -e "${RED}✗ Git is not installed.${NC}"
+        echo -e "  Manual fix (macOS):  brew install git"
+        echo -e "  Manual fix (Linux):  sudo apt install git"
         exit 1
     fi
-    echo -e "${GREEN}System dependencies are OK.${NC}"
+    echo -e "  Git:     ${GREEN}$(git --version)${NC}"
+    export FINAL_PYTHON=$PYTHON_CMD
 }
 
-# 2. Virtual Environment & Requirements
+# ─────────────────────────────────────────────
+# Step 2: Python venv + pip requirements
+# ─────────────────────────────────────────────
 setup_python_env() {
     show_progress "Setting up Python Environment..."
     if [ ! -d ".venv" ]; then
         echo "Creating virtual environment using $FINAL_PYTHON..."
         $FINAL_PYTHON -m venv .venv
     fi
-    
     source .venv/bin/activate
-    echo "Upgrading package manager (pip)..."
     pip install --quiet --upgrade pip
-    
-    echo "Installing required AI libraries (this may take a minute)..."
+    echo "Installing dependencies (this may take a minute)..."
     if [ "$OS_TYPE" == "Linux" ]; then
         grep -v "pyobjc" requirements.txt > requirements_linux.txt
         pip install --quiet -r requirements_linux.txt
@@ -132,49 +187,157 @@ setup_python_env() {
     else
         pip install --quiet -r requirements.txt
     fi
-    echo -e "${GREEN}Python environment is ready.${NC}"
+    echo -e "${GREEN}Python environment ready.${NC}"
 }
 
-# 3. Ollama Installation (Local AI)
+# ─────────────────────────────────────────────
+# Step 3: Ollama
+# ─────────────────────────────────────────────
 setup_local_ai() {
     show_progress "Checking Local AI (Ollama)..."
     chmod +x scripts/manage_services.sh
 
     if ! command -v ollama &> /dev/null; then
-        echo "Ollama not found. It allows you to run AI models privately on your machine."
-        read -p "Would you like to install Ollama now? (y/n): " install_ollama
+        echo -e "${YELLOW}Ollama not found.${NC}"
+        echo "  Ollama runs AI models privately on your machine (no cloud required)."
+        read -p "  Install Ollama now? (y/n): " install_ollama
         if [[ "$install_ollama" == "y"* ]]; then
-            if [ "$OS_TYPE" == "Darwin" ]; then
-                if command -v brew &> /dev/null; then
-                    brew install --cask ollama
-                else
-                    echo "Downloading Ollama for Mac..."
-                    curl -fsSL https://ollama.com/install.sh | sh
-                fi
+            if [ "$OS_TYPE" == "Darwin" ] && command -v brew &> /dev/null; then
+                brew install --cask ollama
             else
                 curl -fsSL https://ollama.com/install.sh | sh
             fi
+        else
+            echo -e "${YELLOW}  ⚠ Skipped. Manual install: https://ollama.com/download${NC}"
+            echo -e "    After install, run: ollama pull llama3"
         fi
     else
-        echo -e "${GREEN}Ollama is already installed.${NC}"
+        echo -e "${GREEN}Ollama is installed.${NC}"
     fi
 
     ./scripts/manage_services.sh start
 }
 
-# Helper: update or append a KEY=value in .config
-set_config_key() {
-    local key="$1"
-    local value="$2"
-    local file=".config"
-    if grep -qE "^#?\s*${key}=" "$file" 2>/dev/null; then
-        sed -i.bak "s|^#\?\s*${key}=.*|${key}=${value}|" "$file" && rm -f "${file}.bak"
+# ─────────────────────────────────────────────
+# Step 4: Container runtime (OrbStack / Docker)
+# ─────────────────────────────────────────────
+detect_container_runtime() {
+    show_progress "Detecting container runtime..."
+
+    # OrbStack ships a docker-compatible CLI; test that first on macOS
+    if [ "$OS_TYPE" == "Darwin" ]; then
+        # OrbStack check: either `orb` CLI exists or docker provided by OrbStack
+        if command -v orb &> /dev/null; then
+            echo -e "${GREEN}OrbStack detected.${NC}"
+        fi
+    fi
+
+    # Docker CLI reachable?
+    if command -v docker &> /dev/null; then
+        if docker info &> /dev/null 2>&1; then
+            DOCKER_CMD="docker"
+            echo -e "  Container runtime: ${GREEN}docker — running ✓${NC}"
+            return 0
+        else
+            echo -e "  ${YELLOW}docker CLI found but the daemon is not running.${NC}"
+            if [ "$OS_TYPE" == "Darwin" ]; then
+                echo -e "  → Start OrbStack (open the app) or start Docker Desktop, then re-run install."
+            else
+                echo -e "  → Run: sudo systemctl start docker"
+            fi
+            echo -e "  ${YELLOW}n8n setup will be skipped — you can run it later with: ./install.sh n8n${NC}"
+            return 1
+        fi
     else
-        echo "${key}=${value}" >> "$file"
+        echo -e "  ${YELLOW}No container runtime found (docker command missing).${NC}"
+        if [ "$OS_TYPE" == "Darwin" ]; then
+            echo -e "  → Install OrbStack (recommended, free): https://orbstack.dev"
+            echo -e "    or Docker Desktop: https://docs.docker.com/desktop/install/mac-install/"
+        else
+            echo -e "  → Run: sudo apt install docker.io && sudo systemctl enable --now docker"
+        fi
+        echo -e "  ${YELLOW}n8n setup will be skipped — you can run it later with: ./install.sh n8n${NC}"
+        return 1
     fi
 }
 
-# 4. Configuration (Web Wizard or CLI)
+# ─────────────────────────────────────────────
+# Step 5: n8n via docker compose
+# ─────────────────────────────────────────────
+setup_n8n() {
+    show_progress "Setting up n8n (workflow automation)..."
+
+    if [ -z "$DOCKER_CMD" ]; then
+        echo -e "${YELLOW}  Skipping n8n setup — no container runtime available.${NC}"
+        return
+    fi
+
+    N8N_PORT=$(awk -F'=' '/^N8N_PORT[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    [ -z "$N8N_PORT" ] && N8N_PORT="5679"
+    N8N_URL="http://localhost:${N8N_PORT}"
+
+    # Check if n8n container is already up
+    if $DOCKER_CMD compose ps n8n 2>/dev/null | grep -q "running\|Up"; then
+        echo -e "${GREEN}  n8n is already running at ${N8N_URL}${NC}"
+    else
+        echo "  n8n is not running."
+        read -p "  Start n8n now via docker compose? (y/n): " start_n8n
+        if [[ "$start_n8n" == "y"* ]]; then
+            echo "  Starting n8n..."
+            # Temporarily disable set -e for compose startup
+            set +e
+            $DOCKER_CMD compose up -d n8n
+            COMPOSE_EXIT=$?
+            set -e
+
+            if [ $COMPOSE_EXIT -ne 0 ]; then
+                echo -e "${RED}  ✗ docker compose up failed.${NC}"
+                echo -e "    Manual fix: run 'docker compose up -d n8n' from the project root"
+                echo -e "    Check logs: docker compose logs n8n"
+                return
+            fi
+
+            # Wait for n8n to be healthy (up to 30s)
+            echo -n "  Waiting for n8n to be ready..."
+            for i in $(seq 1 15); do
+                if curl -sf --max-time 2 "${N8N_URL}/healthz" > /dev/null 2>&1 || \
+                   curl -sf --max-time 2 "${N8N_URL}" > /dev/null 2>&1; then
+                    echo -e " ${GREEN}ready!${NC}"
+                    break
+                fi
+                echo -n "."
+                sleep 2
+            done
+
+            if ! curl -sf --max-time 2 "${N8N_URL}" > /dev/null 2>&1; then
+                echo -e "\n${YELLOW}  n8n may still be starting. Check: ${N8N_URL}${NC}"
+            fi
+        else
+            echo -e "${YELLOW}  Skipped. Start later with: docker compose up -d n8n${NC}"
+            return
+        fi
+    fi
+
+    # Write webhook URL to .config
+    set_config_key "N8N_WEBHOOK_URL" "${N8N_URL}/webhook"
+    echo -e "  N8N_WEBHOOK_URL set to: ${CYAN}${N8N_URL}/webhook${NC}"
+
+    # Workflow import instructions
+    echo ""
+    echo -e "  ${BOLD}Next step — import workflows into n8n:${NC}"
+    echo -e "  1. Open ${CYAN}${N8N_URL}${NC} in your browser"
+    echo -e "  2. Top-right menu → ${BOLD}Import from file${NC}"
+    echo -e "  3. Import each file from ${CYAN}n8n-workflows/${NC}:"
+    echo -e "     • morning-planning.json"
+    echo -e "     • add-task.json"
+    echo -e "     • backlog-digest.json"
+    echo -e "     • universal_task_sync.json"
+    echo -e "  4. Open each imported workflow and toggle ${BOLD}Active${NC} (top-right switch)"
+}
+
+# ─────────────────────────────────────────────
+# Step 6: Configuration (.config keys)
+# ─────────────────────────────────────────────
 setup_configuration() {
     show_progress "System Configuration..."
 
@@ -186,121 +349,248 @@ setup_configuration() {
     fi
 
     echo ""
-    echo -e "${BLUE}--- API Key Setup ---${NC}"
-    echo "The assistant uses Ollama as its primary local LLM. Cloud API keys are optional."
-    echo ""
+    echo -e "${BLUE}--- API Keys (all optional — Ollama runs locally without these) ---${NC}"
 
-    # OpenAI (optional)
     CURRENT_OPENAI=$(grep -E "^OPENAI_API_KEY=" .config | cut -d'=' -f2- | tr -d ' ')
     if [ -z "$CURRENT_OPENAI" ] || [[ "$CURRENT_OPENAI" == *"your_"* ]]; then
         read -p "OpenAI API Key (sk-proj-...) [Enter to skip]: " openai_key
         if [ -n "$openai_key" ]; then
             set_config_key "OPENAI_API_KEY" "$openai_key"
             set_config_key "ENABLE_OPENAI" "true"
-            echo -e "${GREEN}OpenAI API key saved.${NC}"
-        else
-            echo -e "${YELLOW}Skipped. You can add it later with: /settings set OPENAI_API_KEY sk-proj-...${NC}"
+            echo -e "${GREEN}OpenAI key saved.${NC}"
         fi
     else
-        echo -e "${GREEN}OpenAI API key already configured.${NC}"
+        echo -e "${GREEN}OpenAI key already configured.${NC}"
     fi
 
-    # Gemini (optional)
     CURRENT_GEMINI=$(grep -E "^GEMINI_API_KEY=" .config | cut -d'=' -f2- | tr -d ' ')
     if [ -z "$CURRENT_GEMINI" ] || [[ "$CURRENT_GEMINI" == *"your_"* ]]; then
         read -p "Google Gemini API Key [Enter to skip]: " gemini_key
         if [ -n "$gemini_key" ]; then
             set_config_key "GEMINI_API_KEY" "$gemini_key"
             set_config_key "ENABLE_GEMINI" "true"
-            echo -e "${GREEN}Gemini API key saved.${NC}"
+            echo -e "${GREEN}Gemini key saved.${NC}"
         fi
     else
-        echo -e "${GREEN}Gemini API key already configured.${NC}"
+        echo -e "${GREEN}Gemini key already configured.${NC}"
     fi
 
-    # Claude (optional)
     CURRENT_CLAUDE=$(grep -E "^CLAUDE_API_KEY=" .config | cut -d'=' -f2- | tr -d ' ')
     if [ -z "$CURRENT_CLAUDE" ] || [[ "$CURRENT_CLAUDE" == *"your_"* ]]; then
         read -p "Anthropic Claude API Key [Enter to skip]: " claude_key
         if [ -n "$claude_key" ]; then
             set_config_key "CLAUDE_API_KEY" "$claude_key"
             set_config_key "ENABLE_CLAUDE" "true"
-            echo -e "${GREEN}Claude API key saved.${NC}"
+            echo -e "${GREEN}Claude key saved.${NC}"
         fi
     else
-        echo -e "${GREEN}Claude API key already configured.${NC}"
+        echo -e "${GREEN}Claude key already configured.${NC}"
     fi
 
     echo ""
     echo -e "${BLUE}--- Folder Paths ---${NC}"
-    read -p "Path to your Obsidian/Markdown notes folder [Enter to skip]: " ws_path
-    if [ -n "$ws_path" ]; then
-        set_config_key "WORKSPACE_DIR" "$ws_path"
+    CURRENT_WS=$(grep -E "^WORKSPACE_DIR=" .config | cut -d'=' -f2- | tr -d ' ')
+    if [ -z "$CURRENT_WS" ] || [[ "$CURRENT_WS" == *"yourname"* ]]; then
+        read -p "Path to your Obsidian/Markdown notes folder [Enter to skip]: " ws_path
+        if [ -n "$ws_path" ]; then
+            set_config_key "WORKSPACE_DIR" "$ws_path"
+        fi
+    else
+        echo -e "${GREEN}WORKSPACE_DIR already set: $CURRENT_WS${NC}"
     fi
 
-    echo -e "${GREEN}Configuration complete. You can update keys any time with /settings in chat.${NC}"
+    echo -e "${GREEN}Configuration complete.${NC}"
 }
 
-# 5. Background Automation (Cron)
+# ─────────────────────────────────────────────
+# Step 7: Cron / background automation
+# ─────────────────────────────────────────────
 setup_automation() {
     show_progress "Automation & Cron Job Setup..."
     EXISTING_CRON=$(crontab -l 2>/dev/null | grep "cron_job.py" || true)
-    
+
     if [ -n "$EXISTING_CRON" ]; then
-        echo -e "${YELLOW}An existing cron job for this project was found:${NC}"
+        echo -e "${YELLOW}Existing cron job found:${NC}"
         echo -e "${BLUE}$EXISTING_CRON${NC}"
-        read -p "Is this cron job still okay? (y/n): " cron_ok
+        read -p "Keep it? (y/n): " cron_ok
         if [[ "$cron_ok" != "y"* ]]; then
-            echo "Removing old cron job..."
             crontab -l | grep -v "cron_job.py" | crontab -
             EXISTING_CRON=""
         fi
     fi
 
     if [ -z "$EXISTING_CRON" ]; then
-        echo "I can set up a 'Cron Job' to automatically sync your tasks every hour."
-        read -p "Enable hourly background sync? (y/n): " enable_cron
+        echo "Enable hourly background sync (LogSeq → Obsidian, reminders, tasks)?"
+        read -p "Set up cron job? (y/n): " enable_cron
         if [[ "$enable_cron" == "y"* ]]; then
             VENV_PYTHON="$(pwd)/.venv/bin/python3"
             CRON_SCRIPT="$(pwd)/cron_job.py"
             CRON_LINE="0 * * * * cd $(pwd) && $VENV_PYTHON $CRON_SCRIPT >> $(pwd)/logs/cron_sync.log 2>&1"
             mkdir -p logs
             (crontab -l 2>/dev/null; echo "$CRON_LINE") | crontab -
-            echo -e "${GREEN}Background sync enabled.${NC}"
+            echo -e "${GREEN}Hourly sync enabled.${NC}"
         fi
     fi
 }
 
-# Main Execution
+# ─────────────────────────────────────────────
+# Step 8: Service check summary + AI advice
+# ─────────────────────────────────────────────
+run_service_checks() {
+    show_progress "Service Health Check..."
+
+    ISSUES=()
+    ADVICE=()
+
+    # --- Python assistant verification ---
+    echo -e "\n  ${BOLD}Checking services:${NC}"
+
+    set +e
+    PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py > /tmp/ai_check.txt 2>&1
+    AI_CHECK_EXIT=$?
+    set -e
+
+    if [ $AI_CHECK_EXIT -eq 0 ]; then
+        echo -e "  ${GREEN}✓ AI assistant (Ollama LLM)${NC}"
+        OLLAMA_OK=true
+    else
+        echo -e "  ${RED}✗ AI assistant check failed${NC}"
+        OLLAMA_OK=false
+        ISSUES+=("Ollama LLM not responding")
+        ADVICE+=("Run: ollama serve   then: ollama pull <model>   (check OLLAMA_MODEL in .config)")
+    fi
+
+    # --- Ollama reachability ---
+    OLLAMA_HOST=$(awk -F'=' '/^OLLAMA_HOST[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    [ -z "$OLLAMA_HOST" ] && OLLAMA_HOST="http://localhost:11434"
+    if curl -sf --max-time 3 "${OLLAMA_HOST}/api/tags" > /dev/null 2>&1; then
+        echo -e "  ${GREEN}✓ Ollama API (${OLLAMA_HOST})${NC}"
+    else
+        echo -e "  ${RED}✗ Ollama API unreachable (${OLLAMA_HOST})${NC}"
+        ISSUES+=("Ollama API unreachable at ${OLLAMA_HOST}")
+        ADVICE+=("Start Ollama: ollama serve   or open the Ollama app")
+    fi
+
+    # --- n8n ---
+    N8N_PORT=$(awk -F'=' '/^N8N_PORT[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    [ -z "$N8N_PORT" ] && N8N_PORT="5679"
+    if curl -sf --max-time 3 "http://localhost:${N8N_PORT}" > /dev/null 2>&1; then
+        echo -e "  ${GREEN}✓ n8n (http://localhost:${N8N_PORT})${NC}"
+    else
+        echo -e "  ${YELLOW}⚠ n8n not reachable (http://localhost:${N8N_PORT})${NC}"
+        ISSUES+=("n8n not running")
+        if [ -n "$DOCKER_CMD" ]; then
+            ADVICE+=("Run: docker compose up -d n8n   then open http://localhost:${N8N_PORT} and import workflows from n8n-workflows/")
+        else
+            ADVICE+=("Install a container runtime first (OrbStack or Docker), then: docker compose up -d n8n")
+        fi
+    fi
+
+    # --- Container runtime ---
+    if [ -n "$DOCKER_CMD" ]; then
+        echo -e "  ${GREEN}✓ Container runtime (docker)${NC}"
+    else
+        echo -e "  ${YELLOW}⚠ Container runtime not available${NC}"
+        ISSUES+=("No container runtime (Docker/OrbStack)")
+        if [ "$OS_TYPE" == "Darwin" ]; then
+            ADVICE+=("Install OrbStack (free, lightweight): https://orbstack.dev   or Docker Desktop: https://docs.docker.com/desktop/install/mac-install/")
+        else
+            ADVICE+=("Install Docker: sudo apt install docker.io && sudo systemctl enable --now docker")
+        fi
+    fi
+
+    # --- Python API server (api_server.py) ---
+    WEBHOOK_PORT=$(awk -F'=' '/^WEBHOOK_PORT[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    [ -z "$WEBHOOK_PORT" ] && WEBHOOK_PORT="5678"
+    if curl -sf --max-time 2 "http://localhost:${WEBHOOK_PORT}/health" > /dev/null 2>&1; then
+        echo -e "  ${GREEN}✓ API server (http://localhost:${WEBHOOK_PORT})${NC}"
+    else
+        echo -e "  ${YELLOW}⚠ API server not running (http://localhost:${WEBHOOK_PORT})${NC}"
+        ISSUES+=("Python API server not running (needed for n8n webhooks back to Python)")
+        ADVICE+=("Start when needed: python api_server.py   (only required if using n8n Universal Task Sync)")
+    fi
+
+    # --- Summary ---
+    echo ""
+    if [ ${#ISSUES[@]} -eq 0 ]; then
+        echo -e "  ${GREEN}${BOLD}All services healthy.${NC}"
+    else
+        echo -e "  ${YELLOW}${BOLD}Issues found (${#ISSUES[@]}):${NC}"
+        for i in "${!ISSUES[@]}"; do
+            echo -e "  ${RED}  [$(( i+1 ))] ${ISSUES[$i]}${NC}"
+            echo -e "  ${CYAN}      → ${ADVICE[$i]}${NC}"
+        done
+    fi
+
+    # --- Ollama-powered advice (if LLM is ready) ---
+    if [ "$OLLAMA_OK" == "true" ] && [ ${#ISSUES[@]} -gt 0 ]; then
+        echo ""
+        echo -e "  ${BLUE}Asking your local AI for setup guidance...${NC}"
+
+        ISSUE_LIST=$(printf '%s\n' "${ISSUES[@]}" | awk '{print NR". "$0}')
+        PROMPT="You are a helpful assistant. The user just installed an AI agent assistant on their $(uname -s) machine. The following setup issues were detected:
+
+${ISSUE_LIST}
+
+Give a short, friendly, plain-text summary (no markdown) of what each issue means and the quickest way to fix it. Be concise — 2-3 sentences per issue maximum."
+
+        ADVICE_TEXT=$(ask_ollama "$PROMPT")
+        if [ -n "$ADVICE_TEXT" ]; then
+            echo ""
+            echo -e "  ${CYAN}${BOLD}AI Setup Advisor:${NC}"
+            echo "$ADVICE_TEXT" | sed 's/^/  /'
+        fi
+    fi
+}
+
+# ─────────────────────────────────────────────
+# Subcommand: ./install.sh n8n
+# ─────────────────────────────────────────────
+if [[ "$1" == "n8n" ]]; then
+    detect_container_runtime || true
+    setup_n8n
+    run_service_checks
+    exit 0
+fi
+
+# ─────────────────────────────────────────────
+# Subcommand: ./install.sh upgrade
+# ─────────────────────────────────────────────
 if [[ "$1" == "upgrade" ]]; then
     check_upgrade
     setup_python_env
     setup_local_ai
+    detect_container_runtime || true
     echo -e "\n${BLUE}Verifying AI Assistant...${NC}"
     PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py
+    run_service_checks
     echo -e "${GREEN}Upgrade complete.${NC}"
     exit 0
-elif [[ "$1" == "cron" ]]; then
+fi
+
+# ─────────────────────────────────────────────
+# Subcommand: ./install.sh cron
+# ─────────────────────────────────────────────
+if [[ "$1" == "cron" ]]; then
     setup_automation
     exit 0
 fi
 
+# ─────────────────────────────────────────────
+# Full installation
+# ─────────────────────────────────────────────
 check_upgrade
 check_dependencies
 setup_python_env
 setup_local_ai
+detect_container_runtime || true
+setup_n8n
 setup_configuration
 setup_automation
+run_service_checks
 
-echo -e "\n${BLUE}[6/6] Verifying AI Assistant...${NC}"
-if ! PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py; then
-    echo -e "${YELLOW}Verification failed. Attempting to repair services...${NC}"
-    ./scripts/manage_services.sh start
-    echo -e "${BLUE}Re-verifying...${NC}"
-    PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py || echo -e "${RED}Verification failed again. Please check Ollama logs or your .config.${NC}"
-fi
-
-echo -e "\n${GREEN}🎉 SUCCESS! AI Agent Assistant is installed.${NC}"
-echo -e "To start the assistant, run:   ${YELLOW}python main.py${NC}"
-echo -e "To run all tests:              ${YELLOW}make test${NC}"
+echo -e "\n${GREEN}${BOLD}🎉 Installation complete.${NC}"
+echo -e "  Start the assistant:   ${YELLOW}python main.py${NC}"
+echo -e "  Run tests:             ${YELLOW}make test${NC}"
+echo -e "  Service health:        ${YELLOW}python scripts/status.py${NC}"
 echo ""
