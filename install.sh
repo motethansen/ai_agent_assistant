@@ -590,7 +590,7 @@ setup_automation
 run_service_checks
 
 echo -e "\n${GREEN}${BOLD}🎉 Installation complete.${NC}"
-echo -e "  Start the assistant:   ${YELLOW}python main.py${NC}"
+echo -e "  Start the assistant:   ${YELLOW}./run.sh${NC}"
 echo -e "  Run tests:             ${YELLOW}make test${NC}"
 echo -e "  Service health:        ${YELLOW}python scripts/status.py${NC}"
 echo ""

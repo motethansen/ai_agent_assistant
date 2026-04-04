@@ -11,15 +11,12 @@ setup:
 	@echo "Launching Setup Wizard..."
 	@.venv/bin/streamlit run setup_wizard.py
 
-# Background observer (Main loop)
+# Start the assistant (uses run.sh to enforce venv Python)
 run:
-	@echo "Starting AI Agent Assistant background observer..."
-	@.venv/bin/python3 main.py
+	@./run.sh
 
-# Interactive chat mode
 run-chat:
-	@echo "Starting AI Agent Assistant..."
-	@.venv/bin/python3 main.py
+	@./run.sh
 
 # Launch the Streamlit UI
 run-ui:
