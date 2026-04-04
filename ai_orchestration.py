@@ -254,17 +254,21 @@ def get_llm(model_type="chat", query=""):
         try:
             from langchain_anthropic import ChatAnthropic
         except ImportError:
-            print("langchain-anthropic not installed. Install with: pip install langchain-anthropic")
-            # Fall through to gemini
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            return ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=api_key), "gemini/gemini-2.0-flash"
+            print("⚠️  langchain-anthropic not installed — falling back to Ollama. Run: pip install langchain-anthropic")
+            ollama_model = get_config_value("OLLAMA_MODEL", "llama3")
+            ollama_host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
+            ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "8192"))
+            return ChatOllama(model=ollama_model, base_url=ollama_host, num_ctx=ctx_size, temperature=0), f"ollama/{ollama_model}"
         claude_key = get_config_value("CLAUDE_API_KEY", "")
         claude_model = get_config_value("CLAUDE_MODEL", "claude-sonnet-4-20250514")
         return ChatAnthropic(model=claude_model, anthropic_api_key=claude_key, temperature=0), f"claude/{claude_model}"
 
-    # Fallback to Gemini
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    return ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=api_key), "gemini/gemini-2.0-flash"
+    # Unknown or unconfigured provider — fall back to Ollama
+    print(f"⚠️  Unknown LLM provider '{model_name}' — falling back to Ollama. Check ROUTING_* keys in .config.")
+    ollama_model = get_config_value("OLLAMA_MODEL", "llama3")
+    ollama_host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
+    ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "8192"))
+    return ChatOllama(model=ollama_model, base_url=ollama_host, num_ctx=ctx_size, temperature=0), f"ollama/{ollama_model}"
 
 def run_agent_query(user_input, context_data=None):
     """Runs a tool-calling agent to handle a user query."""
