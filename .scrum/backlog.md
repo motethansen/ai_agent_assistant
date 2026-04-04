@@ -462,6 +462,69 @@
 - **Status**: ✅ Done — 2026-04-03 (T06-05) — route(), send_to_n8n() in ai_orchestration.py; fire-and-forget n8n calls in sync_logseq_to_obsidian() and handle_morning_planning(); NANOCLAW_ENABLED=false verified zero regression; 6 tests pass
 - **Notes**: Depends on BLI-037 and BLI-038 (NanoClaw Skills must exist before router can dispatch to them)
 
+#### BLI-043 — Local n8n setup: install, configure, import workflows, and verify
+- **Story**: As a user, I want n8n running locally via Docker so I can import the bundled workflow templates, connect them to the Python API server, and verify the full event-driven pipeline end-to-end
+- **Acceptance Criteria**:
+  - [ ] `docker compose up -d n8n` starts cleanly — n8n UI accessible at `http://localhost:5679`
+  - [ ] `N8N_WEBHOOK_URL=http://localhost:5679/webhook` set in `.config`
+  - [ ] All 4 workflow JSONs imported into n8n UI (`n8n-workflows/*.json`)
+  - [ ] `python api_server.py` starts cleanly on port 5678 (the n8n→Python callback server)
+  - [ ] `/sync-universal` CLI command triggers the Universal Task Sync workflow and n8n logs show the webhook received
+  - [ ] `python scripts/status.py` shows `n8n: ok`
+  - [ ] `INSTALL.md` updated with a dedicated **n8n Setup** section (steps below)
+- **Epic**: E07
+- **Estimate**: S
+- **Status**: 🔲 Not started
+
+**Setup steps (for INSTALL.md):**
+
+```
+# 1. Prerequisites
+#    Docker Desktop (Mac): https://docs.docker.com/desktop/install/mac-install/
+docker info   # must succeed
+
+# 2. Start n8n
+docker compose up -d n8n
+#    UI available at: http://localhost:5679
+#    Data persisted to Docker volume: n8n_data
+
+# 3. Set the webhook URL in .config
+echo "N8N_WEBHOOK_URL=http://localhost:5679/webhook" >> .config
+
+# 4. Start the Python API server (n8n calls back to this)
+python api_server.py &
+#    Listens on port 5678 by default
+
+# 5. Import workflows into n8n
+#    Open http://localhost:5679 in a browser
+#    Top-right menu → Import from file → select each file from n8n-workflows/:
+#      - morning-planning.json
+#      - add-task.json
+#      - backlog-digest.json
+#      - universal_task_sync.json
+
+# 6. Activate workflows
+#    Open each imported workflow → toggle Active (top-right switch)
+
+# 7. Test the connection
+python main.py
+/sync-universal
+#    Expected: n8n logs show POST /webhook/task-sync received
+
+# 8. Verify status
+python scripts/status.py
+#    Expected: n8n: ok
+```
+
+**Troubleshooting:**
+- `n8n: unreachable` in status → check `docker ps` and confirm n8n container is running
+- Webhook 404 → confirm workflow is Active in n8n UI (inactive workflows don't expose webhook URLs)
+- `api_server.py` connection refused → n8n cannot reach Python on port 5678; check firewall or use `docker network inspect agent_net`
+
+- **Notes**: n8n data (workflows, credentials) is stored in Docker volume `n8n_data` — survives container restarts. To reset: `docker volume rm ai_agent_assistant_n8n_data`. Port can be changed via `N8N_PORT` in `.config`.
+
+---
+
 #### BLI-041 — Remove direct Google Calendar OAuth from Python; route via n8n
 - **Story**: As a user, I want Google Calendar integration handled entirely by n8n so that no OAuth tokens or credentials live in the Python runtime
 - **Acceptance Criteria**:
