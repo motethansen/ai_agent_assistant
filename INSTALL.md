@@ -49,20 +49,14 @@ This project requires setting up a few local and cloud components to function as
     - `GEMINI_API_KEY`: Optional cloud fallback.
     - `CALENDAR_ID`: Usually 'primary' or a specific ID.
 
-5. **Google Calendar (via n8n):**
-    Google Calendar credentials live in n8n's credential store, not in Python.
-    - Open your local n8n instance (http://localhost:5679)
-    - Go to **Credentials** → **Add Credential** → **Google Calendar OAuth2 API**
-    - Follow the n8n guide to link your Google Cloud Project.
-    - Python agents will read from the n8n-synced `datainput/googlecalendar.yml` cache.
-
-6. **Google Tasks (via n8n):**
-    Google Tasks sync is handled by n8n.
-    - Open your local n8n instance (http://localhost:5679)
-    - Go to **Credentials** → **Add Credential** → **Google Tasks OAuth2 API**
-    - Follow the n8n guide to link your Google Cloud Project.
-    - Import `n8n-workflows/google_tasks_sync.json`.
-    - Set `ENABLE_GOOGLE_TASKS=true` in `.config`.
+5. **Google Calendar, Tasks, and Gmail (via n8n):**
+    Google credentials live in n8n's credential store — no `token.json` or
+    `credentials.json` files are needed in the Python project.
+    See **[docs/GOOGLE_SETUP.md](docs/GOOGLE_SETUP.md)** for the full step-by-step guide:
+    - Create a Google Cloud project and enable the required APIs
+    - Configure the OAuth consent screen and create OAuth 2.0 credentials
+    - Add credentials in n8n and wire them into workflows
+    - Set `ENABLE_GOOGLE_TASKS=true` and/or `ENABLE_GMAIL=true` in `.config`
 
 
 ## LogSeq Setup
