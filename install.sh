@@ -352,7 +352,6 @@ setup_n8n() {
     # Format: "filename|Sprint-XX — reason"
     CHANGED_WORKFLOWS=(
         "morning-planning.json|Sprint-08 — webhook changed to /webhook/morning-plan"
-        "google_tasks_sync.json|Sprint-07 — new workflow (Google Tasks pull/push via n8n)"
     )
     STABLE_WORKFLOWS=(
         "universal_task_sync.json"

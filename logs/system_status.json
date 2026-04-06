@@ -1,16 +1,16 @@
 {
-    "last_check": "2026-04-04T21:04:07.788103",
+    "last_check": "2026-04-06T21:00:23.385261",
     "git": {
-        "status": "update_available",
-        "message": "New updates available"
+        "status": "up_to_date",
+        "message": "System is up to date"
     },
     "ollama": {
-        "status": "ok",
-        "message": "Ollama is running"
+        "status": "error",
+        "message": "Ollama is not reachable"
     },
     "lm_studio": {
-        "status": "disabled",
-        "message": "LM Studio disabled (ENABLE_LM_STUDIO=false)"
+        "status": "error",
+        "message": "LM Studio is not reachable: HTTPConnectionPool(host='localhost', port=1234): Max retries exceeded with url: /v1/models (Caused by NewConnectionError(\"HTTPConnection(host='localhost', port=1234): Failed to establish a new connection: [Errno 61] Connection refused\"))"
     },
     "venv": {
         "status": "ok",
@@ -33,13 +33,14 @@
         "message": "/Users/michaelhansen/Library/Mobile Documents/iCloud~md~obsidian/Documents"
     },
     "cron_last_run": {
-        "status": "warning",
-        "message": "No timestamps found in cron_sync.log"
+        "status": "ok",
+        "message": "11.0h ago",
+        "age_hours": 11.01
     },
     "reminders_sync": {
         "status": "warning",
-        "message": "Last synced 868h ago",
-        "age_hours": 868.05
+        "message": "Last synced 916h ago",
+        "age_hours": 915.98
     },
     "google_tasks": {
         "status": "disabled",

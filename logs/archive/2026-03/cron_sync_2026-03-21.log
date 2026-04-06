@@ -1,0 +1,46 @@
+Cron Sync Started at 2026-03-21 08:00:01
+Agents: datainput, logseq, calendar, legacy_sync, health
+============================================================
+
+[2026-03-21 08:00:01] === DataInput Agent ===
+[DataInputAgent] No new reminders to sync.
+[DataInputAgent] Asking LLM to organise planner...
+  ERROR: module 'ai_orchestration' has no attribute 'generate'
+
+[2026-03-21 08:00:20] === LogSeq LATER Agent ===
+[LogSeqLaterAgent] Found 59 unique LATER tasks (58 from journals, 2 from pages).
+[LogSeqLaterAgent] Summary written to /Users/michaelhansen/Library/Mobile Documents/iCloud~md~obsidian/Documents/Planner.md
+  LATER tasks found: 59
+
+[2026-03-21 08:00:20] === Calendar Planning Agent (Gemini) ===
+Please visit this URL to authorize this application: https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=715905683797-mg3ros358tpmi8vmcuro8gad35fc42sl.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A61147%2F&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly&state=0IyHtUgZnGGodoy2U4SsmeLktZduOF&access_type=offline
+  ERROR: (invalid_client) Unauthorized
+
+[2026-03-21 08:05:20] === Health Checks ===
+
+[2026-03-21 08:05:24] Cron Sync Complete.
+/Users/michaelhansen/Projects/github/ai_agent_assistant/.venv/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: FutureWarning: You are using a Python version (3.10.13) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
+  warnings.warn(message, FutureWarning)
+
+============================================================
+Cron Sync Started at 2026-03-21 09:00:00
+Agents: datainput, logseq, calendar, legacy_sync, health
+============================================================
+
+[2026-03-21 09:00:00] === DataInput Agent ===
+[DataInputAgent] No new reminders to sync.
+[DataInputAgent] Asking LLM to organise planner...
+  ERROR: module 'ai_orchestration' has no attribute 'generate'
+
+[2026-03-21 09:00:19] === LogSeq LATER Agent ===
+[LogSeqLaterAgent] Found 59 unique LATER tasks (58 from journals, 2 from pages).
+[LogSeqLaterAgent] Summary written to /Users/michaelhansen/Library/Mobile Documents/iCloud~md~obsidian/Documents/Planner.md
+  LATER tasks found: 59
+
+[2026-03-21 09:00:19] === Calendar Planning Agent (Gemini) ===
+Please visit this URL to authorize this application: https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=715905683797-mg3ros358tpmi8vmcuro8gad35fc42sl.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A65500%2F&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly&state=Z5Lo0X5hsvxrZWxqRaIFyzswhO2BBR&access_type=offline
+  ERROR: (invalid_client) Unauthorized
+
+[2026-03-21 09:40:20] === Health Checks ===
+
+[2026-03-21 09:40:24] Cron Sync Complete.
