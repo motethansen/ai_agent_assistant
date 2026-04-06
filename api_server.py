@@ -96,6 +96,56 @@ def run_plan(_: PlanRequest = None):
     }
 
 
+@app.post("/webhook/morning-plan")
+def morning_plan():
+    """
+    Run the full morning planning pipeline and return the generated plan.
+
+    Sequence:
+      1. datainput_agent  — sync Apple Reminders → Obsidian planner
+      2. logseq_later_agent — sync LogSeq LATER tasks → Obsidian planner
+      3. calendar_planning_agent — generate day/week plan via configured LLM (ROUTING_PLANNING)
+      4. Return plan text + path to suggestions file
+    """
+    import calendar_planning_agent
+
+    results = {}
+
+    # Step 1: datainput sync
+    try:
+        import datainput_agent
+        datainput_agent.run(organise=False)
+        results["datainput"] = "ok"
+    except Exception as e:
+        results["datainput"] = f"error: {e}"
+
+    # Step 2: LogSeq LATER sync
+    try:
+        from logseq_later_agent import run as logseq_run
+        logseq_run(write_to_obsidian=True)
+        results["logseq_later"] = "ok"
+    except Exception as e:
+        results["logseq_later"] = f"error: {e}"
+
+    # Step 3: Generate plan via LLM
+    try:
+        plan_text = calendar_planning_agent.generate_plan(
+            days=7, write_to_obsidian=True
+        )
+        results["plan"] = "ok" if plan_text else "no output"
+    except Exception as e:
+        results["plan"] = f"error: {e}"
+        plan_text = None
+
+    suggestions_path = os.path.join("datainput", "calendar_suggestions.md")
+    return {
+        "status": "ok",
+        "steps": results,
+        "plan": plan_text or "",
+        "suggestions_file": suggestions_path if os.path.exists(suggestions_path) else None,
+    }
+
+
 @app.get("/health")
 def health():
     logseq_dir = get_config_value("LOGSEQ_DIR", None)

@@ -133,7 +133,9 @@ def render_settings(config_path):
 
 COMMAND_DESCRIPTIONS = {
     "backlog": "Show all pending tasks (Obsidian + LogSeq)",
-    "plan": "Run interactive planning session with Google Calendar",
+    "plan": "Tasks by time horizon: /plan  /plan today|week|month|year|backlog",
+    "cal": "Month grid with task/event markers: /cal  /cal 5 2026",
+    "cal-day": "Drill into a day: /cal-day YYYY-MM-DD  (default: today)",
     "add-task": "Add a LATER task to today's LogSeq journal  e.g. /add-task Write tests",
     "done": "Mark a matching task done in LogSeq or Obsidian  e.g. /done Write tests",
     "sync-logseq": "Sync LogSeq tasks to Obsidian Inbox",

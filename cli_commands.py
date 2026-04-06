@@ -957,6 +957,21 @@ def handle_chat_mode(obsidian_file):
                 elif command == "week":
                     from terminal_views import handle_week_view
                     handle_week_view()
+                elif command == "plan":
+                    from terminal_views import handle_plan_view
+                    handle_plan_view(args[0] if args else None)
+                elif command == "cal":
+                    from terminal_views import handle_cal_view
+                    month = args[0] if args else None
+                    year = args[1] if len(args) > 1 else None
+                    handle_cal_view(month=month, year=year)
+                elif command == "cal-day":
+                    from terminal_views import handle_cal_day_view
+                    if args:
+                        handle_cal_day_view(args[0])
+                    else:
+                        import datetime
+                        handle_cal_day_view(datetime.date.today().isoformat())
                 elif command == "add-event":
                     handle_add_event()
                 elif command == "remove-event":

@@ -21,15 +21,15 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://api:5678/webhook/plan",
+        "url": "http://api:5678/webhook/morning-plan",
         "sendBody": true,
         "bodyParameters": {
           "parameters": []
         },
         "options": {}
       },
-      "id": "http-plan",
-      "name": "Request Daily Plan",
+      "id": "http-morning-plan",
+      "name": "Run Morning Plan Pipeline",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [460, 300]
@@ -58,14 +58,14 @@
           "string": [
             {
               "name": "summary",
-              "value": "={{ \"Today's plan:\\n\" + ($json.schedule || []).map(s => `- [${s.time}] ${s.task} (${s.category})`).join('\\n') }}"
+              "value": "={{ \"Morning plan ready.\\nSteps: \" + JSON.stringify($json.steps) + \"\\n\\n\" + ($json.plan || '(no plan text)').slice(0, 500) }}"
             }
           ]
         },
         "options": {}
       },
       "id": "set-summary",
-      "name": "Format Schedule",
+      "name": "Format Plan Summary",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.3,
       "position": [900, 220]
@@ -76,7 +76,7 @@
           "string": [
             {
               "name": "error",
-              "value": "={{ \"Planning failed: \" + $json.message }}"
+              "value": "={{ \"Morning plan failed. Steps: \" + JSON.stringify($json.steps) }}"
             }
           ]
         },
@@ -94,14 +94,14 @@
       "main": [
         [
           {
-            "node": "Request Daily Plan",
+            "node": "Run Morning Plan Pipeline",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Request Daily Plan": {
+    "Run Morning Plan Pipeline": {
       "main": [
         [
           {
@@ -116,7 +116,7 @@
       "main": [
         [
           {
-            "node": "Format Schedule",
+            "node": "Format Plan Summary",
             "type": "main",
             "index": 0
           }

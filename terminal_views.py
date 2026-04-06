@@ -1,18 +1,21 @@
 """
-terminal_views.py — /today and /week Rich terminal views.
+terminal_views.py — /today, /week, /plan, and /cal Rich terminal views.
 
-Renders today's calendar events and tasks (/today) or a 7-day summary (/week)
-using Rich tables.  Calendar data is read from the YAML cache written by
-CalendarAgent; tasks come from Obsidian, LogSeq and Apple Reminders.
+Renders today's calendar events and tasks (/today), a 7-day summary (/week),
+time-horizon task buckets (/plan), or a unix cal-style month grid (/cal).
+Calendar data is read from the YAML cache written by CalendarAgent; tasks come
+from Obsidian, LogSeq and Apple Reminders.
 """
 import os
 import re
 import time
+import calendar
 import datetime
 
 import yaml
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 from rich import box
 
 console = Console()
@@ -280,6 +283,285 @@ def handle_today_view():
     console.print(table)
     console.print()
 
+
+# ---------------------------------------------------------------------------
+# /plan — time-horizon task buckets
+# ---------------------------------------------------------------------------
+
+_HORIZONS = ("today", "week", "month", "year", "backlog")
+
+
+def _bucket_tasks(all_tasks, today):
+    """
+    Split tasks into five buckets based on due_date relative to today.
+    Returns dict: {horizon: [task_dict, ...]}
+    """
+    buckets = {h: [] for h in _HORIZONS}
+    for t in all_tasks:
+        due = t.get("due_date")
+        if not due:
+            buckets["backlog"].append(t)
+            continue
+        try:
+            due_date = datetime.date.fromisoformat(str(due)[:10])
+        except ValueError:
+            buckets["backlog"].append(t)
+            continue
+        delta = (due_date - today).days
+        if delta <= 0:
+            buckets["today"].append(t)
+        elif delta <= 6:
+            buckets["week"].append(t)
+        elif delta <= 29:
+            buckets["month"].append(t)
+        elif delta <= 364:
+            buckets["year"].append(t)
+        else:
+            buckets["backlog"].append(t)
+    return buckets
+
+
+def _render_bucket(label, tasks, today, show_empty=False):
+    """Print a Rich table for one time-horizon bucket."""
+    if not tasks:
+        if show_empty:
+            console.print(f"[dim]  No tasks in {label}.[/dim]")
+        return
+
+    table = Table(
+        box=box.SIMPLE_HEAD,
+        show_header=True,
+        header_style="bold",
+        pad_edge=False,
+        title=f"[bold cyan]{label}[/bold cyan]  [dim]({len(tasks)} task{'s' if len(tasks) != 1 else ''})[/dim]",
+        title_justify="left",
+    )
+    table.add_column("Due", width=12, style="dim")
+    table.add_column("Task", min_width=32)
+    table.add_column("Source", width=12)
+
+    for t in tasks:
+        due = t.get("due_date") or "—"
+        task_text = t["task"]
+        source = _source_label(t.get("source", ""))
+
+        # Colour overdue tasks red
+        try:
+            due_date = datetime.date.fromisoformat(str(due)[:10])
+            if due_date < today:
+                task_text = f"[red]{task_text}[/red]"
+                due = f"[red]{due}[/red]"
+        except ValueError:
+            pass
+
+        table.add_row(str(due), task_text, source)
+
+    console.print(table)
+
+
+def handle_plan_view(horizon=None):
+    """
+    Render tasks grouped by time horizon.
+
+    horizon: 'today' | 'week' | 'month' | 'year' | 'backlog' | None (all buckets)
+    """
+    today = datetime.date.today()
+
+    if horizon and horizon not in _HORIZONS:
+        console.print(f"[yellow]Unknown horizon '{horizon}'. "
+                      f"Use: today, week, month, year, backlog[/yellow]")
+        return
+
+    console.print()
+    if horizon:
+        console.print(f"[bold cyan]Plan — {horizon.capitalize()}[/bold cyan]  "
+                      f"[dim]{today.strftime('%-d %B %Y')}[/dim]")
+    else:
+        console.print(f"[bold cyan]Plan — All horizons[/bold cyan]  "
+                      f"[dim]{today.strftime('%-d %B %Y')}[/dim]")
+    console.print("━" * 52)
+
+    all_tasks = _load_unified_tasks()
+    buckets = _bucket_tasks(all_tasks, today)
+
+    horizon_labels = {
+        "today":   "Today & Overdue",
+        "week":    "This Week  (next 7 days)",
+        "month":   "This Month  (next 30 days)",
+        "year":    "This Year  (next 365 days)",
+        "backlog": "Backlog  (no due date / beyond a year)",
+    }
+
+    targets = [horizon] if horizon else list(_HORIZONS)
+    for h in targets:
+        _render_bucket(horizon_labels[h], buckets[h], today, show_empty=(horizon is not None))
+
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# /cal — unix cal-style month grid with task/event markers
+# ---------------------------------------------------------------------------
+
+def handle_cal_view(month=None, year=None):
+    """
+    Render a Rich month grid.  Days with events show '*', days with tasks show '•'.
+    /cal           → current month
+    /cal 5 2026    → May 2026
+    """
+    today = datetime.date.today()
+    if month is None:
+        month = today.month
+    if year is None:
+        year = today.year
+
+    try:
+        month = int(month)
+        year = int(year)
+    except (TypeError, ValueError):
+        console.print("[red]Usage: /cal [month year]  e.g. /cal 5 2026[/red]")
+        return
+
+    # Load events and tasks for the whole month
+    first_day = datetime.date(year, month, 1)
+    last_day_num = calendar.monthrange(year, month)[1]
+    last_day = datetime.date(year, month, last_day_num)
+
+    events = _load_calendar_events()
+    all_tasks = _load_unified_tasks()
+
+    # Build per-day sets
+    days_with_events = set()
+    days_with_tasks = set()
+
+    for ev in events:
+        dt = _parse_event_time(ev.get("start"))
+        if dt and first_day <= dt.date() <= last_day:
+            days_with_events.add(dt.date().day)
+
+    for t in all_tasks:
+        due = t.get("due_date")
+        if not due:
+            continue
+        try:
+            d = datetime.date.fromisoformat(str(due)[:10])
+            if first_day <= d <= last_day:
+                days_with_tasks.add(d.day)
+        except ValueError:
+            continue
+
+    month_name = first_day.strftime("%B %Y")
+    console.print()
+    console.print(f"[bold cyan]{month_name}[/bold cyan]")
+    console.print("[dim]Mo Tu We Th Fr Sa Su[/dim]")
+
+    # calendar.monthcalendar returns list of weeks (Mon=0, Sun=6); 0 = day not in month
+    weeks = calendar.monthcalendar(year, month)
+
+    for week in weeks:
+        row_parts = []
+        for day in week:
+            if day == 0:
+                row_parts.append("   ")
+                continue
+
+            marker = ""
+            if day in days_with_events and day in days_with_tasks:
+                marker = "‼"
+            elif day in days_with_events:
+                marker = "*"
+            elif day in days_with_tasks:
+                marker = "•"
+
+            day_str = f"{day:2d}{marker if marker else ' '}"
+
+            current = datetime.date(year, month, day)
+            if current == today:
+                day_str = f"[bold cyan]{day_str}[/bold cyan]"
+            elif current < today:
+                day_str = f"[dim]{day_str}[/dim]"
+
+            row_parts.append(day_str)
+
+        console.print(" ".join(row_parts))
+
+    console.print()
+    console.print(
+        "[dim]  *=event  •=task  ‼=both  "
+        f"bold=today  /cal-day YYYY-MM-DD for detail[/dim]"
+    )
+    console.print()
+
+
+def handle_cal_day_view(date_str):
+    """
+    Drill into a single day — shows events and tasks with due_date == that day.
+    date_str: YYYY-MM-DD
+    """
+    try:
+        target = datetime.date.fromisoformat(date_str)
+    except ValueError:
+        console.print(f"[red]Invalid date '{date_str}'. Use YYYY-MM-DD.[/red]")
+        return
+
+    today = datetime.date.today()
+    day_name = target.strftime("%A %-d %B %Y")
+    console.print()
+    console.print(f"[bold cyan]{day_name}[/bold cyan]")
+    console.print("━" * 52)
+
+    events = _load_calendar_events()
+    all_tasks = _load_unified_tasks()
+
+    day_events = [
+        ev for ev in events
+        if _parse_event_time(ev.get("start")) and
+           _parse_event_time(ev.get("start")).date() == target
+    ]
+    day_events.sort(key=lambda e: _parse_event_time(e.get("start")) or datetime.datetime.min)
+
+    day_tasks = []
+    for t in all_tasks:
+        due = t.get("due_date")
+        if not due:
+            continue
+        try:
+            if datetime.date.fromisoformat(str(due)[:10]) == target:
+                day_tasks.append(t)
+        except ValueError:
+            continue
+
+    if not day_events and not day_tasks:
+        console.print("[dim]Nothing scheduled for this day.[/dim]")
+        console.print()
+        return
+
+    table = Table(box=box.SIMPLE_HEAD, show_header=True, header_style="bold", pad_edge=False)
+    table.add_column("Time", width=7, style="dim")
+    table.add_column("Type", width=12)
+    table.add_column("Description", min_width=28)
+    table.add_column("Source", width=12)
+
+    for ev in day_events:
+        start_dt = _parse_event_time(ev.get("start"))
+        table.add_row(
+            _format_hhmm(start_dt),
+            "[blue]📅 Event[/blue]",
+            ev.get("summary", "(no title)"),
+            "Calendar",
+        )
+
+    for t in day_tasks:
+        style = "[red]" if target < today else "[green]"
+        table.add_row(
+            "—",
+            f"{style}✅ Task[/{style[1:]}",
+            t["task"],
+            _source_label(t.get("source", "")),
+        )
+
+    console.print(table)
+    console.print()
 
 def handle_week_view():
     """

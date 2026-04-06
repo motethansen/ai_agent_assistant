@@ -1,18 +1,17 @@
 """
-Calendar Planning Agent  (Gemini-powered)
+Calendar Planning Agent
 
 Responsibilities:
-  1. Fetch Google Calendar events for the next 7 days.
+  1. Fetch calendar events for the next 7 days (local ICS or YAML cache).
   2. Load pending tasks from:
        - datainput/reminders.json  (Apple Reminders)
        - LogSeq LATER tasks        (via logseq_later_agent)
-  3. Send everything to Gemini and ask for a concrete weekly/daily plan.
+  3. Send everything to the configured LLM and ask for a concrete weekly/daily plan.
   4. Save the suggestions to datainput/calendar_suggestions.md
      (and optionally append to the Obsidian planner).
 
 Config keys used:
-  GEMINI_API_KEY        — required
-  GEMINI_MODEL          — default: gemini-2.0-flash
+  ROUTING_PLANNING      — LLM to use (default: ollama); falls back via LLM_PRIORITY chain
   CALENDAR_ID           — default: primary
   WORKSPACE_DIR         — Obsidian vault root
   OBSIDIAN_PLANNER_FILE — planner note (default: Planner.md)
@@ -186,13 +185,10 @@ Output format — use this markdown structure:
 
 def generate_plan(days=7, write_to_obsidian=False):
     """
-    Run the full calendar planning pipeline using Gemini.
+    Run the full calendar planning pipeline.
+    Uses ROUTING_PLANNING config key (default: ollama) via the standard LLM fallback chain.
     Returns the suggestion text.
     """
-    if not get_config_value("ENABLE_GEMINI", "false").lower() == "true":
-        print("[CalendarPlanningAgent] Gemini is not enabled. Set ENABLE_GEMINI=true in .config")
-        return None
-
     events        = _get_week_events(days=days)
     reminders     = _load_reminders()
     logseq_tasks  = _load_logseq_tasks()
@@ -204,8 +200,13 @@ def generate_plan(days=7, write_to_obsidian=False):
         "Use the provided data exactly — do not invent tasks or events."
     )
 
-    print("[CalendarPlanningAgent] Sending to Gemini for planning suggestions...")
-    suggestions, model = ai_orchestration.generate_with("gemini", prompt, system=system)
+    routing_provider = get_config_value("ROUTING_PLANNING", None)
+    if routing_provider:
+        print(f"[CalendarPlanningAgent] Sending to {routing_provider} for planning suggestions...")
+        suggestions, model = ai_orchestration.generate_with(routing_provider, prompt, system=system)
+    else:
+        print("[CalendarPlanningAgent] Sending to LLM for planning suggestions...")
+        suggestions, model = ai_orchestration.generate(prompt, system=system)
     print(f"[CalendarPlanningAgent] Received plan from {model}.")
 
     if not suggestions or suggestions.startswith("LLM error"):
