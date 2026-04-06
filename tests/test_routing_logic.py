@@ -37,6 +37,7 @@ def test_get_routing_fallback_to_gemini(mock_ollama_running, mock_get_config):
     with patch('ai_orchestration.api_key', 'valid_key'):
         ai_orchestration.MODELS_ENABLED["gemini"] = True
         ai_orchestration.MODELS_ENABLED["ollama"] = True
+        ai_orchestration.MODELS_ENABLED["lmstudio"] = False
 
         route = ai_orchestration.get_routing("chat")
         assert route == "gemini"

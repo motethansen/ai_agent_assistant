@@ -152,9 +152,9 @@ def _call_lmstudio(prompt, system=None, model=None):
         import lmstudio as lms
         model_id = model or get_config_value("LM_STUDIO_MODEL", "")
         m = lms.llm(model_id)
-        chat = [{"role": "user", "content": prompt}]
+        chat = {"messages": [{"role": "user", "content": prompt}]}
         if system:
-            chat.insert(0, {"role": "system", "content": system})
+            chat["messages"].insert(0, {"role": "system", "content": system})
         result = m.respond(chat)
         return str(result), f"lmstudio/{model_id}"
     except Exception as e:

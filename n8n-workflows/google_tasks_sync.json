@@ -42,7 +42,7 @@
         "url": "http://host.docker.internal:5678/webhook/add-task",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{"description": "={{$json.title}}", "date": "={{$json.due ? $json.due.split('T')[0] : ''}}"}",
+        "jsonBody": "{\"description\": \"={{$json.title}}\", \"date\": \"={{$json.due ? $json.due.split('T')[0] : ''}}\"}",
         "options": {}
       },
       "id": "add-to-python",
@@ -66,8 +66,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const completions = $json.body.completions || [];
-return completions.map(c => ({ json: { title: c } }));"
+        "jsCode": "const completions = $json.body.completions || [];\nreturn completions.map(c => ({ json: { title: c } }));"
       },
       "id": "parse-completions",
       "name": "Parse Completions",

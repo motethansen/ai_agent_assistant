@@ -19,8 +19,8 @@ def test_call_lmstudio_success():
     assert model_name == "lmstudio/test-model"
     # system message should have been prepended
     call_args = mock_model.respond.call_args[0][0]
-    assert call_args[0] == {"role": "system", "content": "Be brief"}
-    assert call_args[1] == {"role": "user", "content": "Say hello"}
+    assert call_args["messages"][0] == {"role": "system", "content": "Be brief"}
+    assert call_args["messages"][1] == {"role": "user", "content": "Say hello"}
 
 
 def test_call_lmstudio_no_system():
@@ -36,7 +36,7 @@ def test_call_lmstudio_no_system():
         text, model_name = ai_orchestration._call_lmstudio("Hello")
 
     call_args = mock_model.respond.call_args[0][0]
-    assert call_args == [{"role": "user", "content": "Hello"}]
+    assert call_args == {"messages": [{"role": "user", "content": "Hello"}]}
     assert model_name == "lmstudio/my-model"
 
 
