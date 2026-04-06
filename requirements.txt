@@ -9,12 +9,15 @@ anthropic
 openai
 lmstudio
 
-# LangChain — kept only for RAG (Chroma vector store + document loaders)
+# LangChain — RAG (Chroma vector store + document loaders) + LLM streaming adapters
 langchain-core
 langchain-community
 langchain-chroma
 langchain-text-splitters
 langchain-ollama
+langchain-openai          # used by LM Studio (OpenAI-compat) and OpenAI backends
+langchain-google-genai    # used by Gemini backend
+langchain-anthropic       # used by Claude backend
 
 # Testing & Reporting
 pytest
