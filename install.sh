@@ -347,17 +347,40 @@ setup_n8n() {
     set_config_key "N8N_WEBHOOK_URL" "${N8N_URL}/webhook"
     echo -e "  N8N_WEBHOOK_URL set to: ${CYAN}${N8N_URL}/webhook${NC}"
 
-    # Workflow import instructions
+    # Workflow import instructions — only show files that are new or changed
+    # Track each workflow's last-changed sprint so we only flag what needs attention.
+    # Format: "filename|Sprint-XX — reason"
+    CHANGED_WORKFLOWS=(
+        "morning-planning.json|Sprint-08 — webhook changed to /webhook/morning-plan"
+        "google_tasks_sync.json|Sprint-07 — new workflow (Google Tasks pull/push via n8n)"
+    )
+    STABLE_WORKFLOWS=(
+        "universal_task_sync.json"
+        "add-task.json"
+        "backlog-digest.json"
+    )
+
     echo ""
-    echo -e "  ${BOLD}Next step — import workflows into n8n:${NC}"
-    echo -e "  1. Open ${CYAN}${N8N_URL}${NC} in your browser"
-    echo -e "  2. Top-right menu → ${BOLD}Import from file${NC}"
-    echo -e "  3. Import each file from ${CYAN}n8n-workflows/${NC}:"
-    echo -e "     • morning-planning.json"
-    echo -e "     • add-task.json"
-    echo -e "     • backlog-digest.json"
-    echo -e "     • universal_task_sync.json"
-    echo -e "  4. Open each imported workflow and toggle ${BOLD}Active${NC} (top-right switch)"
+    echo -e "  ${BOLD}n8n workflows — what needs importing:${NC}"
+    echo ""
+    echo -e "  ${YELLOW}${BOLD}New / Updated (re-import these):${NC}"
+    for entry in "${CHANGED_WORKFLOWS[@]}"; do
+        file="${entry%%|*}"
+        reason="${entry##*|}"
+        echo -e "    ${YELLOW}↻  n8n-workflows/${file}${NC}"
+        echo -e "       ${reason}"
+    done
+    echo ""
+    echo -e "  ${GREEN}Already imported — no action needed:${NC}"
+    for file in "${STABLE_WORKFLOWS[@]}"; do
+        echo -e "    ${GREEN}✓  n8n-workflows/${file}${NC}"
+    done
+    echo ""
+    echo -e "  ${BOLD}To re-import a workflow:${NC}"
+    echo -e "  1. Open ${CYAN}${N8N_URL}${NC}"
+    echo -e "  2. Open the existing workflow → top-right ⋯ menu → ${BOLD}Import from file${NC}"
+    echo -e "     (this updates in place without losing your credentials)"
+    echo -e "  3. Toggle ${BOLD}Active${NC} if it was active before"
 }
 
 # ─────────────────────────────────────────────
