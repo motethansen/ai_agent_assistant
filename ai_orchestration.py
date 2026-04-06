@@ -541,9 +541,6 @@ def generate(prompt, system=None, task_type="chat"):
     """
     from langchain_core.messages import SystemMessage, HumanMessage
     try:
-        model_name = get_routing(task_type, prompt)
-        if model_name == "lmstudio":
-            return _call_lmstudio(prompt, system=system)
         llm, model_name = get_llm(task_type, prompt)
         messages = []
         if system:
@@ -559,44 +556,18 @@ def generate(prompt, system=None, task_type="chat"):
 def generate_with(provider, prompt, system=None):
     """Call a specific provider directly, bypassing routing.
 
-    provider: "gemini" | "ollama" | "openai" | "claude"
+    provider: "lmstudio" | "gemini" | "ollama" | "openai" | "claude"
     Returns (response_text, model_name). On error returns ("LLM error: ...", model_name).
     """
     from langchain_core.messages import SystemMessage, HumanMessage
-    messages = []
-    if system:
-        messages.append(SystemMessage(content=system))
-    messages.append(HumanMessage(content=prompt))
-
     try:
-        if provider == "gemini":
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            model_id = get_config_value("GEMINI_MODEL", "gemini-2.0-flash")
-            llm = ChatGoogleGenerativeAI(model=model_id, google_api_key=api_key)
-            response = llm.invoke(messages)
-            return response.content, f"gemini/{model_id}"
-        elif provider == "ollama":
-            model_id = get_config_value("OLLAMA_MODEL", "qwen3:8b")
-            host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
-            llm = ChatOllama(model=model_id, base_url=host)
-            response = llm.invoke(messages)
-            return response.content, f"ollama/{model_id}"
-        elif provider == "lmstudio":
-            return _call_lmstudio(prompt, system=system)
-        elif provider == "openai":
-            from langchain_openai import ChatOpenAI
-            model_id = get_config_value("OPENAI_MODEL", "gpt-4o-mini")
-            llm = ChatOpenAI(model=model_id, openai_api_key=get_config_value("OPENAI_API_KEY", ""))
-            response = llm.invoke(messages)
-            return response.content, f"openai/{model_id}"
-        elif provider == "claude":
-            from langchain_anthropic import ChatAnthropic
-            model_id = get_config_value("CLAUDE_MODEL", "claude-sonnet-4-20250514")
-            llm = ChatAnthropic(model=model_id, anthropic_api_key=get_config_value("CLAUDE_API_KEY", ""))
-            response = llm.invoke(messages)
-            return response.content, f"claude/{model_id}"
-        else:
-            return generate(prompt, system=system, task_type="chat")
+        llm, model_name = _build_llm(provider)
+        messages = []
+        if system:
+            messages.append(SystemMessage(content=system))
+        messages.append(HumanMessage(content=prompt))
+        response = llm.invoke(messages)
+        return response.content, model_name
     except Exception as e:
         return f"LLM error: {e}", provider
 
