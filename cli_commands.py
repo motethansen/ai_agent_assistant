@@ -545,22 +545,7 @@ def handle_chat_mode(obsidian_file):
     logseq_path = get_config_value("LOGSEQ_DIR", None)
 
     chat_ui.print_banner()
-
-    # Config path status
-    workspace_status = "✅ set" if obsidian_path and obsidian_path != "." else "⚠️  not set (defaulting to .)"
-    logseq_status = "✅ set" if logseq_path else "⚠️  not set"
-    print(f"WORKSPACE_DIR: {obsidian_path}  [{workspace_status}]")
-    print(f"LOGSEQ_DIR:    {logseq_path or '(none)'}  [{logseq_status}]")
-
-    # Ollama startup check
-    if ai_orchestration.is_ollama_running():
-        models = ai_orchestration.list_ollama_models()
-        if models:
-            print(f"✅ Ollama running — models: {', '.join(models)}")
-        else:
-            print("⚠️  Ollama running but no models found. Run: ollama pull llama3")
-    else:
-        print("⚠️  Ollama is not running. Start it with: ollama serve")
+    chat_ui.print_startup_status()
 
     history = chat_ui.load_history()
 
@@ -569,16 +554,7 @@ def handle_chat_mode(obsidian_file):
         chat_ui.render_info("AUTO_SYNC_LOGSEQ enabled — syncing LogSeq tasks on startup...")
         sync_logseq_to_obsidian()
 
-    # Use prompt_toolkit for better input if available
-    try:
-        from prompt_toolkit import prompt as pt_prompt
-        from prompt_toolkit.history import FileHistory
-        input_history = FileHistory(os.path.expanduser("~/.ai_agent_input_history"))
-        def get_input():
-            return pt_prompt("You: ", history=input_history).strip()
-    except ImportError:
-        def get_input():
-            return input("\nYou: ").strip()
+    get_input = chat_ui.make_input_fn()
 
     while True:
         try:
@@ -694,8 +670,10 @@ def handle_chat_mode(obsidian_file):
                     from session import display_docs
                     display_docs()
                 elif command == "services":
-                    ollama_up = ai_orchestration.is_ollama_running()
-                    chat_ui.render_services(ollama_up)
+                    from config_utils import get_config_value as _gcv
+                    lms_up = ai_orchestration.is_lmstudio_running() if _gcv("ENABLE_LM_STUDIO", "false").lower() == "true" else None
+                    ollama_up = ai_orchestration.is_ollama_running() if _gcv("ENABLE_OLLAMA", "true").lower() == "true" else None
+                    chat_ui.render_services(lmstudio_status=lms_up, ollama_status=ollama_up)
                 elif command == "models":
                     ollama_models = ai_orchestration.list_ollama_models()
                     if not ollama_models:

@@ -1,271 +1,501 @@
 """
-Rich-based terminal chat UI for the AI Agent Assistant.
-Provides markdown rendering, streaming output, and conversation history.
+chat_ui.py — Terminal chat UI for AI Agent Assistant.
+
+Design: compact, information-dense, similar to Claude Code / LM Studio terminal.
+  - Persistent status line showing active model
+  - Streamed responses render inline (no heavy panel box)
+  - Model + timing badge after each response
+  - prompt_toolkit input with styled prompt showing model name
 """
 import os
+import time
 import json
 import datetime
+
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
-from rich.live import Live
+from rich.rule import Rule
 from rich.text import Text
+from rich.live import Live
+from rich import box
 
 console = Console()
 
 HISTORY_FILE = os.path.expanduser("~/.ai_agent_assistant_history.json")
 
 
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _active_model_label():
+    """Return a short label for the currently configured LLM."""
+    try:
+        from config_utils import get_config_value
+        lms = get_config_value("ENABLE_LM_STUDIO", "false").lower() == "true"
+        if lms:
+            model = get_config_value("LM_STUDIO_MODEL", "lmstudio")
+            return model, "lmstudio"
+        ollama = get_config_value("ENABLE_OLLAMA", "true").lower() == "true"
+        if ollama:
+            model = get_config_value("OLLAMA_MODEL", "ollama")
+            return model, "ollama"
+        for provider in ("gemini", "openai", "claude"):
+            enabled = get_config_value(f"ENABLE_{provider.upper()}", "false").lower() == "true"
+            if enabled:
+                return provider, provider
+    except Exception:
+        pass
+    return "unknown", "unknown"
+
+
+def _fmt_seconds(seconds):
+    if seconds < 1:
+        return f"{seconds*1000:.0f}ms"
+    return f"{seconds:.1f}s"
+
+
+# ── Banner ─────────────────────────────────────────────────────────────────────
+
 def print_banner():
-    """Styled banner using Rich."""
+    """Compact startup banner showing model and status."""
+    model_name, provider = _active_model_label()
+
+    try:
+        from ai_orchestration import is_lmstudio_running, is_ollama_running
+        if provider == "lmstudio":
+            running = is_lmstudio_running()
+        elif provider == "ollama":
+            running = is_ollama_running()
+        else:
+            running = True
+        status = "[green]●[/green] online" if running else "[red]●[/red] offline"
+    except Exception:
+        status = "[dim]●[/dim] unknown"
+
+    console.print()
     console.print(Panel(
-        "[bold blue]AI Agent Assistant[/bold blue]\n"
-        "[dim]Local-first AI task management | Type /commands for help[/dim]",
-        border_style="blue",
-        padding=(1, 4)
+        f"[bold white]AI Agent Assistant[/bold white]  "
+        f"[dim]│[/dim]  "
+        f"[cyan]{model_name}[/cyan]  "
+        f"[dim]via[/dim]  [bold]{provider}[/bold]  "
+        f"[dim]│[/dim]  {status}\n"
+        f"[dim]Type a message to chat · /help for commands · /quit to exit[/dim]",
+        border_style="bright_black",
+        padding=(0, 2),
     ))
+    console.print()
 
 
-def render_user_input(text):
-    """Show user input styled."""
-    console.print(f"\n[bold green]You:[/bold green] {text}")
+def print_startup_status():
+    """Print model / workspace status lines below the banner."""
+    try:
+        from config_utils import get_config_value
+        from ai_orchestration import is_lmstudio_running, is_ollama_running, MODELS_ENABLED
+
+        model_name, provider = _active_model_label()
+
+        # LLM status
+        if provider == "lmstudio":
+            ok = is_lmstudio_running()
+            icon = "[green]✓[/green]" if ok else "[yellow]⚠[/yellow]"
+            console.print(f"  {icon}  LM Studio  [cyan]{model_name}[/cyan]  "
+                          f"[dim]localhost:1234[/dim]")
+        elif provider == "ollama":
+            ok = is_ollama_running()
+            icon = "[green]✓[/green]" if ok else "[yellow]⚠[/yellow]"
+            host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
+            console.print(f"  {icon}  Ollama  [cyan]{model_name}[/cyan]  [dim]{host}[/dim]")
+
+        # Routing
+        routing = get_config_value("ROUTING_CHAT", provider)
+        console.print(f"  [dim]routing → {routing}  ·  "
+                      f"priority: {get_config_value('LLM_PRIORITY', provider)}[/dim]")
+
+        # Workspace
+        ws = get_config_value("WORKSPACE_DIR", None)
+        ls = get_config_value("LOGSEQ_DIR", None)
+        ws_icon = "[green]✓[/green]" if ws and ws != "." else "[yellow]⚠[/yellow]"
+        ls_icon = "[green]✓[/green]" if ls else "[dim]—[/dim]"
+        console.print(f"  {ws_icon}  Obsidian  [dim]{ws or 'not set'}[/dim]")
+        console.print(f"  {ls_icon}  LogSeq    [dim]{ls or 'not set'}[/dim]")
+        console.print()
+
+    except Exception as e:
+        console.print(f"  [dim]Could not load status: {e}[/dim]\n")
 
 
-def render_response(text, model_name=""):
-    """Render AI response as markdown in a panel."""
-    title = f"AI Assistant [{model_name}]" if model_name else "AI Assistant"
-    md = Markdown(text)
-    console.print(Panel(md, title=title, border_style="blue", padding=(1, 2)))
+# ── Input prompt ───────────────────────────────────────────────────────────────
+
+def make_input_fn():
+    """
+    Return a get_input() callable.
+    Uses prompt_toolkit with a styled prompt showing the model name.
+    Falls back to plain input() if prompt_toolkit is unavailable.
+    """
+    model_name, _ = _active_model_label()
+    short_model = model_name.split("/")[-1][:24]  # trim long model IDs
+
+    try:
+        from prompt_toolkit import prompt as pt_prompt
+        from prompt_toolkit.history import FileHistory
+        from prompt_toolkit.styles import Style
+        from prompt_toolkit.formatted_text import HTML
+
+        input_history = FileHistory(os.path.expanduser("~/.ai_agent_input_history"))
+        style = Style.from_dict({"prompt": "ansicyan bold"})
+
+        def get_input():
+            return pt_prompt(
+                HTML(f"<prompt>❯</prompt> "),
+                history=input_history,
+                style=style,
+            ).strip()
+
+    except ImportError:
+        def get_input():
+            return input(f"❯ ").strip()
+
+    return get_input
+
+
+# ── Message rendering ──────────────────────────────────────────────────────────
+
+def render_user_message(text):
+    """Render the user's message with a subtle 'You' label."""
+    console.print()
+    console.print(f"[bold green]You[/bold green]  [dim]│[/dim]  {text}")
+    console.print()
 
 
 def render_streaming(stream_iterator, model_name=""):
-    """Render streaming LLM response with live update. Returns full text."""
-    title = f"AI Assistant [{model_name}]" if model_name else "AI Assistant"
+    """
+    Stream LLM response inline — no heavy panel.
+    Shows a header line with model name, streams markdown, ends with a timing badge.
+    Returns (full_text, elapsed_seconds).
+    """
+    short = (model_name.split("/")[-1] if "/" in model_name else model_name)[:32]
+
+    # Header rule
+    console.print(Rule(
+        f"[bold cyan]{short}[/bold cyan]",
+        style="bright_black",
+        align="left",
+    ))
+
     full_text = ""
-    with Live(console=console, refresh_per_second=8) as live:
+    t0 = time.time()
+
+    with Live(console=console, refresh_per_second=12, vertical_overflow="visible") as live:
         for chunk in stream_iterator:
             content = ""
-            if hasattr(chunk, 'content') and chunk.content:
+            if hasattr(chunk, "content") and chunk.content:
                 content = chunk.content
             elif isinstance(chunk, str):
                 content = chunk
             if content:
                 full_text += content
                 try:
-                    live.update(Panel(
-                        Markdown(full_text),
-                        title=title,
-                        border_style="blue",
-                        padding=(1, 2)
-                    ))
+                    live.update(Markdown(full_text))
                 except Exception:
-                    live.update(Panel(
-                        Text(full_text),
-                        title=title,
-                        border_style="blue",
-                        padding=(1, 2)
-                    ))
+                    live.update(Text(full_text))
+
+    elapsed = time.time() - t0
+
+    # Footer with timing
+    console.print()
+    console.print(
+        f"[dim]  {_fmt_seconds(elapsed)}  ·  {short}[/dim]"
+    )
+    console.print()
+
     return full_text
 
 
+def render_response(text, model_name=""):
+    """Non-streaming response render (fallback)."""
+    short = (model_name.split("/")[-1] if "/" in model_name else model_name)[:32]
+    console.print(Rule(
+        f"[bold cyan]{short}[/bold cyan]",
+        style="bright_black",
+        align="left",
+    ))
+    try:
+        console.print(Markdown(text))
+    except Exception:
+        console.print(text)
+    console.print()
+
+
+# ── Status / info messages ─────────────────────────────────────────────────────
+
 def render_error(msg):
-    """Show error message."""
-    console.print(f"[bold red]Error:[/bold red] {msg}")
+    console.print(f"\n[bold red]Error[/bold red]  [dim]│[/dim]  {msg}\n")
 
 
 def render_info(msg):
-    """Show info message."""
     console.print(f"[dim]{msg}[/dim]")
 
 
 def render_success(msg):
-    """Show success message."""
-    console.print(f"[bold green]{msg}[/bold green]")
+    console.print(f"[green]✓[/green]  {msg}")
 
 
 def render_warning(msg):
-    """Show warning message."""
-    console.print(f"[bold yellow]{msg}[/bold yellow]")
+    console.print(f"[yellow]⚠[/yellow]  {msg}")
 
 
-def render_settings(config_path):
-    """Render current API key and LLM configuration status."""
-    from config_utils import get_config_value
-    table = Table(title="Settings & API Keys", show_header=True, header_style="bold cyan")
-    table.add_column("Setting", style="cyan", min_width=20)
-    table.add_column("Status")
-    table.add_column("Value (masked)")
-
-    def mask(val):
-        if not val or "your_" in val or "here" in val:
-            return "[red]NOT SET[/red]"
-        return "[green]SET[/green]", f"{val[:8]}...{val[-4:]}" if len(val) > 14 else "***"
-
-    keys = [
-        ("OPENAI_API_KEY",   "OpenAI API Key"),
-        ("GEMINI_API_KEY",   "Gemini API Key"),
-        ("CLAUDE_API_KEY",   "Claude API Key"),
-        ("HF_TOKEN",         "HuggingFace Token"),
-    ]
-    for key, label in keys:
-        val = get_config_value(key, "")
-        if not val or "your_" in val or "here" in val:
-            table.add_row(label, "[red]NOT SET[/red]", "—")
-        else:
-            table.add_row(label, "[green]SET[/green]", f"{val[:8]}...{val[-4:]}" if len(val) > 14 else "***")
-
-    console.print(table)
-
-    settings_table = Table(title="LLM Configuration", show_header=True, header_style="bold cyan")
-    settings_table.add_column("Setting", style="cyan", min_width=20)
-    settings_table.add_column("Value")
-    for key in ["OPENAI_MODEL", "OLLAMA_MODEL", "LLM_PRIORITY",
-                "ROUTING_CHAT", "ROUTING_SCHEDULING", "ENABLE_OPENAI",
-                "ENABLE_OLLAMA", "ENABLE_GEMINI", "ENABLE_CLAUDE"]:
-        val = get_config_value(key, "")
-        settings_table.add_row(key, val or "[dim]not set[/dim]")
-    console.print(settings_table)
-    console.print(f"\n[dim]Config file: {config_path}[/dim]")
-    console.print("[dim]To update a key: /settings set <KEY> <value>[/dim]")
-    console.print("[dim]Example: /settings set OPENAI_API_KEY sk-proj-...[/dim]\n")
-
+# ── Command help ───────────────────────────────────────────────────────────────
 
 COMMAND_DESCRIPTIONS = {
-    "backlog": "Show all pending tasks (Obsidian + LogSeq)",
-    "plan": "Tasks by time horizon: /plan  /plan today|week|month|year|backlog",
-    "cal": "Month grid with task/event markers: /cal  /cal 5 2026",
-    "cal-day": "Drill into a day: /cal-day YYYY-MM-DD  (default: today)",
-    "add-task": "Add a LATER task to today's LogSeq journal  e.g. /add-task Write tests",
-    "done": "Mark a matching task done in LogSeq or Obsidian  e.g. /done Write tests",
-    "sync-logseq": "Sync LogSeq tasks to Obsidian Inbox",
-    "sync-universal": "Sync local tasks and calendar through n8n conflict resolution",
-    "review": "Show tasks completed today (file scan, no LLM)",
-    "models": "Show and select installed Ollama models",
-    "sync": "Manually trigger task sync from Obsidian and Reminders",
-    "pull": "Sync Calendar -> Markdown (Two-Way Sync)",
-    "stats": "Display focus analytics for today",
-    "ui": "Launch the Streamlit web interface",
-    "model": "Enable/disable models (e.g., /model disable gemini)",
-    "routing": "Show current LLM routing configuration",
-    "services": "Check and start local AI services (Ollama)",
-    "organize": "AI suggestions for task organization",
-    "cmd": "Custom AI command on backlog (e.g., /cmd prioritize by deadline)",
-    "develop": "AI code generation (e.g., /develop a flask REST API)",
-    "gmail": "List snoozed and filtered emails from Gmail",
-    "gmail-filter": "Manage Gmail search filters",
-    "index": "Re-index all notes and books for RAG",
-    "docs": "Show project documentation",
-    "create-agent": "Scaffold a new custom agent",
-    "define-agent": "Link an agent to a specific LLM",
-    "list-agents": "Show available custom agents",
-    "settings": "View or update API keys and configuration (/settings set KEY value)",
-    "status": "Show full system status dashboard (health checks)",
-    "today": "Show today's calendar events and tasks due",
-    "week": "Show 7-day summary of events and tasks",
-    "add-event":    "Add an event to your local ICS calendar",
-    "remove-event": "Remove an upcoming event from your local ICS calendar",
-    "export-calendar": "Export local ICS calendar to a file (default: ~/calendar_export.ics)",
-    "import-calendar": "Import events from an .ics file into local calendar",
-    "google-tasks": "Sync Google Tasks → Obsidian (and push done tasks back)",
-    "help": "Show this help",
-    "history": "Show recent conversation history",
-    "clear-history": "Clear conversation history",
-    "quit": "Exit the assistant",
-    "exit": "Quit the chat mode",
+    # Calendar & tasks
+    "today":          "Today's events + tasks due today",
+    "week":           "7-day summary of events and tasks",
+    "plan":           "/plan [today|week|month|year|backlog]  — tasks by horizon",
+    "cal":            "/cal [month year]  — month grid with event/task markers",
+    "cal-day":        "/cal-day YYYY-MM-DD  — drill into a specific day",
+    # Task management
+    "backlog":        "Unified task backlog (Obsidian + LogSeq)",
+    "add-task":       "/add-task <text>  — add LATER task to today's LogSeq journal",
+    "done":           "/done <text>  — mark a matching task done",
+    "add-event":      "Add an event to your local ICS calendar",
+    "remove-event":   "Remove an upcoming ICS calendar event",
+    "export-calendar":"Export local calendar to .ics file",
+    "import-calendar":"Import events from an .ics file",
+    # Sync & planning
+    "sync-logseq":    "Sync LogSeq LATER tasks → Obsidian planner",
+    "sync-universal": "Full task sync through n8n conflict resolution",
+    "google-tasks":   "Sync Google Tasks ↔ Obsidian",
+    "sync":           "Manually trigger task sync from Obsidian and Reminders",
+    "pull":           "Sync calendar → Markdown (two-way sync)",
+    # LLM & services
+    "models":         "Show and select installed models",
+    "routing":        "Show current LLM routing config",
+    "services":       "Check and start local AI services",
+    "model":          "/model enable|disable <provider>",
+    "settings":       "/settings [set KEY value]  — view or update config",
+    "status":         "Full system health dashboard",
+    # Research
+    "organize":       "AI suggestions for task organisation",
+    "cmd":            "/cmd <instruction>  — custom AI command on backlog",
+    "develop":        "/develop <prompt>  — AI code generation",
+    "gmail":          "List snoozed and filtered emails",
+    "gmail-filter":   "Manage Gmail search filters",
+    "index":          "Re-index notes and books for RAG search",
+    # Misc
+    "stats":          "Focus analytics for today",
+    "ui":             "Launch Streamlit web dashboard",
+    "docs":           "Show project documentation",
+    "create-agent":   "Scaffold a new custom agent",
+    "define-agent":   "Link an agent to a specific LLM",
+    "list-agents":    "Show available custom agents",
+    "history":        "Show recent conversation history",
+    "clear-history":  "Clear conversation history",
+    "help":           "Show this help",
+    "quit":           "Exit",
 }
+
+# Group labels for the help table
+_COMMAND_GROUPS = [
+    ("Calendar & Tasks",   ["today", "week", "plan", "cal", "cal-day"]),
+    ("Task Management",    ["backlog", "add-task", "done", "add-event", "remove-event",
+                            "export-calendar", "import-calendar"]),
+    ("Sync & Planning",    ["sync-logseq", "sync-universal", "google-tasks", "sync", "pull"]),
+    ("LLM & Services",     ["models", "routing", "services", "model", "settings", "status"]),
+    ("Research & AI",      ["organize", "cmd", "develop", "gmail", "gmail-filter", "index"]),
+    ("Misc",               ["stats", "ui", "docs", "create-agent", "define-agent",
+                            "list-agents", "history", "clear-history", "help", "quit"]),
+]
 
 
 def render_command_help():
-    """Render slash commands as a Rich table."""
-    table = Table(title="Available Commands", show_header=True, header_style="bold cyan")
-    table.add_column("Command", style="cyan", min_width=18)
-    table.add_column("Description")
-    for cmd, desc in COMMAND_DESCRIPTIONS.items():
-        table.add_row(f"/{cmd}", desc)
-    console.print(table)
+    """Render slash commands grouped by category."""
+    model_name, provider = _active_model_label()
+    console.print()
+    console.print(Rule(
+        f"[bold]Commands[/bold]  [dim]model: {model_name} via {provider}[/dim]",
+        style="bright_black",
+    ))
+    console.print()
 
-
-def render_backlog(tasks):
-    """Render unified backlog as a Rich table grouped by category."""
-    cats = {}
-    for t in tasks:
-        cat = t.get("category", "Uncategorized")
-        if cat not in cats:
-            cats[cat] = []
-        cats[cat].append(t)
-
-    console.print(f"\n[bold]Unified Backlog[/bold] ({len(tasks)} tasks)\n")
-
-    for cat, task_list in cats.items():
-        table = Table(title=f"[{cat.upper()}]", show_header=True, header_style="bold")
-        table.add_column("Source", width=8)
-        table.add_column("Task")
-        table.add_column("Due", width=12)
-        for t in task_list:
-            source_map = {"Obsidian": "[blue]Obs[/blue]", "Logseq": "[green]LSq[/green]", "Reminders": "[yellow]Rem[/yellow]"}
-            source = source_map.get(t.get("source", ""), t.get("source", ""))
-            due = t.get("due_date", "") or ""
-            table.add_row(source, t.get("task", ""), due)
+    for group_label, cmds in _COMMAND_GROUPS:
+        table = Table(
+            box=box.SIMPLE,
+            show_header=False,
+            pad_edge=False,
+            title=f"[dim]{group_label}[/dim]",
+            title_justify="left",
+            title_style="bold",
+        )
+        table.add_column("cmd", style="cyan", min_width=20, no_wrap=True)
+        table.add_column("desc", style="")
+        for cmd in cmds:
+            desc = COMMAND_DESCRIPTIONS.get(cmd, "")
+            table.add_row(f"/{cmd}", desc)
         console.print(table)
-        console.print()
+
+    console.print()
 
 
-def render_services(ollama_status):
-    """Render service status table."""
-    table = Table(title="Local AI Services", show_header=True)
-    table.add_column("Service", style="cyan")
-    table.add_column("Status")
-    table.add_row("Ollama", "[bold green]RUNNING[/bold green]" if ollama_status else "[bold red]STOPPED[/bold red]")
-    console.print(table)
+# ── Settings / routing / models ────────────────────────────────────────────────
+
+def render_settings(config_path):
+    """Render API key and LLM config status."""
+    from config_utils import get_config_value
+
+    console.print()
+    console.print(Rule("[bold]Configuration[/bold]", style="bright_black"))
+    console.print()
+
+    # API keys
+    key_table = Table(box=box.SIMPLE, show_header=True, header_style="bold dim", pad_edge=False)
+    key_table.add_column("Key", style="cyan", min_width=22)
+    key_table.add_column("Status", width=8)
+    key_table.add_column("Preview")
+    for key, label in [
+        ("OPENAI_API_KEY", "OpenAI"),
+        ("GEMINI_API_KEY", "Gemini"),
+        ("CLAUDE_API_KEY", "Claude"),
+        ("HF_TOKEN",       "HuggingFace"),
+    ]:
+        val = get_config_value(key, "")
+        if not val or "your_" in val or "here" in val:
+            key_table.add_row(label, "[red]not set[/red]", "[dim]—[/dim]")
+        else:
+            preview = f"{val[:6]}…{val[-4:]}" if len(val) > 12 else "***"
+            key_table.add_row(label, "[green]set[/green]", f"[dim]{preview}[/dim]")
+    console.print(key_table)
+
+    # Routing
+    route_table = Table(box=box.SIMPLE, show_header=True, header_style="bold dim", pad_edge=False)
+    route_table.add_column("Setting", style="cyan", min_width=22)
+    route_table.add_column("Value")
+    for key in ["LM_STUDIO_MODEL", "OLLAMA_MODEL", "LLM_PRIORITY",
+                "ROUTING_CHAT", "ROUTING_SCHEDULING", "ROUTING_PARSING", "ROUTING_PLANNING",
+                "ENABLE_LM_STUDIO", "ENABLE_OLLAMA", "ENABLE_GEMINI", "ENABLE_CLAUDE"]:
+        val = get_config_value(key, "")
+        route_table.add_row(key, val or "[dim]not set[/dim]")
+    console.print(route_table)
+    console.print(f"[dim]  config: {config_path}[/dim]")
+    console.print("[dim]  update: /settings set KEY value[/dim]\n")
 
 
 def render_models(models_status):
-    """Render model activation status."""
-    table = Table(title="LLM Model Status", show_header=True)
-    table.add_column("Model", style="cyan")
-    table.add_column("Enabled")
-    table.add_column("Available")
+    table = Table(box=box.SIMPLE, show_header=True, header_style="bold dim", pad_edge=False,
+                  title="[bold]Models[/bold]", title_justify="left")
+    table.add_column("Provider", style="cyan", min_width=12)
+    table.add_column("Enabled", width=8)
+    table.add_column("Available", width=10)
     for name, info in models_status.items():
-        enabled = "[green]YES[/green]" if info["enabled"] else "[red]NO[/red]"
-        available = "[green]YES[/green]" if info["available"] else "[red]NO[/red]"
+        enabled = "[green]yes[/green]" if info["enabled"] else "[dim]no[/dim]"
+        available = "[green]yes[/green]" if info["available"] else "[dim]no[/dim]"
         table.add_row(name, enabled, available)
+    console.print()
     console.print(table)
+    console.print()
 
 
 def render_routing(routing_info):
-    """Render routing configuration."""
-    table = Table(title="LLM Routing Configuration", show_header=True)
-    table.add_column("Task Type", style="cyan")
-    table.add_column("Config")
-    table.add_column("Active Model")
+    table = Table(box=box.SIMPLE, show_header=True, header_style="bold dim", pad_edge=False,
+                  title="[bold]LLM Routing[/bold]", title_justify="left")
+    table.add_column("Task Type", style="cyan", min_width=14)
+    table.add_column("Config", width=12)
+    table.add_column("Active")
     for task_type, info in routing_info.items():
-        table.add_row(task_type, info["config"], info["active"])
+        table.add_row(task_type, info["config"], f"[cyan]{info['active']}[/cyan]")
+    console.print()
     console.print(table)
+    console.print()
+
+
+def render_services(lmstudio_status=None, ollama_status=None):
+    """Render service status. Accepts lmstudio_status and/or ollama_status booleans."""
+    table = Table(box=box.SIMPLE, show_header=True, header_style="bold dim", pad_edge=False,
+                  title="[bold]Services[/bold]", title_justify="left")
+    table.add_column("Service", style="cyan", min_width=14)
+    table.add_column("Status")
+
+    try:
+        from ai_orchestration import is_lmstudio_running, is_ollama_running, MODELS_ENABLED
+        from config_utils import get_config_value
+
+        if MODELS_ENABLED.get("lmstudio"):
+            model = get_config_value("LM_STUDIO_MODEL", "")
+            running = lmstudio_status if lmstudio_status is not None else is_lmstudio_running()
+            status = "[green]running[/green]" if running else "[red]stopped[/red]"
+            table.add_row(f"LM Studio  [dim]{model}[/dim]", status)
+
+        if MODELS_ENABLED.get("ollama"):
+            running = ollama_status if ollama_status is not None else is_ollama_running()
+            status = "[green]running[/green]" if running else "[red]stopped[/red]"
+            table.add_row("Ollama", status)
+
+    except Exception:
+        # Fallback: old single-arg behaviour
+        if ollama_status is not None:
+            s = "[green]running[/green]" if ollama_status else "[red]stopped[/red]"
+            table.add_row("Ollama", s)
+
+    console.print()
+    console.print(table)
+    console.print()
+
+
+# ── Backlog / history ──────────────────────────────────────────────────────────
+
+def render_backlog(tasks):
+    cats = {}
+    for t in tasks:
+        cat = t.get("category", "Uncategorized")
+        cats.setdefault(cat, []).append(t)
+
+    console.print()
+    console.print(Rule(
+        f"[bold]Backlog[/bold]  [dim]{len(tasks)} tasks[/dim]",
+        style="bright_black",
+    ))
+    console.print()
+
+    for cat, task_list in cats.items():
+        table = Table(box=box.SIMPLE, show_header=False, pad_edge=False,
+                      title=f"[dim]{cat}[/dim]", title_justify="left", title_style="bold")
+        table.add_column("src", width=5, style="dim")
+        table.add_column("task")
+        table.add_column("due", width=12, style="dim")
+        for t in task_list:
+            src_map = {"Obsidian": "obs", "Logseq": "lsq", "Reminders": "rem"}
+            src = src_map.get(t.get("source", ""), t.get("source", "")[:3])
+            table.add_row(src, t.get("task", ""), t.get("due_date", "") or "")
+        console.print(table)
+
+    console.print()
 
 
 def render_history_summary(history, count=10):
-    """Show recent conversation history."""
-    recent = history[-count*2:] if len(history) > count*2 else history
+    recent = history[-(count * 2):]
     if not recent:
         console.print("[dim]No conversation history.[/dim]")
         return
 
-    console.print(f"\n[bold]Recent History[/bold] (last {min(count, len(recent)//2 + 1)} exchanges)\n")
+    console.print()
+    console.print(Rule("[bold]History[/bold]", style="bright_black"))
+    console.print()
     for msg in recent:
         role = msg.get("role", "")
-        content = msg.get("content", "")
-        ts = msg.get("timestamp", "")
+        content = msg.get("content", "")[:120]
+        ts = msg.get("timestamp", "")[:16]
         if role == "user":
-            console.print(f"[dim]{ts[:16]}[/dim] [bold green]You:[/bold green] {content[:100]}{'...' if len(content) > 100 else ''}")
+            console.print(f"[dim]{ts}[/dim]  [green]You[/green]  {content}")
         else:
-            console.print(f"[dim]{ts[:16]}[/dim] [blue]AI:[/blue] {content[:100]}{'...' if len(content) > 100 else ''}")
+            label, _ = _active_model_label()
+            short = label.split("/")[-1][:20]
+            console.print(f"[dim]{ts}[/dim]  [cyan]{short}[/cyan]  {content}")
+    console.print()
 
 
-# --- Conversation History ---
+# ── Conversation history persistence ──────────────────────────────────────────
 
 def load_history():
-    """Load conversation history from file."""
     if os.path.exists(HISTORY_FILE):
         try:
             with open(HISTORY_FILE) as f:
@@ -276,20 +506,17 @@ def load_history():
 
 
 def save_history(history):
-    """Save conversation history, keeping last 200 messages."""
-    trimmed = history[-200:]
     try:
-        with open(HISTORY_FILE, 'w') as f:
-            json.dump(trimmed, f, indent=2)
+        with open(HISTORY_FILE, "w") as f:
+            json.dump(history[-200:], f, indent=2)
     except IOError:
         pass
 
 
 def add_to_history(role, content, history):
-    """Add a message to history."""
     history.append({
         "role": role,
         "content": content,
-        "timestamp": datetime.datetime.now().isoformat()
+        "timestamp": datetime.datetime.now().isoformat(),
     })
     return history
