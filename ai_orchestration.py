@@ -223,67 +223,104 @@ def get_routing(task_type="chat", query=""):
     complexity = classify_complexity(query) if query else "simple"
 
     if complexity == "simple":
-        for model in ["ollama", "lmstudio", "gemini"]:
+        for model in ["lmstudio", "ollama", "gemini"]:
             if _is_model_available(model, try_start=True):
                 return model
     else:
-        for model in ["openai", "claude", "gemini", "ollama"]:
+        for model in ["lmstudio", "openai", "claude", "gemini", "ollama"]:
             if _is_model_available(model, try_start=True):
                 return model
 
     # Fallback through priority list
-    priority_str = get_config_value("LLM_PRIORITY", "ollama,lmstudio,gemini,openai,claude")
+    priority_str = get_config_value("LLM_PRIORITY", "lmstudio,ollama,gemini,openai,claude")
     for model in [m.strip().lower() for m in priority_str.split(",")]:
         if _is_model_available(model, try_start=True):
             return model
 
-    return "ollama"
+    # Last resort — return first enabled provider even if not reachable
+    for model in [m.strip().lower() for m in priority_str.split(",")]:
+        if MODELS_ENABLED.get(model, False):
+            return model
 
-def get_llm(model_type="chat", query=""):
-    """Returns a LangChain LLM instance based on routing. Also returns the model name used."""
-    model_name = get_routing(model_type, query)
+    return "lmstudio"
 
-    if model_name == "ollama":
-        if not is_ollama_running():
-            print("⚠️  Ollama is not running. Start it with: ollama serve")
-            print("    Falling back to next available LLM.")
-            # Try priority fallback excluding ollama
-            priority_str = get_config_value("LLM_PRIORITY", "ollama,gemini,openai,claude")
-            for fallback in [m.strip().lower() for m in priority_str.split(",")]:
-                if fallback != "ollama" and _is_model_available(fallback):
-                    model_name = fallback
-                    break
-        if model_name == "ollama":
-            model = get_config_value("OLLAMA_MODEL", "qwen3:8b")
-            host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
-            ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "8192"))
-            return ChatOllama(model=model, base_url=host, num_ctx=ctx_size, temperature=0), f"ollama/{model}"
+def _build_llm(provider):
+    """
+    Build and return a (LangChain LLM instance, label) for a specific provider name.
+    Does NOT call get_routing() — use this when you already know the provider.
+    """
+    if provider == "lmstudio":
+        from langchain_openai import ChatOpenAI
+        lms_model = get_config_value("LM_STUDIO_MODEL", "")
+        lms_host = get_config_value("LM_STUDIO_HOST", "http://localhost:1234")
+        return ChatOpenAI(
+            model=lms_model,
+            base_url=f"{lms_host}/v1",
+            api_key="lm-studio",
+            temperature=0,
+        ), f"lmstudio/{lms_model}"
 
-    elif model_name == "openai":
+    if provider == "ollama":
+        model = get_config_value("OLLAMA_MODEL", "qwen3:8b")
+        host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
+        ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "8192"))
+        return ChatOllama(model=model, base_url=host, num_ctx=ctx_size, temperature=0), f"ollama/{model}"
+
+    if provider == "gemini":
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+        except ImportError:
+            raise RuntimeError("langchain-google-genai not installed. Run: pip install langchain-google-genai")
+        gemini_key = get_config_value("GEMINI_API_KEY", "")
+        gemini_model = get_config_value("GEMINI_MODEL", "gemini-2.0-flash")
+        return ChatGoogleGenerativeAI(model=gemini_model, google_api_key=gemini_key, temperature=0), f"gemini/{gemini_model}"
+
+    if provider == "openai":
         from langchain_openai import ChatOpenAI
         openai_key = get_config_value("OPENAI_API_KEY", "")
         openai_model = get_config_value("OPENAI_MODEL", "gpt-4o-mini")
         return ChatOpenAI(model=openai_model, openai_api_key=openai_key, temperature=0), f"openai/{openai_model}"
 
-    elif model_name == "claude":
+    if provider == "claude":
         try:
             from langchain_anthropic import ChatAnthropic
         except ImportError:
-            print("⚠️  langchain-anthropic not installed — falling back to Ollama. Run: pip install langchain-anthropic")
-            ollama_model = get_config_value("OLLAMA_MODEL", "llama3")
-            ollama_host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
-            ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "8192"))
-            return ChatOllama(model=ollama_model, base_url=ollama_host, num_ctx=ctx_size, temperature=0), f"ollama/{ollama_model}"
+            raise RuntimeError("langchain-anthropic not installed. Run: pip install langchain-anthropic")
         claude_key = get_config_value("CLAUDE_API_KEY", "")
         claude_model = get_config_value("CLAUDE_MODEL", "claude-sonnet-4-20250514")
         return ChatAnthropic(model=claude_model, anthropic_api_key=claude_key, temperature=0), f"claude/{claude_model}"
 
-    # Unknown or unconfigured provider — fall back to Ollama
-    print(f"⚠️  Unknown LLM provider '{model_name}' — falling back to Ollama. Check ROUTING_* keys in .config.")
-    ollama_model = get_config_value("OLLAMA_MODEL", "llama3")
-    ollama_host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
-    ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "8192"))
-    return ChatOllama(model=ollama_model, base_url=ollama_host, num_ctx=ctx_size, temperature=0), f"ollama/{ollama_model}"
+    raise ValueError(f"Unknown provider '{provider}'")
+
+
+def _get_llm_fallback(exclude=None):
+    """Walk LLM_PRIORITY and return the first available (LLM, label) that isn't `exclude`."""
+    priority_str = get_config_value("LLM_PRIORITY", "lmstudio,ollama,gemini,openai,claude")
+    for name in [m.strip().lower() for m in priority_str.split(",")]:
+        if name == exclude:
+            continue
+        if _is_model_available(name):
+            try:
+                return _build_llm(name)
+            except Exception:
+                continue
+    raise RuntimeError("No LLM backend is available. Check ENABLE_LM_STUDIO / ENABLE_OLLAMA in .config.")
+
+
+def get_llm(model_type="chat", query=""):
+    """Returns a LangChain LLM instance based on routing. Also returns the model name used."""
+    provider = get_routing(model_type, query)
+
+    # Special case: Ollama needs a liveness check before we try to connect
+    if provider == "ollama" and not is_ollama_running():
+        print("⚠️  Ollama is not running. Falling back through LLM_PRIORITY chain.")
+        return _get_llm_fallback("ollama")
+
+    try:
+        return _build_llm(provider)
+    except Exception as e:
+        print(f"⚠️  Failed to build LLM for provider '{provider}': {e}. Trying fallback.")
+        return _get_llm_fallback(provider)
 
 def run_agent_query(user_input, context_data=None):
     """Runs a tool-calling agent to handle a user query."""
