@@ -191,28 +191,53 @@ setup_python_env() {
 }
 
 # ─────────────────────────────────────────────
-# Step 3: Ollama
+# Step 3: Local LLM (LM Studio or Ollama)
 # ─────────────────────────────────────────────
 setup_local_ai() {
-    show_progress "Checking Local AI (Ollama)..."
+    show_progress "Checking Local AI..."
     chmod +x scripts/manage_services.sh
 
-    if ! command -v ollama &> /dev/null; then
-        echo -e "${YELLOW}Ollama not found.${NC}"
-        echo "  Ollama runs AI models privately on your machine (no cloud required)."
-        read -p "  Install Ollama now? (y/n): " install_ollama
-        if [[ "$install_ollama" == "y"* ]]; then
-            if [ "$OS_TYPE" == "Darwin" ] && command -v brew &> /dev/null; then
-                brew install --cask ollama
+    # Determine which backend is configured (default: LM Studio)
+    LMS_ENABLED=$(awk -F'=' '/^ENABLE_LM_STUDIO[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    OLLAMA_ENABLED=$(awk -F'=' '/^ENABLE_OLLAMA[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+
+    # ── LM Studio path ──
+    if [ "$LMS_ENABLED" == "true" ]; then
+        echo -e "${CYAN}Primary LLM: LM Studio${NC}"
+        if command -v lms > /dev/null 2>&1; then
+            echo -e "${GREEN}lms CLI found.${NC}"
+        else
+            echo -e "${YELLOW}lms CLI not found in PATH.${NC}"
+            echo "  LM Studio must be installed and opened at least once to register 'lms'."
+            echo "  Download: https://lmstudio.ai"
+            echo -e "  ${YELLOW}⚠ Skipping LM Studio start — open LM Studio manually, load a model, and enable the local server.${NC}"
+        fi
+    fi
+
+    # ── Ollama path ──
+    if [ "$OLLAMA_ENABLED" == "true" ]; then
+        echo -e "${CYAN}Primary LLM: Ollama${NC}"
+        if ! command -v ollama &> /dev/null; then
+            echo -e "${YELLOW}Ollama not found.${NC}"
+            read -p "  Install Ollama now? (y/n): " install_ollama
+            if [[ "$install_ollama" == "y"* ]]; then
+                if [ "$OS_TYPE" == "Darwin" ] && command -v brew &> /dev/null; then
+                    brew install --cask ollama
+                else
+                    curl -fsSL https://ollama.com/install.sh | sh
+                fi
             else
-                curl -fsSL https://ollama.com/install.sh | sh
+                echo -e "${YELLOW}  ⚠ Skipped. Manual install: https://ollama.com/download${NC}"
             fi
         else
-            echo -e "${YELLOW}  ⚠ Skipped. Manual install: https://ollama.com/download${NC}"
-            echo -e "    After install, run: ollama pull llama3"
+            echo -e "${GREEN}Ollama is installed.${NC}"
         fi
-    else
-        echo -e "${GREEN}Ollama is installed.${NC}"
+    fi
+
+    # ── Neither enabled ──
+    if [ "$LMS_ENABLED" != "true" ] && [ "$OLLAMA_ENABLED" != "true" ]; then
+        echo -e "${YELLOW}No local LLM enabled in .config.${NC}"
+        echo "  Set ENABLE_LM_STUDIO=true (recommended) or ENABLE_OLLAMA=true"
     fi
 
     ./scripts/manage_services.sh start
@@ -445,48 +470,58 @@ run_service_checks() {
     # --- Python assistant verification ---
     echo -e "\n  ${BOLD}Checking services:${NC}"
 
+    LMS_ENABLED=$(awk -F'=' '/^ENABLE_LM_STUDIO[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    OLLAMA_ENABLED=$(awk -F'=' '/^ENABLE_OLLAMA[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    OLLAMA_OK=false
+
+    # --- LM Studio (primary when enabled) ---
+    if [ "$LMS_ENABLED" == "true" ]; then
+        LMS_MODEL=$(awk -F'=' '/^LM_STUDIO_MODEL[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+        if command -v lms > /dev/null 2>&1; then
+            if lms ps 2>/dev/null | grep -q .; then
+                echo -e "  ${GREEN}✓ LM Studio running — model: ${LMS_MODEL}${NC}"
+            else
+                echo -e "  ${YELLOW}⚠ LM Studio enabled but no model loaded${NC}"
+                ISSUES+=("LM Studio model not loaded")
+                ADVICE+=("Open LM Studio, load '${LMS_MODEL:-a model}', and enable the local server — or run: lms server start && lms load ${LMS_MODEL:-<model>}")
+            fi
+        else
+            echo -e "  ${YELLOW}⚠ LM Studio enabled but lms CLI not found in PATH${NC}"
+            ISSUES+=("lms CLI not in PATH (ENABLE_LM_STUDIO=true)")
+            ADVICE+=("Open LM Studio at least once to register the lms CLI, then re-run install.sh")
+        fi
+    fi
+
+    # --- Ollama (shown only when enabled) ---
+    if [ "$OLLAMA_ENABLED" == "true" ]; then
+        OLLAMA_HOST=$(awk -F'=' '/^OLLAMA_HOST[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+        [ -z "$OLLAMA_HOST" ] && OLLAMA_HOST="http://localhost:11434"
+        if curl -sf --max-time 3 "${OLLAMA_HOST}/api/tags" > /dev/null 2>&1; then
+            echo -e "  ${GREEN}✓ Ollama API (${OLLAMA_HOST})${NC}"
+            OLLAMA_OK=true
+        else
+            echo -e "  ${RED}✗ Ollama API unreachable (${OLLAMA_HOST})${NC}"
+            ISSUES+=("Ollama API unreachable at ${OLLAMA_HOST}")
+            ADVICE+=("Start Ollama: ollama serve   or open the Ollama app")
+        fi
+    fi
+
+    # --- General AI assistant check (uses whichever backend is active) ---
     set +e
     PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py > /tmp/ai_check.txt 2>&1
     AI_CHECK_EXIT=$?
     set -e
 
     if [ $AI_CHECK_EXIT -eq 0 ]; then
-        echo -e "  ${GREEN}✓ AI assistant (Ollama LLM)${NC}"
-        OLLAMA_OK=true
+        echo -e "  ${GREEN}✓ AI assistant check passed${NC}"
     else
         echo -e "  ${RED}✗ AI assistant check failed${NC}"
-        OLLAMA_OK=false
-        ISSUES+=("Ollama LLM not responding")
-        ADVICE+=("Run: ollama serve   then: ollama pull <model>   (check OLLAMA_MODEL in .config)")
-    fi
-
-    # --- Ollama reachability ---
-    OLLAMA_HOST=$(awk -F'=' '/^OLLAMA_HOST[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
-    [ -z "$OLLAMA_HOST" ] && OLLAMA_HOST="http://localhost:11434"
-    if curl -sf --max-time 3 "${OLLAMA_HOST}/api/tags" > /dev/null 2>&1; then
-        echo -e "  ${GREEN}✓ Ollama API (${OLLAMA_HOST})${NC}"
-    else
-        echo -e "  ${RED}✗ Ollama API unreachable (${OLLAMA_HOST})${NC}"
-        ISSUES+=("Ollama API unreachable at ${OLLAMA_HOST}")
-        ADVICE+=("Start Ollama: ollama serve   or open the Ollama app")
-    fi
-
-    # --- LM Studio ---
-    LMS_ENABLED=$(awk -F'=' '/^ENABLE_LM_STUDIO[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
-    if [ "$LMS_ENABLED" == "true" ]; then
-        if command -v lms > /dev/null 2>&1; then
-            LMS_MODEL=$(awk -F'=' '/^LM_STUDIO_MODEL[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
-            if lms ps 2>/dev/null | grep -qF "${LMS_MODEL:-model}"; then
-                echo -e "  ${GREEN}✓ LM Studio model loaded: ${LMS_MODEL}${NC}"
-            else
-                echo -e "  ${YELLOW}⚠ LM Studio enabled but no model loaded (lms ps shows nothing)${NC}"
-                ISSUES+=("LM Studio model not loaded")
-                ADVICE+=("Run: lms server start && lms load ${LMS_MODEL:-<model>}")
-            fi
+        if [ "$LMS_ENABLED" == "true" ]; then
+            ISSUES+=("LM Studio not responding to API calls")
+            ADVICE+=("Open LM Studio, load '${LMS_MODEL:-a model}', and enable Server (port 1234)")
         else
-            echo -e "  ${YELLOW}⚠ LM Studio enabled but lms CLI not found${NC}"
-            ISSUES+=("lms CLI not in PATH (ENABLE_LM_STUDIO=true)")
-            ADVICE+=("Open LM Studio at least once to register the lms CLI, then re-run install.sh")
+            ISSUES+=("Ollama LLM not responding")
+            ADVICE+=("Run: ollama serve   then: ollama pull <model>   (check OLLAMA_MODEL in .config)")
         fi
     fi
 
@@ -541,10 +576,10 @@ run_service_checks() {
         done
     fi
 
-    # --- Ollama-powered advice (if LLM is ready) ---
+    # --- AI-powered advice (Ollama only, when available and there are issues) ---
     if [ "$OLLAMA_OK" == "true" ] && [ ${#ISSUES[@]} -gt 0 ]; then
         echo ""
-        echo -e "  ${BLUE}Asking your local AI for setup guidance...${NC}"
+        echo -e "  ${BLUE}Asking Ollama for setup guidance...${NC}"
 
         ISSUE_LIST=$(printf '%s\n' "${ISSUES[@]}" | awk '{print NR". "$0}')
         PROMPT="You are a helpful assistant. The user just installed an AI agent assistant on their $(uname -s) machine. The following setup issues were detected:
