@@ -1,170 +1,212 @@
 # AI Agent Assistant
 
-An automated, multi-agent AI assistant that bridges local Markdown notes (Obsidian/LogSeq) with your Google Calendar. Designed for privacy, it prioritises local models (Ollama) and falls back gracefully to cloud APIs (OpenAI, Claude, Gemini).
+A local-first personal AI assistant that bridges your Markdown notes (Obsidian + LogSeq), your calendar, and your task lists — all from the terminal, powered by local LLMs.
 
-## Features
-
-- **Local-First AI** — Ollama keeps your data on your machine.
-- **Smart LLM Routing** — Complexity-based routing: simple tasks go local, complex tasks use the best available API.
-- **4 LLM Backends** — Ollama, OpenAI, Claude, Gemini with automatic failover.
-- **Rich Terminal Chat** — Streaming responses, Markdown rendering, and conversation history.
-- **Intelligent Scheduling** — Slots tasks from your notes into free gaps in your calendar.
-- **Deep Research (RAG)** — Index your entire note vault and book library (PDF/EPUB).
-- **Background Sync** — A Calendar Agent keeps a local YAML cache for fast responses.
-- **LogSeq Integration** — Extracts tasks marked with `LATER` from your journals.
-- **Mission Control UI** — Streamlit dashboard for backlog, analytics, and chat history.
+> **Primary LLM**: LM Studio (local, no cloud required)  
+> **Fallback chain**: LM Studio → Gemini → OpenAI → Claude
 
 ---
 
-## Installation
+## What It Does
 
-### Requirements
+- Reads tasks from **Obsidian** and **LogSeq** (`LATER` / `TODO` markers)
+- Syncs **Apple Reminders** into your Obsidian planner
+- Shows your schedule as a **unix `cal`-style month grid** in the terminal
+- Generates a **day-by-day AI plan** using your calendar and task data
+- Triggers the full planning pipeline from **n8n** on a schedule (weekdays 08:00)
+- Runs completely **offline** — no cloud accounts required
 
-- macOS or Linux
-- Python 3.11+
-- Git
-- [Ollama](https://ollama.com) (primary local LLM)
-- At least one cloud API key (optional — see below)
+---
 
-### Quick Start
+## Quick Start
 
 ```bash
 git clone https://github.com/yourusername/ai_agent_assistant
 cd ai_agent_assistant
+cp config.example .config        # fill in WORKSPACE_DIR, LOGSEQ_DIR, model names
 ./install.sh
-```
-
-The installer will:
-1. Check and install Python dependencies
-2. Set up a Python virtual environment
-3. Install Ollama (if not present)
-4. **Prompt you for API keys** (OpenAI, Gemini, Claude — all optional)
-5. Set up an hourly cron job for background task sync
-6. Verify everything is working
-
-### Configuration
-
-Copy the example config and fill in your paths:
-
-```bash
-cp config.example .config
-# Edit .config with your Obsidian vault path, LogSeq path, and Ollama model
+./run.sh                         # start the terminal chat
 ```
 
 ---
 
-## API Key Setup
+## Requirements
 
-The assistant uses **Ollama** by default — no API keys required. Cloud APIs are optional fallbacks.
-
-### OpenAI (Optional)
-
-1. Get your key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-2. The installer will prompt: `OpenAI API Key (sk-proj-...)`
-
-### Gemini (Optional)
-
-1. Get your key at [aistudio.google.com](https://aistudio.google.com)
-2. The installer will prompt: `Google Gemini API Key`
-
-### Claude (Optional)
-
-1. Get your key at [console.anthropic.com](https://console.anthropic.com)
-2. The installer will prompt: `Anthropic Claude API Key`
-
-### Updating Keys After Installation
-
-```
-/settings                              ← view all current keys and config
-/settings set OPENAI_API_KEY sk-...   ← update OpenAI key
-/settings set GEMINI_API_KEY AIza...  ← update Gemini key
-/settings set CLAUDE_API_KEY sk-...   ← update Claude key
-```
+- macOS or Linux, Python 3.11+
+- [LM Studio](https://lmstudio.ai) — load any GGUF/MLX model, enable local server on port 1234
+- Obsidian vault and/or LogSeq graph (paths set in `.config`)
+- Docker / OrbStack (optional — for n8n workflow automation)
 
 ---
 
 ## Configuration
 
-All settings live in `.config` (created from `config.template` during install). Key settings:
+All settings live in `.config` (copy from `config.example`). **Never commit `.config`** — it contains your API keys.
 
-| Setting | Description | Default |
-|---|---|---|
-| `OLLAMA_MODEL` | Local Ollama model | `llama3` |
-| `OLLAMA_HOST` | Ollama server URL | `http://localhost:11434` |
-| `LLM_PRIORITY` | Fallback order | `ollama,gemini,openai,claude` |
-| `ROUTING_CHAT` | LLM for chat queries | `ollama` |
-| `ROUTING_SCHEDULING` | LLM for scheduling | `ollama` |
-| `OPENAI_API_KEY` | OpenAI API key (optional) | — |
-| `GEMINI_API_KEY` | Gemini API key (optional) | — |
-| `CLAUDE_API_KEY` | Anthropic API key (optional) | — |
-| `WORKSPACE_DIR` | Path to Obsidian vault | — |
-| `LOGSEQ_DIR` | Path to LogSeq graph | — |
+| Key | Description | Example |
+|-----|-------------|---------|
+| `LM_STUDIO_MODEL` | Model loaded in LM Studio | `qwen2.5-coder-7b-instruct-mlx` |
+| `ENABLE_LM_STUDIO` | Use LM Studio as primary LLM | `true` |
+| `ENABLE_OLLAMA` | Use Ollama (alternative local LLM) | `false` |
+| `LLM_PRIORITY` | Fallback chain | `lmstudio,gemini,openai,claude` |
+| `ROUTING_CHAT` | LLM for chat | `lmstudio` |
+| `ROUTING_SCHEDULING` | LLM for scheduling | `lmstudio` |
+| `ROUTING_PARSING` | LLM for task parsing | `lmstudio` |
+| `ROUTING_PLANNING` | LLM for daily plan generation | `lmstudio` |
+| `WORKSPACE_DIR` | Path to Obsidian vault | `/path/to/vault` |
+| `LOGSEQ_DIR` | Path to LogSeq graph | `/path/to/logseq` |
+| `OBSIDIAN_PLANNER_FILE` | Planner note (relative to vault) | `Planner.md` |
+| `DEEP_WORK_START/END` | Focus window for plan scheduling | `09:00` / `12:00` |
+| `CHRONOTYPE` | Used to shape plan suggestions | `morning_owl` |
 
-**Do not commit `.config` to Git** — it contains your API keys. It is already in `.gitignore`.
+Update any key live from the chat:
+```
+/settings set LM_STUDIO_MODEL qwen2.5-coder-7b-instruct-mlx
+```
 
 ---
 
-## Running the Assistant
+## Terminal Chat Commands
 
-```bash
-make run-chat    # Interactive terminal chat
-make run-ui      # Streamlit web dashboard
-make run         # Background observer (watches for Markdown changes)
-```
+Start the chat: `./run.sh` or `python main.py --chat`
 
-### Chat Commands
+### Calendar & Tasks
 
 | Command | Description |
-|---|---|
-| `/settings` | View and update API keys and LLM config |
-| `/models` | Show which LLM backends are available |
-| `/routing` | Show active routing configuration |
-| `/services` | Check/start local AI services (Ollama) |
-| `/model enable openai` | Enable a specific backend |
-| `/sync` | Manually sync tasks from Obsidian and Reminders |
-| `/plan` | Trigger morning planning session |
-| `/backlog` | Display your unified task backlog |
-| `/develop <prompt>` | AI code generation |
-| `/commands` | Full command list |
+|---------|-------------|
+| `/today` | Today's calendar events + tasks due today |
+| `/week` | 7-day summary — event and task counts per day |
+| `/plan` | All tasks grouped by: Today, This Week, This Month, This Year, Backlog |
+| `/plan today` | Filter to today's tasks and overdue only |
+| `/plan week` | Tasks due within 7 days |
+| `/plan month` | Tasks due within 30 days |
+| `/plan year` | Tasks due within 365 days |
+| `/plan backlog` | Tasks with no due date |
+| `/cal` | Month grid with `*` (events) and `•` (tasks) markers |
+| `/cal 5 2026` | Calendar for any month/year |
+| `/cal-day 2026-04-10` | Drill into a specific day's events and tasks |
+
+### Planning
+
+| Command | Description |
+|---------|-------------|
+| `--morning` | Run the full morning planning pipeline (sync + AI plan) |
+| `/sync-logseq` | Sync LogSeq `LATER` tasks → Obsidian planner |
+| `/sync-universal` | Full task sync through n8n conflict resolution |
+| `/google-tasks` | Pull Google Tasks → Obsidian; push completions back |
+
+### Tasks
+
+| Command | Description |
+|---------|-------------|
+| `/backlog` | Unified task backlog (Obsidian + LogSeq) |
+| `/add-task Write tests` | Add a `LATER` task to today's LogSeq journal |
+| `/done Write tests` | Mark a task done in LogSeq or Obsidian |
+| `/add-event` | Add an event to your local ICS calendar |
+| `/remove-event` | Remove an upcoming ICS event |
+| `/export-calendar` | Export local calendar to `.ics` file |
+| `/import-calendar` | Import events from an `.ics` file |
+
+### LLM & Services
+
+| Command | Description |
+|---------|-------------|
+| `/models` | Show installed models and enable/disable |
+| `/routing` | Show current LLM routing config |
+| `/services` | Check and start local AI services |
+| `/settings` | View or update config keys and API keys |
+| `/status` | Full system health dashboard |
+
+### Research & Utilities
+
+| Command | Description |
+|---------|-------------|
+| `/cmd prioritize by deadline` | Custom AI command on your backlog |
+| `/develop a FastAPI endpoint` | AI code generation |
+| `/index` | Re-index notes and books for RAG search |
+| `/gmail` | List snoozed and filtered emails |
+| `/help` | Full command list |
+
+---
+
+## CLI Flags
+
+```bash
+python main.py --chat          # interactive terminal chat
+python main.py --morning       # run morning planning pipeline (non-interactive)
+python main.py --plan          # interactive planning session with calendar
+python main.py --backlog       # print unified task backlog and exit
+python main.py --today         # print today view and exit
+python main.py --dry-run       # plan without writing to calendar
+python main.py --stats         # show focus analytics
+```
+
+---
+
+## Agent Pipeline (cron / scheduled)
+
+```bash
+python cron_job.py                          # run all agents
+python cron_job.py --agents datainput logseq  # run specific agents
+```
+
+Agents run in order:
+1. **datainput** — Apple Reminders → Obsidian planner
+2. **logseq** — LogSeq `LATER` tasks → Obsidian planner block
+3. **calendar_planning** — AI-generated day/week plan → `datainput/calendar_suggestions.md`
+4. **google_tasks** — Google Tasks ↔ Obsidian two-way sync
+
+---
+
+## n8n Workflow Automation
+
+n8n runs as a Docker container and automates the morning pipeline on a schedule.
+
+```bash
+docker compose up -d n8n        # start n8n at http://localhost:5679
+python api_server.py            # start the Python webhook server on port 5678
+```
+
+Import workflows from `n8n-workflows/`:
+- `morning-planning.json` — fires weekdays at 08:00, calls `/webhook/morning-plan`
+- `add-task.json` — n8n → add task to LogSeq
+- `backlog-digest.json` — n8n → fetch backlog summary
+- `universal_task_sync.json` — n8n conflict resolution for tasks
+- `google_tasks_sync.json` — Google Tasks pull/push via n8n
+
+The `POST /webhook/morning-plan` endpoint runs the full pipeline:
+datainput sync → LogSeq LATER sync → AI plan (LM Studio) → writes `datainput/calendar_suggestions.md`
 
 ---
 
 ## LLM Routing
 
-The assistant automatically routes requests based on complexity:
-
-- **Simple tasks** (chat, quick lookups) → Ollama (local, free)
-- **Complex tasks** (scheduling, reasoning, code) → OpenAI/Claude/Gemini
-
-Override routing in `.config`:
 ```
+ROUTING_CHAT=lmstudio          → all chat goes to LM Studio
+ROUTING_SCHEDULING=lmstudio    → scheduling decisions via LM Studio
+ROUTING_PARSING=lmstudio       → task parsing via LM Studio
+ROUTING_PLANNING=lmstudio      → daily plan generation via LM Studio
+LLM_PRIORITY=lmstudio,gemini,openai,claude   → fallback order if LM Studio unavailable
+```
+
+To switch to Ollama:
+```
+ENABLE_OLLAMA=true
+ENABLE_LM_STUDIO=false
 ROUTING_CHAT=ollama
-ROUTING_SCHEDULING=openai
+ROUTING_PLANNING=ollama
+LLM_PRIORITY=ollama,gemini,openai,claude
 ```
 
 ---
 
-## Google Calendar Integration
+## Google API Setup
 
-1. Create a project at [console.cloud.google.com](https://console.cloud.google.com)
-2. Enable the Google Calendar API and Google Gmail API
-3. Download `credentials.json` and place it in the project root
-4. On first run, a browser window will open to authorise access
+Cloud Google services are optional. See `docs/GOOGLE_API_SETUP.md` for setup steps.  
+Google Calendar and Tasks credentials are managed via **n8n** — no `token.json` required in Python.
 
 ---
 
 ## License
 
-MIT License
-
----
-
-## Progress Log
-
-- **2026-03-14:** Removed OpenClaw — Ollama is now the primary local LLM
-- **2026-03-08:** `/settings` chat command for live API key management
-- **2026-03-08:** Added Rich terminal chat UI with streaming, markdown rendering, and persistent conversation history
-- **2026-03-08:** Implemented complexity-based LLM routing
-- **2026-03-04:** Added Qwen 3.5-9B support and LangChain integration
-- **2026-03-01:** Bulk Task Management and Custom AI Commands in Mission Control
-- **2026-03-01:** Self-Repairing Installation script with automatic model pulling
+MIT

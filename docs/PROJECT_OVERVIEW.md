@@ -1,158 +1,203 @@
-# AI Agent Assistant: System Architecture & Agent Flows
+# AI Agent Assistant — System Architecture & Agent Flows
 
 This document provides a technical overview of how the AI Agent Assistant operates, its internal agents, and the flow of data across the system.
 
-## 🏗 System Architecture Diagram
+---
+
+## System Architecture
 
 ```mermaid
 graph TD
-    subgraph "Local Sources (Data Inputs)"
+    subgraph "Local Sources"
         Obsidian["Obsidian Vault (.md)"]
         LogSeq["LogSeq Graph (.md)"]
-        AppleRem["Apple Reminders (MacOS)"]
-        Books["Book Library (PDF/EPUB)"]
-        Gmail["Gmail API (Snoozed/Filters)"]
+        AppleRem["Apple Reminders (macOS)"]
+        ICS["Local ICS Calendar"]
     end
 
-    subgraph "Core Agents (Processing)"
-        ObserverAgent["Observer Agent (Watchdog)"]
-        BacklogAgent["Unified Backlog Agent"]
-        MonitoringAgent["Monitoring Agent (Pulse)"]
-        CalendarAgent["Calendar Agent (YAML Cache)"]
-        PlanningAgent["Planning Agent (Executor)"]
-        AIOrcAgent["AI Orchestrator (Router)"]
-        FSAgent["File System Agent"]
-        BookAgent["Book Agent (RAG)"]
-        TravelAgent["Travel Agent (Search)"]
-        GmailAgent["Gmail Agent"]
-        RAGAgent["Notes RAG Agent"]
+    subgraph "Core Agents"
+        DataInput["datainput_agent — Reminders → Obsidian planner"]
+        LogSeqLater["logseq_later_agent — LATER tasks → Obsidian planner"]
+        CalPlan["calendar_planning_agent — AI day/week plan"]
+        CronJob["cron_job.py — orchestrates all agents"]
+        TermViews["terminal_views — /today /week /plan /cal"]
+        ObsAgent["obsidian_agent — read/write .md tasks"]
+        LSAgent["logseq_agent — read/write LogSeq journals"]
+        LocalCal["local_calendar_agent — ICS add/remove/list"]
+        GTasks["google_tasks_agent — Google Tasks ↔ Obsidian"]
+        AIOrch["ai_orchestration — LLM router + fallback"]
     end
 
-    subgraph "External Integration"
-        GCalAPI["Google Calendar API"]
-        GmailAPI["Gmail API"]
-        GeminiAPI["Google Gemini API"]
-        OpenAIAPI["OpenAI API"]
-        ClaudeAPI["Claude API"]
-        OllamaLocal["Ollama Local LLM"]
-        OpenClawLocal["OpenClaw Local Agent"]
-        VectorDB["Local ChromaDB (vector_db/)"]
-        YAMLData["Local YAML (datainput/)"]
+    subgraph "LLM Backends"
+        LMStudio["LM Studio (primary — local)"]
+        Gemini["Gemini API (fallback)"]
+        OpenAI["OpenAI API (fallback)"]
+        Claude["Claude API (fallback)"]
     end
 
-    %% Flow: Observation
-    Obsidian -->|Changes Detected| ObserverAgent
-    LogSeq -->|LATER Tasks| ObserverAgent
-    
-    %% Flow: Backlog Gathering
-    ObserverAgent -->|Trigger| BacklogAgent
-    AppleRem -->|Sync JSON| BacklogAgent
-    BacklogAgent -->|Unified Tasks| AIOrcAgent
-    
-    %% Flow: Context & Research
-    GCalAPI -->|Periodic Sync| CalendarAgent
-    CalendarAgent -->|Save YAML| YAMLData
-    YAMLData -->|Cached Busy Slots| AIOrcAgent
-    GmailAgent -->|Snoozed/Filtered| AIOrcAgent
-    BookAgent -->|Deep Search/Extracts| AIOrcAgent
-    TravelAgent -->|Flight/Holiday Research| AIOrcAgent
-    RAGAgent -->|Notes Context| AIOrcAgent
-    
-    %% Flow: AI Processing
-    MonitoringAgent -->|Health Check| AIOrcAgent
-    AIOrcAgent <-->|Routing| GeminiAPI
-    AIOrcAgent <-->|Routing| OpenAIAPI
-    AIOrcAgent <-->|Routing| ClaudeAPI
-    AIOrcAgent <-->|Local Request| OllamaLocal
-    AIOrcAgent <-->|Local Request| OpenClawLocal
-    
-    %% Flow: Execution & Sync
-    AIOrcAgent -->|JSON Schedule| PlanningAgent
-    PlanningAgent -->|Submit Events| GCalAPI
-    PlanningAgent -->|Update Markdown Plan| Obsidian
-    AIOrcAgent -->|Action Proposals| FSAgent
-    FSAgent -->|Create/Write/Move| Obsidian
-    
-    %% Flow: Vector DB
-    Books -->|Index| BookAgent
-    Obsidian -->|Index| RAGAgent
-    BookAgent <-->|Query| VectorDB
-    RAGAgent <-->|Query| VectorDB
+    subgraph "Automation"
+        N8N["n8n (Docker port 5679)"]
+        APIServer["api_server.py (FastAPI port 5678)"]
+    end
+
+    %% Data flows
+    AppleRem -->|reminders.json| DataInput
+    DataInput -->|## Reminders block| Obsidian
+    LogSeq -->|LATER/TODO tasks| LogSeqLater
+    LogSeqLater -->|## LogSeq LATER Tasks block| Obsidian
+    Obsidian --> ObsAgent
+    LogSeq --> LSAgent
+    ICS --> LocalCal
+
+    %% Planning pipeline
+    ObsAgent --> CalPlan
+    LSAgent --> CalPlan
+    LocalCal --> CalPlan
+    CalPlan -->|calendar_suggestions.md| Obsidian
+    CronJob --> DataInput
+    CronJob --> LogSeqLater
+    CronJob --> CalPlan
+    CronJob --> GTasks
+
+    %% Terminal views
+    ObsAgent --> TermViews
+    LSAgent --> TermViews
+    LocalCal --> TermViews
+
+    %% LLM routing
+    AIOrch -->|ROUTING_CHAT/SCHEDULING/PARSING/PLANNING| LMStudio
+    AIOrch -.->|fallback| Gemini
+    AIOrch -.->|fallback| OpenAI
+    AIOrch -.->|fallback| Claude
+    CalPlan --> AIOrch
+
+    %% n8n automation
+    N8N -->|POST /webhook/morning-plan| APIServer
+    APIServer --> CronJob
+    N8N -->|POST /webhook/add-task| APIServer
+    APIServer --> LSAgent
 ```
 
 ---
 
-## 🤖 Agent Roles & Code Linkage
+## Agent Roles
 
-### 1. Observer Agent (The Watcher)
-Monitors specific directories for changes and triggers the synchronization workflow. It specifically scans LogSeq journals for `LATER` tasks.
-- **Code Files:** `main.py`, `observer.py`.
+### datainput_agent
+Reads `datainput/reminders.json` (Apple Reminders export), deduplicates against `datainput/synced_reminders.json`, and appends new tasks to the Obsidian planner under `## Reminders`. Optionally calls the LLM to re-organise the full planner.
 
-### 2. Unified Backlog Agent (The Aggregator)
-Merges tasks from multiple disparate sources (Obsidian, LogSeq, Apple Reminders) into a consistent JSON format for the AI.
-- **Code Files:** `main.py`, `reminders_manager.py`.
+- **Entry**: `run(organise=True)`
+- **Writes**: Obsidian `Planner.md` (or `OBSIDIAN_PLANNER_FILE`)
 
-### 3. Monitoring Agent (The Pulse)
-Checks the health and availability of local AI servers (Ollama, OpenClaw) to ensure reliable routing.
-- **Code Files:** `monitoring_agent.py`.
+### logseq_later_agent
+Scans LogSeq journals (last N days, default 30) and all pages for `LATER`-marked tasks. Deduplicates by task text and writes a `## LogSeq LATER Tasks` block to the Obsidian planner.
 
-### 4. Calendar Agent (The Cache Manager)
-Runs a background process to sync Google Calendar data to `datainput/googlecalendar.yml`, reducing API latency and preventing rate limits.
-- **Code Files:** `calendar_agent.py`, `calendar_manager.py`.
+- **Entry**: `run(write_to_obsidian=True)`
+- **Config**: `LOGSEQ_JOURNAL_DAYS`, `LOGSEQ_DIR`, `OBSIDIAN_PLANNER_FILE`
 
-### 5. Planning Agent (The Executor)
-Handles the final phase of scheduling: submitting confirmed events to Google Calendar and writing the plan back to Obsidian.
-- **Code Files:** `planning_agent.py`.
+### calendar_planning_agent
+Fetches calendar events (local ICS → n8n YAML cache fallback), loads Apple Reminders and LogSeq tasks, and sends everything to the configured LLM (`ROUTING_PLANNING`) to generate a concrete day-by-day plan. Saves to `datainput/calendar_suggestions.md` and optionally appends to the Obsidian planner.
 
-### 6. AI Orchestrator Agent (The Scheduler & Router)
-The "Brain" of the system. It routes tasks between local models (Ollama, OpenClaw) and cloud APIs (Gemini, OpenAI, Claude).
-- **Code Files:** `ai_orchestration.py`.
+- **Entry**: `generate_plan(days=7, write_to_obsidian=False)`
+- **LLM**: routes via `ROUTING_PLANNING` (default: LLM_PRIORITY chain → LM Studio)
 
-### 7. File System Agent (The Actor)
-Executes physical changes to the local workspace based on AI proposals.
-- **Code Files:** `file_system_agent.py`.
+### local_calendar_agent
+Manages a local RFC 5545 ICS file (`datainput/local_calendar.ics`). Supports add, remove, list, today, export, and import — no Google OAuth required.
 
-### 8. Book Agent (The Librarian)
-Scans, indexes, and deep-searches local book libraries (PDF/EPUB) using RAG.
-- **Code Files:** `book_agent.py`.
+- **CLI commands**: `/add-event`, `/remove-event`, `/export-calendar`, `/import-calendar`
 
-### 9. Gmail Agent (The Inbox Watcher)
-Monitors snoozed and filtered emails to provide additional task context.
-- **Code Files:** `gmail_agent.py`.
+### google_tasks_agent
+Pulls tasks from Google Tasks into Obsidian planner; pushes `[x]` completions from Obsidian back to Google Tasks. Auth managed via n8n (no token.json in Python).
 
-### 10. RAG Agent (The Context Retriever)
-Indexes and retrieves relevant snippets from local markdown notes to ground AI responses.
-- **Code Files:** `rag_agent.py`.
+- **Entry**: `run()`
+- **CLI command**: `/google-tasks`
 
-### 11. Travel Agent (The Researcher)
-Uses Google Search grounding to find real-time flights, itineraries, and travel links.
-- **Code Files:** `travel_agent.py`.
+### terminal_views
+Rich terminal rendering for calendar and task data. All views read from Obsidian + LogSeq + Apple Reminders via `_load_unified_tasks()` and from the local ICS calendar.
+
+| View | Command | Description |
+|------|---------|-------------|
+| Today | `/today` | Events + tasks due today; overdue in red |
+| Week | `/week` | 7-day count summary (events + tasks per day) |
+| Plan | `/plan [horizon]` | Tasks bucketed: today / week / month / year / backlog |
+| Cal grid | `/cal [month year]` | Month grid; `*`=event `•`=task `‼`=both |
+| Cal day | `/cal-day YYYY-MM-DD` | Single-day drill-down |
+
+### ai_orchestration
+The LLM router. Routes requests to the correct backend based on `ROUTING_*` config keys. Falls back through `LLM_PRIORITY` chain if the primary is unavailable.
+
+- **Providers**: `lmstudio`, `ollama`, `gemini`, `openai`, `claude`
+- **Key functions**: `generate(prompt)`, `generate_with(provider, prompt)`, `generate_stream(prompt)`
+
+### cron_job.py
+Orchestrates all agents in sequence with a lockfile (prevents concurrent runs) and a 5-minute hard timeout. Run directly or triggered via n8n's `POST /webhook/morning-plan`.
+
+```bash
+python cron_job.py                              # all agents
+python cron_job.py --agents datainput logseq    # specific agents
+```
+
+### api_server.py (FastAPI)
+Webhook server for n8n integration. Runs on `WEBHOOK_PORT` (default 5678).
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /webhook/add-task` | Add a task to today's LogSeq journal |
+| `GET /webhook/backlog` | Return unified task backlog as JSON |
+| `POST /webhook/plan` | Trigger scheduling via ai_orchestration |
+| `POST /webhook/morning-plan` | Full pipeline: datainput → logseq → AI plan |
+| `GET /health` | Health check (Ollama status, LOGSEQ_DIR) |
 
 ---
 
-## 🔄 Data Connection Flow
+## Data Flow — Morning Plan Pipeline
 
-1.  **Detection:** `watchdog` detects a save or a new `LATER` task in LogSeq.
-2.  **Aggregation:** `get_unified_tasks` scans Obsidian, LogSeq, and Reminders.
-3.  **Context:** `CalendarAgent` (via YAML), `GmailAgent`, and `RAGAgent` provide deep context.
-4.  **Decision:** A payload is sent to the AI via `ai_orchestration` after `MonitoringAgent` confirms server health.
-5.  **Proposal:** The AI returns a JSON object containing a `schedule` and optional `actions`.
-6.  **Sync & Action:** 
-    - `PlanningAgent` commits events to Google Calendar and Obsidian.
-    - User confirms and executes `actions` via `FileSystemAgent`.
-
-## 🛠 Configuration Mapping
-The agents rely on the `.config` file for their environment:
-- `WORKSPACE_DIR` -> **ObserverAgent**, **FSAgent**, **RAGAgent**
-- `LOGSEQ_DIR` -> **ObserverAgent**, **RAGAgent**
-- `BOOKS_DIR` -> **BookAgent**
-- `CALENDAR_ID` -> **CalendarAgent**, **PlanningAgent**
-- `ROUTING_*` -> **AIOrcAgent**
-- `ENABLE_*` -> **AIOrcAgent**, **MonitoringAgent**
+```
+08:00 weekdays
+  n8n schedule trigger
+    → POST http://api:5678/webhook/morning-plan
+      → datainput_agent.run()          # Apple Reminders → Obsidian
+      → logseq_later_agent.run()       # LogSeq LATER → Obsidian
+      → calendar_planning_agent        # LM Studio → day/week plan
+        → datainput/calendar_suggestions.md
+      → return {status, steps, plan}
+    ← n8n formats summary
+```
 
 ---
 
-## 🚀 Interfaces
-- **Background Observer (`main.py`)**: Persistent daemon mode with background calendar sync.
-- **Interactive CLI (`main.py --chat`)**: Slash commands and action loops.
-- **Web Mission Control (`app.py`)**: Visual backlog management and interactive chat dashboard.
+## Configuration Reference
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `ENABLE_LM_STUDIO` | `false` | Enable LM Studio backend |
+| `LM_STUDIO_MODEL` | — | Model name loaded in LM Studio |
+| `ENABLE_OLLAMA` | `true` | Enable Ollama backend |
+| `OLLAMA_MODEL` | `llama3:latest` | Ollama model name |
+| `LLM_PRIORITY` | `ollama,gemini,openai,claude` | Fallback chain |
+| `ROUTING_CHAT` | `ollama` | LLM for chat |
+| `ROUTING_SCHEDULING` | `ollama` | LLM for scheduling |
+| `ROUTING_PARSING` | `ollama` | LLM for parsing |
+| `ROUTING_PLANNING` | _(uses LLM_PRIORITY)_ | LLM for daily plan |
+| `WORKSPACE_DIR` | — | Obsidian vault root |
+| `LOGSEQ_DIR` | — | LogSeq graph root |
+| `OBSIDIAN_PLANNER_FILE` | `Planner.md` | Planner note relative path |
+| `LOGSEQ_JOURNAL_DAYS` | `30` | Days of journals to scan |
+| `DEEP_WORK_START/END` | `09:00`/`12:00` | Focus window for plan |
+| `CHRONOTYPE` | `morning_owl` | Affects plan scheduling |
+| `N8N_WEBHOOK_URL` | `http://localhost:5678/webhook` | n8n base URL |
+| `WEBHOOK_PORT` | `5678` | api_server.py port |
+
+---
+
+## Sprint History
+
+| Sprint | Goal | Status |
+|--------|------|--------|
+| 01 | Remove OpenClaw, Ollama-first LLM, LogSeq parsing, n8n webhooks | ✅ |
+| 02 | Obsidian direct parsing, LogSeq→Obsidian sync, `--plan` flag, cron safety | ✅ |
+| 03 | Per-task LLM routing, `config.example`, evening review | ✅ |
+| 04 | `main.py` refactor, test suite (42 tests), Rich status dashboard, `/today` + `/week` | ✅ |
+| 05 | Local ICS calendar engine, Google Tasks two-way sync | ✅ |
+| 06 | LM Studio adapter, NanoClaw containerised Obsidian + LogSeq skills | ✅ |
+| 07 | LM Studio native SDK, `lms` CLI lifecycle, n8n local setup, Google OAuth → n8n | ✅ |
+| 08 | `/plan` time-horizon buckets, `/cal` month grid, Ollama/LM Studio planning, n8n morning-plan webhook | ✅ |

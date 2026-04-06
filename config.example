@@ -1,47 +1,57 @@
-# Copy this file to .config and fill in your paths.
-# Cloud API keys are optional — Ollama runs fully locally.
+# Copy this file to .config and fill in your paths and model names.
+# DO NOT COMMIT .config TO GIT — it contains your API keys.
 
-# Ollama (required — install from https://ollama.com)
+# ── LM Studio (primary local LLM — https://lmstudio.ai) ──────────────────────
+# Download LM Studio, load a model, and enable the local server on port 1234.
+ENABLE_LM_STUDIO=true
+LM_STUDIO_MODEL=qwen2.5-coder-7b-instruct-mlx
+
+# ── Ollama (alternative local LLM — https://ollama.com) ──────────────────────
+# Set ENABLE_OLLAMA=true and ENABLE_LM_STUDIO=false to use Ollama instead.
+ENABLE_OLLAMA=false
 OLLAMA_MODEL=llama3:latest
 OLLAMA_HOST=http://localhost:11434
 
-# LM Studio (optional — download from https://lmstudio.ai, load a model, enable local server on port 1234)
-# ENABLE_LM_STUDIO=false
-# LM_STUDIO_MODEL=your-model-name-here
-
-# Your notes directories
+# ── Notes directories ─────────────────────────────────────────────────────────
 WORKSPACE_DIR=/path/to/your/obsidian/vault
 LOGSEQ_DIR=/path/to/your/logseq/graph
+OBSIDIAN_PLANNER_FILE=Planner.md      # relative path inside WORKSPACE_DIR
+LOGSEQ_JOURNAL_DAYS=30                # how many recent journal days to scan
 
-# Local ICS calendar (primary calendar — no credentials required)
-LOCAL_CALENDAR_FILE=datainput/local_calendar.ics
+# ── Planning preferences ──────────────────────────────────────────────────────
+CHRONOTYPE=morning_owl                # morning_owl | night_owl | balanced
+DEEP_WORK_START=09:00
+DEEP_WORK_END=12:00
+FOCUS_CATEGORIES=dev,writing,learning # comma-separated focus areas
 
-# Google Tasks two-way sync
-ENABLE_GOOGLE_TASKS=false
-GOOGLE_TASKS_LIST=@default
+# ── LLM routing ───────────────────────────────────────────────────────────────
+ROUTING_CHAT=lmstudio
+ROUTING_SCHEDULING=lmstudio
+ROUTING_PARSING=lmstudio
+ROUTING_PLANNING=lmstudio
+LLM_PRIORITY=lmstudio,gemini,openai,claude
 
-# Google Calendar is managed via n8n — see INSTALL.md
-CALENDAR_ID=primary
-
-# LLM routing — which model handles each task type
-ROUTING_CHAT=ollama
-ROUTING_SCHEDULING=ollama
-ROUTING_PARSING=ollama
-
-# Fallback order if Ollama is unavailable
-LLM_PRIORITY=ollama,gemini,openai,claude
-
-# Cloud API keys (optional — uncomment and fill in if you want cloud fallback)
+# ── Cloud API keys (optional — fallback only) ─────────────────────────────────
+ENABLE_GEMINI=false
 # GEMINI_API_KEY=your_key_here
+
+ENABLE_OPENAI=false
 # OPENAI_API_KEY=your_key_here
+
+ENABLE_CLAUDE=false
 # CLAUDE_API_KEY=your_key_here
 
-# Enable cloud providers (all off by default — Ollama only)
-ENABLE_OLLAMA=true
-ENABLE_GEMINI=false
-ENABLE_OPENAI=false
-ENABLE_CLAUDE=false
+# ── Local ICS calendar (no credentials required) ─────────────────────────────
+LOCAL_CALENDAR_FILE=datainput/local_calendar.ics
 
-# Webhook server for n8n integration (optional)
-# WEBHOOK_PORT=5678
-# N8N_PORT=5679
+# ── Google Tasks two-way sync (via n8n) ───────────────────────────────────────
+# Google Calendar and Tasks credentials are managed in n8n — see INSTALL.md
+ENABLE_GOOGLE_TASKS=false
+GOOGLE_TASKS_LIST=@default
+ENABLE_GOOGLE_CALENDAR=false
+
+# ── n8n workflow automation (optional) ────────────────────────────────────────
+# docker compose up -d n8n   →   http://localhost:5679
+# python api_server.py       →   http://localhost:5678
+N8N_WEBHOOK_URL=http://localhost:5679/webhook
+WEBHOOK_PORT=5678
