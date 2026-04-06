@@ -136,11 +136,7 @@ def run_google_tasks_agent():
 
 
 def run_calendar_planning_agent():
-    print(f"\n[{_ts()}] === Calendar Planning Agent (Gemini) ===")
-    gemini_enabled = get_config_value("ENABLE_GEMINI", "false").lower() == "true"
-    if not gemini_enabled:
-        print("  Skipped — ENABLE_GEMINI=false in .config")
-        return None
+    print(f"\n[{_ts()}] === Calendar Planning Agent ===")
     try:
         import calendar_planning_agent
         result = calendar_planning_agent.run(write_to_obsidian=False)

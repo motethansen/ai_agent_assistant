@@ -413,22 +413,7 @@ if prompt := st.chat_input("Ask me about your emails, calendar, or books..."):
                 
                 Ensure all dates use the correct year (2026) and include the timezone offset provided in 'current_time'.
                 """
-                model_to_use = ai_orchestration.get_routing("chat")
-                
-                if model_to_use == "ollama":
-                    response_text = ai_orchestration.ollama_generate(ai_prompt)
-                else:
-                    if not ai_orchestration.api_key or "your_gemini_api_key" in ai_orchestration.api_key:
-                        st.info("Gemini key not set. Using local Ollama fallback.")
-                        response_text = ai_orchestration.ollama_generate(ai_prompt)
-                    else:
-                        import google.genai as genai
-                        client = genai.Client(api_key=ai_orchestration.api_key)
-                        response = client.models.generate_content(
-                            model='gemini-flash-latest',
-                            contents=ai_prompt
-                        )
-                        response_text = response.text
+                response_text, _ = ai_orchestration.generate(ai_prompt, task_type="chat")
 
                 # Try to extract JSON for actions (like read_book)
                 try:

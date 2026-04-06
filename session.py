@@ -24,39 +24,22 @@ def display_stats():
     print(f"  LogSeq: {os.path.abspath(logseq) if logseq else 'Not configured'}")
     print(f"  Calendar ID: {calendar_id}")
 
-    # API Key Status
-    print("\n🔑 API Configuration:")
-    api_key = os.getenv("GEMINI_API_KEY")
-    if api_key:
-        print(f"  Gemini API Key: {'✓ Configured' if api_key else '✗ Missing'}")
-        print(f"  Key Length: {len(api_key)} characters")
-    else:
-        print("  Gemini API Key: ✗ Missing")
-
-    # Check Ollama availability
+    # LLM backend status
+    print("\n🤖 LLM Backend:")
     try:
-        import requests
-        ollama_response = requests.get("http://localhost:11434/api/version", timeout=2)
-        if ollama_response.status_code == 200:
-            print("  Ollama: ✓ Available (http://localhost:11434)")
-        else:
-            print("  Ollama: ✗ Not responding")
-    except:
-        print("  Ollama: ✗ Not available")
-
-    # Available Models
-    print("\n🤖 Available Gemini Models:")
-    if api_key:
-        try:
-            import google.genai as genai
-            client = genai.Client(api_key=api_key)
-            models = list(client.models.list())
-            for model in models[:5]:  # Show first 5 models
-                print(f"  • {model.name}")
-            if len(models) > 5:
-                print(f"  ... and {len(models) - 5} more models")
-        except Exception as e:
-            print(f"  Error listing models: {e}")
+        from ai_orchestration import is_lmstudio_running, is_ollama_running, MODELS_ENABLED
+        from config_utils import get_config_value
+        if MODELS_ENABLED.get("lmstudio"):
+            lms_model = get_config_value("LM_STUDIO_MODEL", "")
+            status = "✓ Running" if is_lmstudio_running() else "✗ Not responding"
+            print(f"  LM Studio ({lms_model}): {status}")
+        if MODELS_ENABLED.get("ollama"):
+            status = "✓ Running" if is_ollama_running() else "✗ Not responding"
+            print(f"  Ollama: {status}")
+        routing = get_config_value("ROUTING_CHAT", "lmstudio")
+        print(f"  Active routing: {routing}")
+    except Exception as e:
+        print(f"  Could not check LLM status: {e}")
     else:
         print("  Cannot list models without API key")
 
