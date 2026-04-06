@@ -25,4 +25,9 @@ client_secret.json
 datainput/
 vector_db/
 
+# Claude Code internals
+.claude/settings.local.json
+.claude/worktrees/
 
+# Logs
+logs/
