@@ -3,7 +3,7 @@
 A local-first personal AI assistant that bridges your Markdown notes (Obsidian + LogSeq), your calendar, and your task lists — all from the terminal, powered by local LLMs.
 
 > **Primary LLM**: LM Studio (local, no cloud required)
-> **Fallback chain**: LM Studio → Gemini → OpenAI → Claude
+> **Fallback chain**: LM Studio → Groq → Gemini → OpenAI → Claude
 
 ---
 
@@ -51,11 +51,14 @@ These must be installed and running before `./install.sh` will fully succeed.
 
 Only needed if LM Studio / Ollama are unavailable or you want cloud fallback.
 
-| Key | Provider | Free tier |
-|---|---|---|
-| `GEMINI_API_KEY` | Google AI Studio | Yes — rate-limited. `gemini-1.5-flash` has a more generous free quota than `gemini-2.0-flash`. |
-| `OPENAI_API_KEY` | OpenAI | No |
-| `CLAUDE_API_KEY` | Anthropic | No |
+| Key | Provider | Free tier | Get your key |
+|---|---|---|---|
+| `GROQ_API_KEY` | Groq | Yes — generous free tier, very fast inference | [console.groq.com](https://console.groq.com) |
+| `GEMINI_API_KEY` | Google AI Studio | Yes — rate-limited. `gemini-1.5-flash` has a more generous free quota than `gemini-2.0-flash`. | [aistudio.google.com](https://aistudio.google.com) |
+| `OPENAI_API_KEY` | OpenAI | No | [platform.openai.com](https://platform.openai.com) |
+| `CLAUDE_API_KEY` | Anthropic | No | [console.anthropic.com](https://console.anthropic.com) |
+
+> **Adding more LLMs:** Groq hosts many open-source models (Llama, Qwen, Kimi K2, and more). See the full list at [console.groq.com/docs/models](https://console.groq.com/docs/models) and set `GROQ_MODEL` in `.config` to any active model ID.
 
 > If you exceed your Gemini free-tier quota, the CLI will display a clear rate-limit warning and suggest switching to LM Studio for that query.
 
@@ -115,7 +118,10 @@ All settings live in `.config` (copy from `config.example`). **Never commit `.co
 | `LM_STUDIO_MODEL` | Model loaded in LM Studio | `qwen2.5-coder-7b-instruct-mlx` |
 | `ENABLE_LM_STUDIO` | Use LM Studio as primary LLM | `true` |
 | `ENABLE_OLLAMA` | Use Ollama (alternative local LLM) | `false` |
-| `LLM_PRIORITY` | Fallback chain | `lmstudio,gemini,openai,claude` |
+| `ENABLE_GROQ` | Use Groq cloud inference (free tier) | `false` |
+| `GROQ_API_KEY` | Groq API key — get one at [console.groq.com](https://console.groq.com) | `gsk_...` |
+| `GROQ_MODEL` | Groq model ID — see [console.groq.com/docs/models](https://console.groq.com/docs/models) | `llama-3.3-70b-versatile` |
+| `LLM_PRIORITY` | Fallback chain | `lmstudio,groq,gemini,openai,claude` |
 | `ROUTING_CHAT` | LLM for chat | `lmstudio` |
 | `ROUTING_SCHEDULING` | LLM for scheduling | `lmstudio` |
 | `ROUTING_PARSING` | LLM for task parsing | `lmstudio` |
@@ -251,21 +257,32 @@ ROUTING_CHAT=lmstudio          # all chat → LM Studio
 ROUTING_SCHEDULING=lmstudio    # scheduling decisions → LM Studio
 ROUTING_PARSING=lmstudio       # task parsing → LM Studio
 ROUTING_PLANNING=lmstudio      # daily plan generation → LM Studio
-LLM_PRIORITY=lmstudio,gemini,openai,claude   # fallback if LM Studio unavailable
+LLM_PRIORITY=lmstudio,groq,gemini,openai,claude   # fallback if LM Studio unavailable
 ```
 
 To route a single query to a specific provider without changing routing config:
 ```
 /ask gemini find tasks about academic papers in obsidian
+/ask groq summarise my overdue tasks
 /ask lmstudio summarise my overdue tasks
 ```
+
+To use Groq as a free cloud fallback (no local GPU needed):
+```
+ENABLE_GROQ=true
+GROQ_API_KEY=gsk_...
+GROQ_MODEL=llama-3.3-70b-versatile
+LLM_PRIORITY=lmstudio,groq,gemini,openai,claude
+```
+
+Browse all available Groq models at [console.groq.com/docs/models](https://console.groq.com/docs/models) and update `GROQ_MODEL` to switch.
 
 To switch to Ollama as the primary backend:
 ```
 ENABLE_OLLAMA=true
 ENABLE_LM_STUDIO=false
 ROUTING_CHAT=ollama
-LLM_PRIORITY=ollama,gemini,openai,claude
+LLM_PRIORITY=ollama,groq,gemini,openai,claude
 ```
 
 ---

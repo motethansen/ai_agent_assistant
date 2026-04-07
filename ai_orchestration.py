@@ -43,6 +43,7 @@ MODELS_ENABLED = {
     "claude": get_config_value("ENABLE_CLAUDE", "false").lower() == "true",
     "ollama": get_config_value("ENABLE_OLLAMA", "true").lower() == "true",
     "lmstudio": get_config_value("ENABLE_LM_STUDIO", "false").lower() == "true",
+    "groq": get_config_value("ENABLE_GROQ", "false").lower() == "true",
 }
 
 # --- Tools for the AI Agent ---
@@ -170,6 +171,11 @@ def is_claude_available():
     key = get_config_value("CLAUDE_API_KEY", "")
     return bool(key) and "your_claude" not in key and MODELS_ENABLED.get("claude", False)
 
+def is_groq_available():
+    """Checks if Groq API key is configured and enabled."""
+    key = get_config_value("GROQ_API_KEY", "")
+    return bool(key) and "your_groq" not in key and MODELS_ENABLED.get("groq", False)
+
 # --- Complexity Classification ---
 COMPLEXITY_KEYWORDS_SIMPLE = [
     "parse", "extract", "categorize", "list", "format", "convert",
@@ -203,6 +209,8 @@ def _is_model_available(model, try_start=False):
         return is_openai_available()
     if model == "claude":
         return is_claude_available()
+    if model == "groq":
+        return is_groq_available()
     return False
 
 def get_routing(task_type="chat", query=""):
@@ -223,16 +231,16 @@ def get_routing(task_type="chat", query=""):
     complexity = classify_complexity(query) if query else "simple"
 
     if complexity == "simple":
-        for model in ["lmstudio", "ollama", "gemini"]:
+        for model in ["lmstudio", "ollama", "groq", "gemini"]:
             if _is_model_available(model, try_start=True):
                 return model
     else:
-        for model in ["lmstudio", "openai", "claude", "gemini", "ollama"]:
+        for model in ["lmstudio", "openai", "claude", "groq", "gemini", "ollama"]:
             if _is_model_available(model, try_start=True):
                 return model
 
     # Fallback through priority list
-    priority_str = get_config_value("LLM_PRIORITY", "lmstudio,ollama,gemini,openai,claude")
+    priority_str = get_config_value("LLM_PRIORITY", "lmstudio,ollama,groq,gemini,openai,claude")
     for model in [m.strip().lower() for m in priority_str.split(",")]:
         if _is_model_available(model, try_start=True):
             return model
@@ -290,12 +298,23 @@ def _build_llm(provider):
         claude_model = get_config_value("CLAUDE_MODEL", "claude-sonnet-4-20250514")
         return ChatAnthropic(model=claude_model, anthropic_api_key=claude_key, temperature=0), f"claude/{claude_model}"
 
+    if provider == "groq":
+        from langchain_openai import ChatOpenAI
+        groq_key = get_config_value("GROQ_API_KEY", "")
+        groq_model = get_config_value("GROQ_MODEL", "llama-3.3-70b-versatile")
+        return ChatOpenAI(
+            model=groq_model,
+            base_url="https://api.groq.com/openai/v1",
+            api_key=groq_key,
+            temperature=0,
+        ), f"groq/{groq_model}"
+
     raise ValueError(f"Unknown provider '{provider}'")
 
 
 def _get_llm_fallback(exclude=None):
     """Walk LLM_PRIORITY and return the first available (LLM, label) that isn't `exclude`."""
-    priority_str = get_config_value("LLM_PRIORITY", "lmstudio,ollama,gemini,openai,claude")
+    priority_str = get_config_value("LLM_PRIORITY", "lmstudio,ollama,groq,gemini,openai,claude")
     for name in [m.strip().lower() for m in priority_str.split(",")]:
         if name == exclude:
             continue
