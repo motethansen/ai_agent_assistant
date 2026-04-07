@@ -15,7 +15,7 @@ def get_config_value(key, default):
                     if k.strip() == key:
                         val = v.strip()
                         # Automatically set HF_TOKEN in environment for HuggingFace Hub
-                        if key == "HF_TOKEN" and val:
+                        if key in ("HF_TOKEN", "AI_Assistant_Token") and val:
                             os.environ["HF_TOKEN"] = val
                         return val
     return default
@@ -24,5 +24,6 @@ def is_google_calendar_enabled():
     """Legacy stub: Google Calendar direct OAuth is disabled (ADR-010)."""
     return False
 
-# Auto-load HF_TOKEN on import to ensure it's available for other modules
+# Auto-load HF token on import — support both key names
 get_config_value("HF_TOKEN", None)
+get_config_value("AI_Assistant_Token", None)

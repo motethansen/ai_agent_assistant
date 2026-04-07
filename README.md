@@ -57,8 +57,11 @@ Only needed if LM Studio / Ollama are unavailable or you want cloud fallback.
 | `GEMINI_API_KEY` | Google AI Studio | Yes — rate-limited. `gemini-1.5-flash` has a more generous free quota than `gemini-2.0-flash`. | [aistudio.google.com](https://aistudio.google.com) |
 | `OPENAI_API_KEY` | OpenAI | No | [platform.openai.com](https://platform.openai.com) |
 | `CLAUDE_API_KEY` | Anthropic | No | [console.anthropic.com](https://console.anthropic.com) |
+| `AI_Assistant_Token` | HuggingFace Inference API | Yes — free tier gives access to thousands of open-source models | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) |
 
 > **Adding more LLMs:** Groq hosts many open-source models (Llama, Qwen, Kimi K2, and more). See the full list at [console.groq.com/docs/models](https://console.groq.com/docs/models) and set `GROQ_MODEL` in `.config` to any active model ID.
+
+> **HuggingFace models:** Browse inference-ready models at [huggingface.co/models](https://huggingface.co/models) — filter by "Inference API" to find ones available on the free tier. Confirmed working: `Qwen/Qwen2.5-72B-Instruct` (chat), `Qwen/Qwen2.5-Coder-32B-Instruct` (code), `facebook/bart-large-cnn` (summarisation).
 
 > If you exceed your Gemini free-tier quota, the CLI will display a clear rate-limit warning and suggest switching to LM Studio for that query.
 
@@ -115,6 +118,7 @@ All settings live in `.config` (copy from `config.example`). **Never commit `.co
 
 | Key | Description | Example |
 |---|---|---|
+| `AI_Assistant_Token` | HuggingFace token — used for RAG embeddings and the Inference API | `hf_...` |
 | `LM_STUDIO_MODEL` | Model loaded in LM Studio | `qwen2.5-coder-7b-instruct-mlx` |
 | `ENABLE_LM_STUDIO` | Use LM Studio as primary LLM | `true` |
 | `ENABLE_OLLAMA` | Use Ollama (alternative local LLM) | `false` |
