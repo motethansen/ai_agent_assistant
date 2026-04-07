@@ -13,7 +13,7 @@ This module adds:
 Config keys used:
   LOGSEQ_DIR              — root of the LogSeq graph
   WORKSPACE_DIR           — Obsidian vault root (for optional summary write)
-  OBSIDIAN_PLANNER_FILE   — planner note (default: Planner.md)
+  OBSIDIAN_PLANNER_FILE   — planner note (default: 010 Planning/Planner.md)
   LOGSEQ_JOURNAL_DAYS     — how many recent journal files to scan (default: 30)
 """
 
@@ -92,7 +92,7 @@ def write_summary_to_obsidian(tasks):
     vault = _config_or_env("WORKSPACE_DIR")
     if not vault:
         return
-    rel     = _config_or_env("OBSIDIAN_PLANNER_FILE", "Planner.md")
+    rel     = _config_or_env("OBSIDIAN_PLANNER_FILE", "010 Planning/Planner.md")
     planner = os.path.join(vault, rel)
 
     today   = datetime.date.today().isoformat()

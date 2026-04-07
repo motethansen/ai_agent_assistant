@@ -14,7 +14,7 @@ Config keys used:
   ROUTING_PLANNING      — LLM to use (default: ollama); falls back via LLM_PRIORITY chain
   CALENDAR_ID           — default: primary
   WORKSPACE_DIR         — Obsidian vault root
-  OBSIDIAN_PLANNER_FILE — planner note (default: Planner.md)
+  OBSIDIAN_PLANNER_FILE — planner note (default: 010 Planning/Planner.md)
   LOGSEQ_DIR            — for LATER task context
   DEEP_WORK_START/END   — user's focus window (default: 09:00 / 12:00)
   CHRONOTYPE            — morning_owl | night_owl | balanced
@@ -232,7 +232,7 @@ def _append_plan_to_obsidian(suggestions, date_str):
     vault = get_config_value("WORKSPACE_DIR", None)
     if not vault:
         return
-    rel     = get_config_value("OBSIDIAN_PLANNER_FILE", "Planner.md")
+    rel     = get_config_value("OBSIDIAN_PLANNER_FILE", "010 Planning/Planner.md")
     planner = os.path.join(vault, rel)
 
     block_header = "## AI Calendar Plan"

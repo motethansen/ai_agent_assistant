@@ -10,7 +10,7 @@ Responsibilities:
 
 Config keys used:
   WORKSPACE_DIR          — Obsidian vault root
-  OBSIDIAN_PLANNER_FILE  — relative path inside vault (default: Planner.md)
+  OBSIDIAN_PLANNER_FILE  — relative path inside vault (default: 010 Planning/Planner.md)
 """
 
 import os
@@ -31,7 +31,7 @@ SYNCED_FILE     = os.path.join(DATAINPUT_DIR, "synced_reminders.json")
 
 def _planner_path():
     vault = get_config_value("WORKSPACE_DIR", ".")
-    rel   = get_config_value("OBSIDIAN_PLANNER_FILE", "Planner.md")
+    rel   = get_config_value("OBSIDIAN_PLANNER_FILE", "010 Planning/Planner.md")
     return os.path.join(vault, rel)
 
 

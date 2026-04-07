@@ -11,7 +11,7 @@ Push: scans Obsidian planner for - [x] done tasks;
 Config keys:
     ENABLE_GOOGLE_TASKS   — false by default; skip all calls if not true
     WORKSPACE_DIR         — Obsidian vault path
-    OBSIDIAN_PLANNER_FILE — planner filename (default: Planner.md)
+    OBSIDIAN_PLANNER_FILE — planner filename (default: 010 Planning/Planner.md)
 
 Entry points:
     run(sync_back=False)  — trigger pull; optionally trigger push
@@ -46,7 +46,7 @@ def sync_completions_to_google() -> bool:
         return False
 
     workspace = get_config_value("WORKSPACE_DIR", "")
-    planner_file = get_config_value("OBSIDIAN_PLANNER_FILE", "Planner.md")
+    planner_file = get_config_value("OBSIDIAN_PLANNER_FILE", "010 Planning/Planner.md")
     planner_path = os.path.join(workspace, planner_file)
     
     if not os.path.exists(planner_path):

@@ -453,28 +453,62 @@ def run_agent_query_stream(user_input, chat_history=None):
         response = llm.invoke(messages)
         return iter([response]), model_used
 
+def _prioritise_tasks(tasks, max_tasks=40):
+    """
+    Return at most max_tasks items, prioritising by due_date proximity.
+    Tasks with a due_date today or in the past come first, then soonest-due,
+    then undated tasks. Strips the verbose 'source'/'file'/'line' keys to
+    keep the prompt compact.
+    """
+    today = datetime.date.today()
+    dated, undated = [], []
+    for t in tasks:
+        entry = {k: v for k, v in (t.items() if isinstance(t, dict) else {}.items())
+                 if k not in ("source", "file", "line")}
+        if not entry:
+            entry = {"task": str(t)}
+        due = entry.get("due_date")
+        if due:
+            try:
+                entry["_due"] = datetime.date.fromisoformat(str(due)[:10])
+                dated.append(entry)
+                continue
+            except ValueError:
+                pass
+        undated.append(entry)
+
+    dated.sort(key=lambda x: x.pop("_due"))
+    selected = (dated + undated)[:max_tasks]
+    return selected
+
+
 def generate_schedule(tasks, busy_slots, morning_mode=False, workspace_dir=None, logseq_dir=None):
     """Legacy wrapper for schedule generation, now using the improved RAG logic."""
+    # Cap tasks to avoid blowing the local LLM context window
+    tasks_for_prompt = _prioritise_tasks(tasks, max_tasks=40)
+    if len(tasks) > len(tasks_for_prompt):
+        print(f"ℹ️  Scheduling top {len(tasks_for_prompt)} prioritised tasks (of {len(tasks)} total).")
+
     rag_context = ""
     try:
         rag_agent = RAGAgent(workspace_dir, logseq_dir)
         # Combine task queries for better context
-        task_names = [t['task'] if isinstance(t, dict) else t for t in tasks[:5]]
+        task_names = [t['task'] if isinstance(t, dict) else t for t in tasks_for_prompt[:5]]
         rag_context = rag_agent.query_context(" ".join(task_names))
     except Exception as e:
         print(f"⚠️ RAG error: {e}")
 
-    llm, _ = get_llm("scheduling", str(tasks[:3]))
+    llm, _ = get_llm("scheduling", str(tasks_for_prompt[:3]))
     current_time = datetime.datetime.now().astimezone().isoformat()
-    
+
     prompt = f"""
     You are a professional personal assistant.
     Current Time: {current_time}
     CONTEXT FROM NOTES: {rag_context}
-    TASKS: {json.dumps(tasks)}
+    TASKS: {json.dumps(tasks_for_prompt)}
     BUSY SLOTS: {json.dumps(busy_slots)}
-    
-    OUTPUT: Return a JSON object with a "schedule" array. 
+
+    OUTPUT: Return a JSON object with a "schedule" array.
     Each item: {{"task": "...", "category": "...", "start": "ISO8601", "end": "ISO8601"}}.
     Return ONLY JSON.
     """
