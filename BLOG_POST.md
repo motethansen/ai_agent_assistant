@@ -1,173 +1,235 @@
-# Building an AI-Powered Markdown-to-Calendar Sync: My Journey into Agentic Workflows
+# Building a Local-First AI Productivity Agent: Lessons from a Year in the Terminal
 
-## The Vision: A Seamless Bridge Between My Notes and My Life
+## The Problem I Was Trying to Solve
 
-I’ve always found a friction point between my local markdown notes (my "second brain" in Obsidian and Logseq) and my actual schedule in Google Calendar. My tasks live in text files, while my time lives in a calendar. Managing a complex workload across devices (my MacBook and Ubuntu machine) often felt like a manual logistics puzzle.
+I have three places my work lives: **Obsidian** (long-form notes and projects), **LogSeq** (daily journals and quick capture), and a **calendar**. Every Monday I was spending 20 minutes manually copying tasks between them, figuring out what was overdue, and trying to build a plan for the week.
 
-What if my notes could talk to my calendar? What if an AI could look at my tasks, see when I’m *actually* free, and intelligently slot them into my day?
+What I actually wanted was simple: a system that reads everything, knows what's overdue, and helps me decide what to do today — without sending my private notes to a cloud service.
 
-In this project, I’m exploring the world of **AI agents as assistants**. I’m not just writing code; I’m collaborating with AI tools (like Gemini CLI) to architect and build this bridge. This post documents the process—the successes, the frustrating "gotchas," and the technical architecture of a system that manages my time so I can focus on my work.
+This post documents how I built that, what I learned, and what you need to install before it'll work on your machine.
 
 ---
 
-## Phase 1: Setting the Foundation (and Avoiding Dependency Hell)
+## What the System Does Today
 
-The first step in any multi-device project is standardization. If it doesn't run on both my Mac and my Linux box, it's not a solution; it's a headache.
+- Reads `LATER` and `TODO` tasks from LogSeq journals and pages
+- Syncs Apple Reminders into an Obsidian planner file
+- Detects overdue tasks (Python date comparison, not LLM guesswork) and surfaces them at the top of the planner under `## 🚨 Overdue`
+- Categorises tasks by your focus areas using an LLM
+- Generates a day-by-day AI weekly plan using your calendar and pending tasks
+- Pushes events to your local ICS calendar and optionally to Apple Calendar via `osascript`
+- Runs all of this hourly via a cron job
+- Exposes a terminal chat interface with 40+ slash commands
 
-### The Strategy
-We decided on a Python-based stack for its portability and rich ecosystem:
-- **`watchdog`**: To listen for real-time file changes without polling.
-- **`google-api-python-client`**: To interface with Google Calendar.
-- **`google-generativeai` (or OpenAI)**: The "brain" that will handle the scheduling logic.
+All processing runs locally by default via LM Studio. No notes leave your machine.
 
-### 🛠️ The Setup (MacBook & Ubuntu)
-To keep the environment identical across both machines, I followed this ritual:
+---
+
+## What You Need to Install First
+
+This section is the one I wish existed when I started. Nothing in `requirements.txt` tells you that you need a running LLM before the whole thing makes sense.
+
+### 1. Python 3.11 or later
+
+The project uses `match` statements and `datetime.date.fromisoformat()` features that require 3.11+.
 
 ```bash
-# Create the isolated sandbox
-python3 -m venv venv
+# macOS
+brew install python@3.12
 
-# Activate it
-source venv/bin/activate
-
-# Install the dependencies from our blueprint
-pip install -r requirements.txt
+# Ubuntu / Debian
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt install python3.12 python3.12-venv
 ```
 
-### 💡 Lesson Learned: The Virtual Environment is Not Optional
-When you’re building something that interacts with local files and cloud APIs, keep your environment clean. I set up a dedicated `venv` inside the project folder. 
+### 2. A Local LLM — LM Studio (recommended) or Ollama
 
-**Hint for others:** If you're syncing your vault across devices (e.g., via iCloud or Syncthing), don't sync the `venv` folder! Keep it local to each machine or use a `requirements.txt` to recreate it.
+This is the non-obvious one. The agent doesn't work without an LLM backend. You have two choices:
 
-### Current Status
-We've mapped out the five-phase plan:
-1. **Environment Foundation** (Current)
-2. **The Local Observer Layer** (Monitoring `.md` files)
-3. **Calendar & Appointments Layer** (Google API integration)
-4. **AI Orchestration** (The scheduling brain)
-5. **The Sync & Write-Back Loop** (Final integration)
+**LM Studio** (what I use on macOS):
+- Download from [lmstudio.ai](https://lmstudio.ai)
+- Open the app, search for a model (I use `qwen2.5-coder-7b-instruct-mlx` on Apple Silicon)
+- Click Load, then go to Local Server → Start Server
+- The server runs on `http://localhost:1234`
+- Set `ENABLE_LM_STUDIO=true` and `LM_STUDIO_MODEL=<your model name>` in `.config`
 
----
+**Ollama** (better for Linux / headless servers):
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen2.5:14b      # or any model you prefer
+```
+- Set `ENABLE_OLLAMA=true`, `OLLAMA_MODEL=qwen2.5:14b` in `.config`
 
-## Phase 4: The AI Orchestration (The Scheduler Brain)
+You can also configure cloud LLMs (Gemini, OpenAI, Claude) as fallbacks. If you hit a free-tier rate limit, the CLI will tell you clearly and suggest switching providers rather than dumping a JSON error blob.
 
-Now for the "magic." I have my tasks (from markdown) and my availability (from Google Calendar). I need an orchestrator to sit in the middle and make smart decisions.
+### 3. Your Notes Folders
 
-### The Strategy
-We chose the Gemini 1.5 Flash model for its speed and its ability to follow strict formatting instructions. I'm feeding it a "Context Payload":
-- **Current Tasks:** A list of what I need to do.
-- **Busy Slots:** A list of when I'm already booked.
-- **The Prompt:** Explicit instructions to fit tasks into free slots and return the result *only* as a JSON array.
+The agent reads Obsidian and LogSeq as plain markdown files — neither app needs to be running. You just need the folders to exist.
 
-### 💡 Lesson Learned: The "Deprecated Package" Pivot
-Software moves fast, and AI software moves at lightspeed. Halfway through my Phase 4 development, I ran into a 404 error and a warning that the `google-generativeai` package had been deprecated in favor of a new, cleaner SDK: `google-genai`.
+Set these in `.config`:
+```
+WORKSPACE_DIR=/path/to/your/obsidian/vault
+LOGSEQ_DIR=/path/to/your/logseq/graph
+```
 
-**Hint for others:** If you see "models/gemini-1.5-flash not found" or package warnings, it’s time to pivot. I had to:
-1.  Update my `requirements.txt` to `google-genai`.
-2.  Rewrite the AI script to use the new `genai.Client` class.
-3.  The result? A cleaner API and more reliable responses. Don’t be afraid to refactor when the tech shifts underneath you.
+On macOS with iCloud sync, these are typically deep inside `~/Library/Mobile Documents/`. The `config.example` file shows the exact path format.
 
-### 💡 Lesson Learned: The "Model Name" Rabbit Hole
-Even after switching to the new SDK, I hit a wall with a `404 Not Found` error for the model name. It turns out that depending on your specific API key and region, the model you expect (like `gemini-1.5-flash`) might be named differently (like `gemini-flash-latest`).
+### 4. Docker or OrbStack (optional, for automation)
 
-**Hint for others:** If you're getting 404 errors, don't guess the model name. Write a tiny diagnostic script using `client.models.list()` to see exactly what your API key is allowed to use. It saved me hours of frustration.
+The n8n workflow engine handles scheduled automation and the Google Calendar/Tasks connector. It runs as a Docker container.
 
-### 💡 Lesson Learned: The JSON "Sanity Check"
-One common failure with AI is "hallucination"—sometimes it adds conversational filler like "Sure! Here is your schedule:". 
+On macOS I recommend [OrbStack](https://orbstack.dev) — it's faster and lighter than Docker Desktop, and the `docker` CLI works identically.
 
-**Hint for others:** I implemented a simple cleanup function in Python to strip away any markdown code blocks (like ```json) that the AI might wrap around its response. This ensures the JSON is always "parse-able" and won't crash the script.
+```bash
+# Once Docker/OrbStack is running:
+docker compose up -d n8n      # starts n8n at http://localhost:5679
+python api_server.py           # starts the Python webhook server on port 5678
+```
 
-### 🛡️ Security First: Use a `.env` and `.config` File
-Never hard-code your API keys or local paths directly into your scripts. I created a `.config` file (and a `.env`) to keep sensitive data separate from the code.
+### 5. Apple Calendar access (macOS only, optional)
 
-**Key Configuration:**
-- **`GEMINI_API_KEY`**: Your brain's fuel.
-- **`WORKSPACE_DIR`**: This is critical! It tells the AI exactly where your Obsidian vault lives. By setting this to your local vault path (e.g., `/Users/michael/Obsidian/SecondBrain`), the assistant gains the ability to organize your files and create new notes exactly where you need them.
-- **`CALENDAR_ID`**: Point the assistant to a specific Google Calendar if you don't want to use your primary one.
+The `/add-event` command can push events directly into Apple Calendar via `osascript`. You need to grant Terminal access:
 
-### Current Status
-- [x] Environment Foundation
-- [x] Local Observer Layer
-- [x] Calendar & Appointments Layer
-- [x] AI Orchestration (Prompt & Logic)
-- [x] The Sync & Write-Back Loop
+**System Settings → Privacy & Security → Automation → Terminal → Calendar: on**
+
+The first time `/add-event` runs it will launch Calendar.app and prompt for approval if not already granted.
 
 ---
 
-## Phase 5: The Sync & Write-Back Loop (Closing the Circle)
+## Architecture: How the Pieces Fit Together
 
-The final step was making the AI's decisions visible and actionable. It's one thing for a script to *calculate* a schedule; it's another for that schedule to magically appear in your calendar and your notes.
+```
+LogSeq journals ──┐
+Apple Reminders ──┼──► cron_job.py ──► Planner.md (Obsidian)
+Google Tasks ─────┘         │
+                            ▼
+                   LM Studio (local LLM)
+                   - re-organises planner
+                   - detects overdue tasks
+                   - generates weekly plan
+                            │
+              ┌─────────────┼─────────────┐
+              ▼             ▼             ▼
+       local ICS      Apple Calendar    datainput/
+       calendar       (osascript)      calendar_suggestions.md
+              │
+              ▼
+         n8n (Docker)
+         - morning planning cron
+         - Google Calendar connector
+         - Universal Task Sync
+```
 
-### The Strategy
-We created a final `main.py` that orchestrates the entire lifecycle:
-1.  **Watchdog** triggers when I save my daily note.
-2.  **Parser** extracts my `## Tasks`.
-3.  **Calendar Manager** fetches my current `Busy` blocks.
-4.  **AI Orchestration** builds a JSON-formatted plan.
-5.  **Sync Back:** The script creates actual events in Google Calendar and then overwrites the `## Today's Plan` section in my markdown file with the finalized times.
-
-### 💡 Lesson Learned: The "Visual Feedback" Loop
-I discovered that having the script write back to the markdown file is the most satisfying part. Seeing a bulleted list of times appear in your notes seconds after you save is the "Aha!" moment where the AI truly feels like a helpful assistant.
-
-### Conclusion: My AI Agent is Alive
-This project taught me that "AI agents" aren't just large language models; they are the glue between those models and our everyday tools. By bridging local markdown files with cloud APIs, I've built a system that manages the logistics so I can focus on the creative work.
-
----
-
-## Final Challenges and Outcomes: Toward Full Agency
-
-The final stretch of this experiment was about pushing the boundaries of what a "local assistant" can actually do. It wasn't just about scheduling anymore; it was about **agency**.
-
-### 💡 Lesson Learned: The "Reminders" Permission Wall
-One of the most frustrating challenges was integrating **Apple Reminders**. macOS has strict privacy silos. My first attempt using the `EventKit` framework hit a "Permission Denied" wall that even system-level resets couldn't consistently bridge for a CLI tool.
-**The Outcome:** I pivoted to a **Local JSON Buffer** strategy. I wrote a dedicated extraction script using AppleScript (which macOS treats as "Automation" rather than "Data Access") to pull reminders into a local `datainput/reminders.json` file. This decoupled the AI from the OS's slow permission loops and made the assistant lightning-fast.
-
-### 💡 Lesson Learned: The Multi-LLM Routing Engine
-As I added more tasks, I realized that using a top-tier cloud model like Gemini for *everything* was overkill and occasionally hit rate limits. 
-**The Outcome:** I implemented a **Multi-LLM Routing Engine**. The assistant can now toggle between Gemini (for complex scheduling), Ollama (for local, private chat), and OpenClaw. This means I can run my daily "Morning Planning" on a local Llama 3 model without ever sending my private data to the cloud.
-
-### 💡 Lesson Learned: Bridging the "Write Access" Gap
-The "Aha!" moment came when I realized the AI could do more than just talk; it could **act**. Initially, the AI would say, "I can't create folders for you."
-**The Outcome:** I built a **File System Agent**. By giving the AI a structured way to propose "Actions" (like `create_folder` or `write_file`), the assistant can now manage my Obsidian vault directly. If I ask it to organize my reminders into a new project folder, it generates the plan, asks for my confirmation (`y/n`), and then physically creates the directory and the `.md` notes.
-
-### Conclusion: The Birth of a Modular Platform
-What started as a simple sync script has evolved into a **modular agentic platform**. 
-- It handles **Multi-Source Backlogs** (Obsidian + Apple Reminders).
-- It manages **Multi-LLM Routing** (Gemini + Ollama + OpenClaw).
-- It possesses **File System Agency** (Safely managing your local files).
-- It is **Extensible** (Users can scaffold their own agents with `/create-agent`).
-
-The journey from a "script" to an "agent" is about trust and feedback loops. By keeping the human in the loop for file operations and calendar syncs, I've built a system that feels like a powerful extension of my own productivity workflow.
+The terminal chat (`./run.sh`) sits in front of all of this. You can inspect any layer, run agents on demand, or just ask the LLM a question in plain English.
 
 ---
 
-## Phase 16: Deep Research and Mission Control (The Final Evolution)
+## Lessons Learned
 
-The final transformation of the AI Agent Assistant was about **Knowledge Mastery** and **Visual Command**.
+### Lesson 1: Don't trust the LLM for date arithmetic
 
-### 💡 Lesson Learned: The "Context Window" Constraint
-As my notes and book library grew, I hit the dreaded context window limit. Even the most powerful AI can't "read" twenty 500-page PDFs at once to answer a simple question.
-**The Solution: Deep RAG (Retrieval-Augmented Generation).** I integrated **ChromaDB**, a local vector database. Now, the assistant indexes my entire Obsidian vault and my local book library (PDFs, EPUBs) page-by-page. When I ask a question, the **RAG Agent** searches the "vector space" for the most relevant passages and feeds *only those* to the AI. This means the assistant can accurately cite findings from a massive library in seconds.
+My first overdue-task detector sent the whole planner to the LLM and asked it to figure out what was overdue. It was unreliable — models would miss tasks or hallucinate dates.
 
-### 💡 Lesson Learned: The Need for "Mission Control"
-Commands in a terminal are powerful, but sometimes you need a bird's-eye view of your day. 
-**The Solution: The Streamlit Dashboard.** I built a web-based "Mission Control." It features:
-- **Unified Backlog View**: See everything from your notes and reminders in one place.
-- **AI Brainstorming**: A sandbox where you can generate and "live-edit" your schedule before pushing it to Google Calendar.
-- **Interactive Chat**: A real-time chat window where you can talk to all your agents simultaneously—asking about emails, searching books, or planning tomorrow.
-- **Focus Analytics**: Visual charts showing how much time the AI has scheduled for your "Deep Work" vs. "Administrative" tasks.
+The fix was to scan for `📅 YYYY-MM-DD` patterns in Python before touching the LLM:
 
-### 💡 Lesson Learned: Timezone "Drift"
-One subtle but annoying bug was "timezone drift." Sometimes the AI would return a schedule in UTC, shifting my entire day by 7 hours.
-**The Solution: Strict ISO8601 with Offsets.** I updated the system to be "timezone-aware." The assistant now detects your local system's offset (e.g., `-07:00`) and forces the AI to use that specific format for every calendar event. No more missing lunch because the AI thought it was 5 AM.
+```python
+def _find_overdue_tasks(content):
+    today = datetime.date.today()
+    overdue = []
+    date_pattern = re.compile(r'📅\s*(\d{4}-\d{2}-\d{2})')
+    for line in content.splitlines():
+        if not re.match(r'\s*-\s*\[ \]', line):  # open tasks only
+            continue
+        m = date_pattern.search(line)
+        if m:
+            due = datetime.date.fromisoformat(m.group(1))
+            if due < today:
+                overdue.append((line.strip(), m.group(1)))
+    return overdue
+```
 
-### Final Thoughts: From Script to Personal Operating System
-The AI Agent Assistant has moved beyond being a "tool." It's now a **Personal Operating System** for my productivity. It listens to my notes, watches my emails, searches my books, and guards my time. 
+The LLM then receives a reliable list: "these 3 tasks are overdue — put them in `## 🚨 Overdue` at the top." It just has to format and categorise, not reason about dates.
 
-By building this with a "Human-in-the-loop" philosophy—where the AI proposes actions and I confirm them—I've created something that feels remarkably like a real, professional assistant. 
+### Lesson 2: Free tier rate limits are invisible until they hit
 
-**What's next?** The project is now stable, documented, and fully agentic. It's time to let it run and see how much more I can achieve when the logistics are handled by a machine that finally "gets" my workflow.
+I was using Gemini as a fallback and it worked great — until it didn't. When the free-tier quota runs out mid-session, the raw API error is 400 lines of JSON. I wrapped the error handler to catch `429`/`RESOURCE_EXHAUSTED` and surface one line:
+
+```
+⚠  gemini/gemini-2.0-flash: rate-limit / quota exceeded.
+   Try /ask lmstudio <query> or switch to gemini-1.5-flash in .config.
+```
+
+The lesson: cloud APIs are useful fallbacks but not reliable primaries if you're on a free tier. Run a local LLM first.
+
+### Lesson 3: The Calendar app needs to be running to receive events
+
+`osascript` can create Apple Calendar events, but if Calendar.app isn't open you get a cryptic `-600` error. The fix is to launch the app first and wait:
+
+```python
+subprocess.run(["open", "-a", "Calendar"])
+time.sleep(2)  # let it initialise
+# now run the osascript
+```
+
+### Lesson 4: `install.sh` on re-runs used to add duplicate cron jobs
+
+The original install script always appended a new cron line on every run. After two installs you'd have two cron jobs firing simultaneously and corrupting the planner. The fix was to check for an existing entry first:
+
+```bash
+EXISTING_CRON=$(crontab -l 2>/dev/null | grep "cron_job.py" || true)
+if [ -n "$EXISTING_CRON" ]; then
+    # show it, ask to keep or replace
+fi
+```
+
+### Lesson 5: The virtual environment is not optional
+
+If you're syncing your vault via iCloud or Syncthing, do **not** sync the `.venv` folder. Keep it local and recreate it from `requirements.txt` on each machine. Otherwise you end up with binary conflicts and path errors that are very hard to debug.
+
+Add `.venv/` to your `.gitignore` (it already is in this repo) and to your sync exclusion list.
+
+### Lesson 6: Per-task LLM routing matters
+
+Sending every request to the same model is wasteful. Task parsing (extract bullet points from markdown) is simple — a small fast model handles it fine. Weekly plan generation needs more reasoning — a larger model does better.
+
+The `.config` routing keys let you send different task types to different models:
+```
+ROUTING_PARSING=lmstudio       # fast, local
+ROUTING_PLANNING=lmstudio      # same model, but could be gemini for heavier reasoning
+ROUTING_CHAT=lmstudio
+```
+
+And `/ask <provider> <query>` lets you route a single question to any provider without changing the config.
 
 ---
 
+## The Stack Today
 
+| Layer | Technology |
+|---|---|
+| Local LLM | LM Studio (`qwen2.5-coder-7b-instruct-mlx`) |
+| LLM fallback | Gemini → OpenAI → Claude |
+| Notes | Obsidian + LogSeq (plain `.md` files) |
+| Calendar | Local ICS file + Apple Calendar (`osascript`) |
+| Task sync | Python agents + n8n workflows |
+| Automation | cron + n8n (Docker) |
+| Vector search | ChromaDB (for RAG over notes and books) |
+| Container agents | NanoClaw (Docker-isolated skills for Obsidian/LogSeq) |
+| Terminal UI | Rich library + custom chat loop |
+
+---
+
+## What's Next
+
+The project is now at a stable base. Remaining work:
+
+- **Sprint 07**: Migrate Google Calendar and Tasks OAuth out of Python and into n8n's credential store — so no `token.json` or `credentials.json` lives in the project folder
+- **LM Studio SDK**: Replace the OpenAI-compat HTTP calls with the official `lmstudio` Python SDK for streaming and proper timeout handling
+
+If you want to run this yourself, clone the repo, read the **Dependencies** section in `README.md`, copy `config.example` to `.config`, fill in your paths and model name, and run `./install.sh`.
+
+The system is genuinely useful once it's running. The morning cron fires, the planner gets updated, overdue tasks bubble to the top, and the day has a shape before I've opened a browser.
+
+---
+
+*Full source: [github.com/yourusername/ai_agent_assistant](https://github.com/yourusername/ai_agent_assistant)*

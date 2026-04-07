@@ -55,3 +55,8 @@ ENABLE_GOOGLE_CALENDAR=false
 # python api_server.py       →   http://localhost:5678
 N8N_WEBHOOK_URL=http://localhost:5679/webhook
 WEBHOOK_PORT=5678
+
+# ── Apple Calendar integration (macOS only) ───────────────────────────────────
+# Name of the Apple Calendar to push events to when using /add-event
+# Run /ask lmstudio list my calendars  or check the Calendar app for the name
+APPLE_CALENDAR_NAME=Home

@@ -14,6 +14,7 @@ console = Console()
 # Map check keys to human-readable labels
 CHECK_LABELS = {
     "git": "Git",
+    "lm_studio": "LM Studio",
     "ollama": "Ollama",
     "gemini": "Gemini API key",
     "google_calendar": "Google Calendar",
@@ -28,6 +29,8 @@ STATUS_ICONS = {
     "ok": "[green]OK[/green]",
     "warning": "[yellow]WARN[/yellow]",
     "error": "[red]ERROR[/red]",
+    "disabled": "[dim]DISABLED[/dim]",
+    "missing": "[dim]MISSING[/dim]",
     # Legacy statuses from git check
     "up_to_date": "[green]OK[/green]",
     "update_available": "[yellow]WARN[/yellow]",
@@ -37,17 +40,21 @@ STATUS_SYMBOLS = {
     "ok": "✅",
     "warning": "⚠️ ",
     "error": "❌",
+    "disabled": "—",
+    "missing": "—",
     "up_to_date": "✅",
     "update_available": "⚠️ ",
 }
 
 
 def normalise_status(raw):
-    """Normalise legacy git status values to ok/warning/error."""
+    """Normalise status values for display."""
     if raw in ("ok", "up_to_date"):
         return "ok"
     if raw in ("warning", "update_available"):
         return "warning"
+    if raw in ("disabled", "missing"):
+        return raw
     return "error"
 
 

@@ -461,10 +461,11 @@ def handle_google_tasks():
 
 
 def handle_add_event():
-    """Interactive prompt to add an event to the local ICS calendar."""
+    """Interactive prompt to add an event to the local ICS calendar and optionally Apple Calendar."""
     from local_calendar_agent import add_event
+    import apple_calendar
     import datetime
-    print("Add calendar event (local ICS)")
+    print("Add calendar event")
     summary = input("  Event name: ").strip()
     if not summary:
         print("Cancelled.")
@@ -477,10 +478,34 @@ def handle_add_event():
         date = datetime.date.fromisoformat(date_str)
         start_dt = datetime.datetime.combine(date, datetime.time.fromisoformat(start_str))
         end_dt   = datetime.datetime.combine(date, datetime.time.fromisoformat(end_str))
+    except ValueError as e:
+        print(f"❌ Invalid date/time: {e}")
+        return
+
+    # 1. Always write to local ICS
+    try:
         uid = add_event(summary, start_dt, end_dt, description=desc)
-        print(f"✅ Event added (uid: {uid[:8]}…): {summary} on {date_str} {start_str}–{end_str}")
+        print(f"✅ Added to local calendar (uid: {uid[:8]}…): {summary} on {date_str} {start_str}–{end_str}")
     except Exception as e:
-        print(f"❌ Failed to add event: {e}")
+        print(f"❌ Failed to add to local ICS: {e}")
+        return
+
+    # 2. Optionally push to Apple Calendar (macOS only)
+    if apple_calendar.is_available():
+        cal_name = get_config_value("APPLE_CALENDAR_NAME", "Home")
+        cals = apple_calendar.list_calendars()
+        if cals:
+            # Deduplicate while preserving order
+            seen = set()
+            unique_cals = [c for c in cals if not (c in seen or seen.add(c))]
+            print(f"  Available calendars: {', '.join(unique_cals)}")
+        push = input(f"  Also add to Apple Calendar '{cal_name}'? (y/n): ").strip().lower()
+        if push == "y":
+            ok = apple_calendar.add_event(summary, start_dt, end_dt, description=desc)
+            if ok:
+                print(f"✅ Added to Apple Calendar '{cal_name}'.")
+            else:
+                print(f"⚠  Apple Calendar push failed — event is still saved in local ICS.")
 
 
 def handle_remove_event():
@@ -675,28 +700,52 @@ def handle_chat_mode(obsidian_file):
                     ollama_up = ai_orchestration.is_ollama_running() if _gcv("ENABLE_OLLAMA", "true").lower() == "true" else None
                     chat_ui.render_services(lmstudio_status=lms_up, ollama_status=ollama_up)
                 elif command == "models":
-                    ollama_models = ai_orchestration.list_ollama_models()
-                    if not ollama_models:
-                        chat_ui.render_warning("No Ollama models found. Run: ollama pull llama3")
+                    from rich.table import Table
+                    from rich.console import Console as _Console
+                    _con = _Console()
+                    tbl = Table(title="Active LLM Providers", show_header=True, header_style="bold cyan")
+                    tbl.add_column("Provider", style="bold")
+                    tbl.add_column("Enabled")
+                    tbl.add_column("Model")
+                    tbl.add_column("Status")
+
+                    # LM Studio
+                    lms_enabled = get_config_value("ENABLE_LM_STUDIO", "false").lower() == "true"
+                    lms_model = get_config_value("LM_STUDIO_MODEL", "—")
+                    if lms_enabled:
+                        lms_up = ai_orchestration.is_lmstudio_running()
+                        lms_status = "✅ running" if lms_up else "❌ not running"
                     else:
-                        current_model = get_config_value("OLLAMA_MODEL", "llama3")
-                        print("\n🤖 Installed Ollama Models:")
-                        for i, m in enumerate(ollama_models, 1):
-                            marker = " (current)" if m == current_model or m.split(":")[0] == current_model else ""
-                            print(f"  {i}. {m}{marker}")
-                        try:
-                            selection = input("\nSelect a model number (or press Enter to keep current): ").strip()
-                            if selection:
-                                idx = int(selection) - 1
-                                if 0 <= idx < len(ollama_models):
-                                    selected_model = ollama_models[idx]
-                                    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".config")
-                                    _update_config_key(config_path, "OLLAMA_MODEL", selected_model)
-                                    chat_ui.render_success(f"Switched to {selected_model}. Effective immediately.")
-                                else:
-                                    chat_ui.render_warning("Invalid selection.")
-                        except (ValueError, KeyboardInterrupt):
-                            chat_ui.render_info("Selection cancelled.")
+                        lms_status = "—"
+                    tbl.add_row("LM Studio", "✅" if lms_enabled else "❌", lms_model if lms_enabled else "—", lms_status)
+
+                    # Ollama
+                    ollama_enabled = get_config_value("ENABLE_OLLAMA", "true").lower() == "true"
+                    ollama_model = get_config_value("OLLAMA_MODEL", "llama3")
+                    if ollama_enabled:
+                        ollama_up = ai_orchestration.is_ollama_running()
+                        ollama_models = ai_orchestration.list_ollama_models()
+                        ollama_status = f"✅ running ({len(ollama_models)} models)" if ollama_up else "❌ not running"
+                    else:
+                        ollama_status = "—"
+                    tbl.add_row("Ollama", "✅" if ollama_enabled else "❌", ollama_model if ollama_enabled else "—", ollama_status)
+
+                    # Gemini
+                    gemini_enabled = get_config_value("ENABLE_GEMINI", "false").lower() == "true"
+                    gemini_key = get_config_value("GEMINI_API_KEY", "")
+                    gemini_ok = bool(gemini_key) and "your_" not in gemini_key
+                    tbl.add_row("Gemini", "✅" if gemini_enabled else "❌",
+                                get_config_value("GEMINI_MODEL", "gemini-2.0-flash") if gemini_enabled else "—",
+                                ("✅ key present" if gemini_ok else "❌ no key") if gemini_enabled else "—")
+
+                    # OpenAI
+                    openai_enabled = get_config_value("ENABLE_OPENAI", "false").lower() == "true"
+                    tbl.add_row("OpenAI", "✅" if openai_enabled else "❌",
+                                get_config_value("OPENAI_MODEL", "gpt-4o") if openai_enabled else "—", "—")
+
+                    priority = get_config_value("LLM_PRIORITY", "lmstudio,ollama,gemini,openai,claude")
+                    _con.print(tbl)
+                    _con.print(f"[dim]Fallback order: {priority}[/dim]")
                 elif command == "model":
                     if len(parts) >= 3:
                         action, target = parts[1].lower(), parts[2].lower()
@@ -713,32 +762,91 @@ def handle_chat_mode(obsidian_file):
                             chat_ui.render_warning(f"Unknown model: {target}. Available: {', '.join(ai_orchestration.MODELS_ENABLED.keys())}")
                     else:
                         chat_ui.render_info("Usage: /model <enable/disable> <model_name>")
-                elif command == "routing":
-                    ollama_models = ai_orchestration.list_ollama_models()
-                    if not ollama_models:
-                        chat_ui.render_warning("No Ollama models found. Run: ollama pull <model>")
+                elif command == "ask":
+                    # /ask <provider> <query...>
+                    # e.g. /ask gemini find tasks about academic papers in obsidian
+                    known_providers = list(ai_orchestration.MODELS_ENABLED.keys())
+                    if len(parts) < 3:
+                        chat_ui.render_info(
+                            f"Usage: /ask <provider> <query>\n"
+                            f"  Providers: {', '.join(known_providers)}\n"
+                            f"  Example: /ask gemini find tasks in obsidian about academic papers"
+                        )
                     else:
-                        task_types = ["chat", "scheduling", "parsing"]
-                        print("\n--- Current Routing ---")
-                        for i, tt in enumerate(task_types, 1):
-                            current = get_config_value(f"ROUTING_{tt.upper()}", "ollama")
-                            print(f"  {i}. {tt:<12} → {current}")
-                        print("\n--- Installed Ollama Models ---")
-                        for j, m in enumerate(ollama_models, 1):
-                            print(f"  {j}. {m}")
+                        provider = parts[1].lower()
+                        # Accept aliases: "lm-studio" → "lmstudio", "gpt" → "openai"
+                        _aliases = {"lm-studio": "lmstudio", "lm_studio": "lmstudio",
+                                    "gpt": "openai", "gpt4": "openai", "gpt-4": "openai",
+                                    "anthropic": "claude"}
+                        provider = _aliases.get(provider, provider)
+                        if provider not in known_providers:
+                            chat_ui.render_warning(
+                                f"Unknown provider '{provider}'. Available: {', '.join(known_providers)}"
+                            )
+                        else:
+                            query = " ".join(parts[2:])
+                            # Pull file context the same way the main chat loop does
+                            file_context = ai_orchestration._get_file_context(query)
+                            augmented = f"{query}\n\n{file_context}" if file_context else query
+                            chat_ui.render_info(f"Sending to {provider}...")
+                            response, model_used = ai_orchestration.generate_with(provider, augmented)
+                            if response.startswith("LLM error:"):
+                                # Parse quota / auth errors into a readable one-liner
+                                err = response[len("LLM error:"):].strip()
+                                if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
+                                    chat_ui.render_warning(
+                                        f"{model_used}: rate-limit / quota exceeded. "
+                                        f"Try again in a moment, switch provider with /ask lmstudio <query>, "
+                                        f"or upgrade your API plan."
+                                    )
+                                elif "401" in err or "API_KEY" in err or "authentication" in err.lower():
+                                    chat_ui.render_warning(f"{model_used}: invalid or missing API key.")
+                                else:
+                                    # Truncate long error blobs to first line
+                                    short = err.splitlines()[0][:200]
+                                    chat_ui.render_warning(f"{model_used} error: {short}")
+                            else:
+                                chat_ui.render_response(response, model_used)
+                elif command == "routing":
+                    # Build list of available providers/models to route to
+                    available_targets = []
+                    lms_enabled = get_config_value("ENABLE_LM_STUDIO", "false").lower() == "true"
+                    if lms_enabled:
+                        lms_model = get_config_value("LM_STUDIO_MODEL", "")
+                        available_targets.append(f"lmstudio ({lms_model})" if lms_model else "lmstudio")
+                    ollama_models = ai_orchestration.list_ollama_models()
+                    for m in ollama_models:
+                        available_targets.append(m)
+                    for provider in ["gemini", "openai", "claude"]:
+                        key = f"ENABLE_{provider.upper()}"
+                        if get_config_value(key, "false").lower() == "true":
+                            available_targets.append(provider)
+
+                    task_types = ["chat", "scheduling", "parsing", "planning"]
+                    print("\n--- Current Routing ---")
+                    for i, tt in enumerate(task_types, 1):
+                        current = get_config_value(f"ROUTING_{tt.upper()}", "lmstudio")
+                        print(f"  {i}. {tt:<12} → {current}")
+                    if available_targets:
+                        print("\n--- Available Targets ---")
+                        for j, t in enumerate(available_targets, 1):
+                            print(f"  {j}. {t}")
                         try:
-                            route_choice = input("\nChange routing for which task type? (1=chat 2=scheduling 3=parsing, Enter=skip): ").strip()
-                            if route_choice.isdigit() and 1 <= int(route_choice) <= 3:
+                            route_choice = input(f"\nChange routing for which task type? (1-{len(task_types)}, Enter=skip): ").strip()
+                            if route_choice.isdigit() and 1 <= int(route_choice) <= len(task_types):
                                 tt = task_types[int(route_choice) - 1]
-                                model_choice = input(f"Select model number for {tt}: ").strip()
-                                if model_choice.isdigit() and 1 <= int(model_choice) <= len(ollama_models):
-                                    selected = ollama_models[int(model_choice) - 1]
+                                model_choice = input(f"Select target number for {tt} (or type a name): ").strip()
+                                if model_choice.isdigit() and 1 <= int(model_choice) <= len(available_targets):
+                                    selected = available_targets[int(model_choice) - 1].split(" ")[0]  # strip "(model)" annotation
                                     _update_config_key(config_path, f"ROUTING_{tt.upper()}", selected)
                                     chat_ui.render_success(f"Routing for {tt} → {selected}. Effective immediately.")
-                                else:
-                                    chat_ui.render_warning("Invalid model selection.")
+                                elif model_choice:
+                                    _update_config_key(config_path, f"ROUTING_{tt.upper()}", model_choice)
+                                    chat_ui.render_success(f"Routing for {tt} → {model_choice}. Effective immediately.")
                         except (EOFError, KeyboardInterrupt):
                             pass
+                    else:
+                        chat_ui.render_warning("No enabled providers found. Check ENABLE_LM_STUDIO / ENABLE_OLLAMA / ENABLE_GEMINI in .config")
                 elif command == "create-agent":
                     if len(parts) >= 2:
                         agent_name = parts[1].lower().replace("-", "_")
@@ -769,21 +877,26 @@ def handle_chat_mode(obsidian_file):
                     agents = [f[:-3] for f in os.listdir("custom_agents") if f.endswith(".py") and f != "__init__.py"]
                     chat_ui.render_info(f"Available Agents: {', '.join(agents) if agents else 'None'}")
                 elif command == "organize":
-                    chat_ui.render_info("AI is analyzing your backlog for organization...")
-                    tasks = get_unified_tasks(obsidian_path)
-                    if not tasks:
-                        chat_ui.render_info("No tasks found in backlog.")
+                    import datainput_agent
+                    import datetime as _dt
+                    chat_ui.render_info("Scanning planner for overdue tasks and reorganising by category...")
+                    # Pre-show overdue count before calling LLM
+                    planner_content = datainput_agent._read_planner(datainput_agent._planner_path())
+                    if not planner_content.strip():
+                        chat_ui.render_warning("Planner is empty — nothing to organise.")
                         continue
-                    results = ai_orchestration.suggest_task_organization(tasks)
-                    if results and "suggestions" in results:
-                        for sug in results["suggestions"]:
-                            print(f"  - {sug['task']} -> {sug['suggested_category']} ({sug['target_date']}): {sug['reason']}")
-                        confirm = input("\nApply these suggestions to your markdown plan? (y/n): ").strip().lower()
-                        if confirm == 'y':
-                            update_markdown_plan(obsidian_path, results["suggestions"])
-                            chat_ui.render_success("Suggestions applied to markdown.")
+                    overdue = datainput_agent._find_overdue_tasks(planner_content)
+                    if overdue:
+                        chat_ui.render_warning(f"{len(overdue)} overdue task(s) found — will be moved to 🚨 Overdue section:")
+                        for line, due in overdue[:10]:
+                            print(f"    {line[:80]}  (was due {due})")
+                        if len(overdue) > 10:
+                            print(f"    ... and {len(overdue) - 10} more")
                     else:
-                        chat_ui.render_error("Failed to get suggestions from AI.")
+                        chat_ui.render_info("No overdue tasks detected.")
+                    result = datainput_agent.organise_planner()
+                    if result and not result.startswith("LLM error"):
+                        chat_ui.render_success("Planner reorganised. Open Obsidian to review.")
                 elif command == "cmd":
                     if len(parts) >= 2:
                         user_cmd = " ".join(parts[1:])

@@ -270,13 +270,14 @@ COMMAND_DESCRIPTIONS = {
     "pull":           "Sync calendar → Markdown (two-way sync)",
     # LLM & services
     "models":         "Show and select installed models",
+    "ask":            "/ask <provider> <query>  — send one query to a specific provider",
     "routing":        "Show current LLM routing config",
     "services":       "Check and start local AI services",
     "model":          "/model enable|disable <provider>",
     "settings":       "/settings [set KEY value]  — view or update config",
     "status":         "Full system health dashboard",
     # Research
-    "organize":       "AI suggestions for task organisation",
+    "organize":       "Reorganise planner: surface overdue tasks + categorise by project",
     "cmd":            "/cmd <instruction>  — custom AI command on backlog",
     "develop":        "/develop <prompt>  — AI code generation",
     "gmail":          "List snoozed and filtered emails",
@@ -300,9 +301,9 @@ _COMMAND_GROUPS = [
     ("Calendar & Tasks",   ["today", "week", "plan", "cal", "cal-day"]),
     ("Task Management",    ["backlog", "add-task", "done", "add-event", "remove-event",
                             "export-calendar", "import-calendar"]),
-    ("Sync & Planning",    ["sync-logseq", "sync-universal", "google-tasks", "sync", "pull"]),
-    ("LLM & Services",     ["models", "routing", "services", "model", "settings", "status"]),
-    ("Research & AI",      ["organize", "cmd", "develop", "gmail", "gmail-filter", "index"]),
+    ("Sync & Planning",    ["sync-logseq", "sync-universal", "google-tasks", "sync", "pull", "organize"]),
+    ("LLM & Services",     ["models", "ask", "routing", "services", "model", "settings", "status"]),
+    ("Research & AI",      ["cmd", "develop", "gmail", "gmail-filter", "index"]),
     ("Misc",               ["stats", "ui", "docs", "create-agent", "define-agent",
                             "list-agents", "history", "clear-history", "help", "quit"]),
 ]

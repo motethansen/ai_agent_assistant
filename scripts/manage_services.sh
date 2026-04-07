@@ -18,8 +18,13 @@ start_lmstudio() {
         return
     fi
 
-    echo -e "${YELLOW}Starting LM Studio server...${NC}"
-    lms server start
+    # Only start if server is not already responding
+    if curl -sf --max-time 2 "http://localhost:1234/v1/models" > /dev/null 2>&1; then
+        echo -e "${GREEN}LM Studio server already running.${NC}"
+    else
+        echo -e "${YELLOW}Starting LM Studio server...${NC}"
+        lms server start
+    fi
 
     LMS_MODEL=$(awk -F'=' '/^LM_STUDIO_MODEL[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
     if [ -z "$LMS_MODEL" ]; then

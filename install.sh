@@ -26,7 +26,7 @@ OS_TYPE=$(uname -s)
 echo -e "Detected Operating System: ${GREEN}$OS_TYPE${NC}"
 
 # Progress Tracking
-TOTAL_STEPS=8
+TOTAL_STEPS=9
 CURRENT_STEP=0
 
 show_progress() {
@@ -446,6 +446,16 @@ setup_configuration() {
         echo -e "${GREEN}WORKSPACE_DIR already set: $CURRENT_WS${NC}"
     fi
 
+    CURRENT_LQ=$(grep -E "^LOGSEQ_DIR=" .config | cut -d'=' -f2- | tr -d ' ')
+    if [ -z "$CURRENT_LQ" ] || [[ "$CURRENT_LQ" == *"yourname"* ]]; then
+        read -p "Path to your LogSeq folder [Enter to skip]: " lq_path
+        if [ -n "$lq_path" ]; then
+            set_config_key "LOGSEQ_DIR" "$lq_path"
+        fi
+    else
+        echo -e "${GREEN}LOGSEQ_DIR already set: $CURRENT_LQ${NC}"
+    fi
+
     echo -e "${GREEN}Configuration complete.${NC}"
 }
 
@@ -637,6 +647,10 @@ if [[ "$1" == "upgrade" ]]; then
     setup_python_env
     setup_local_ai
     detect_container_runtime || true
+    # Show workflow change notices (non-interactive — just prints what needs re-importing)
+    setup_n8n
+    # Check/update cron job if schedule or path has changed
+    setup_automation
     echo -e "\n${BLUE}Verifying AI Assistant...${NC}"
     PYTHONPATH=. .venv/bin/python3 scripts/check_ai_working.py
     run_service_checks

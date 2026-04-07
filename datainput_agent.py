@@ -157,13 +157,42 @@ def sync_reminders_to_planner():
 
 
 # ---------------------------------------------------------------------------
-# Step 2 — Organise the planner with LLM
+# Step 2 — Pre-scan for overdue tasks (Python-side, reliable date comparison)
+# ---------------------------------------------------------------------------
+
+def _find_overdue_tasks(content):
+    """
+    Scan planner markdown for incomplete tasks with a 📅 YYYY-MM-DD date
+    that is strictly before today. Returns list of (task_line, due_date_str).
+    """
+    today = datetime.date.today()
+    overdue = []
+    date_pattern = re.compile(r'📅\s*(\d{4}-\d{2}-\d{2})')
+    for line in content.splitlines():
+        # Only open tasks: - [ ] ...
+        if not re.match(r'\s*-\s*\[ \]', line):
+            continue
+        m = date_pattern.search(line)
+        if not m:
+            continue
+        try:
+            due = datetime.date.fromisoformat(m.group(1))
+            if due < today:
+                overdue.append((line.strip(), m.group(1)))
+        except ValueError:
+            continue
+    return overdue
+
+
+# ---------------------------------------------------------------------------
+# Step 3 — Organise the planner with LLM
 # ---------------------------------------------------------------------------
 
 def organise_planner():
     """
-    Read the full planner file, send to LLM, get back an organised version,
-    and write it back. Returns the organised content string.
+    Read the full planner file, pre-detect overdue tasks, then send to LLM
+    with explicit category and overdue instructions. Writes result back.
+    Returns the organised content string.
     """
     planner = _planner_path()
     content = _read_planner(planner)
@@ -172,29 +201,59 @@ def organise_planner():
         return ""
 
     today = datetime.date.today().isoformat()
+
+    # Pre-detect overdue tasks in Python (reliable, doesn't depend on LLM date parsing)
+    overdue = _find_overdue_tasks(content)
+    overdue_block = ""
+    if overdue:
+        overdue_lines = "\n".join(f"  - {line} (was due {due})" for line, due in overdue)
+        overdue_block = (
+            f"\nIMPORTANT — the following {len(overdue)} task(s) are OVERDUE "
+            f"(due date is before {today}). They MUST appear under a "
+            f"'## 🚨 Overdue' section at the very top of the output:\n{overdue_lines}\n"
+        )
+
+    # Read user's focus categories from config
+    raw_cats = get_config_value("FOCUS_CATEGORIES", "")
+    categories = [c.strip() for c in raw_cats.split(",") if c.strip()] if raw_cats else []
+    if categories:
+        cat_instruction = (
+            f"\nOrganise tasks under these category headings where possible "
+            f"(use ## headers): {', '.join(categories)}. "
+            f"Tasks that don't fit any category go under '## Other'."
+        )
+    else:
+        cat_instruction = (
+            "\nGroup tasks by project or theme using ## headers."
+        )
+
     system = (
         "You are a personal productivity assistant. "
-        "Your job is to reorganise a markdown task planner into clean, logical sections. "
-        "Preserve ALL tasks — do not remove, merge, or alter any task text. "
-        "Group tasks by theme or project. "
-        "Within each group, sort by due date (earliest first), then by importance. "
-        "Use markdown headers (##) for groups. "
-        "Keep the ## Reminders section at the bottom if it exists. "
-        "Return ONLY the reorganised markdown — no commentary."
+        "Your job is to reorganise a markdown task planner into clean, prioritised sections. "
+        "Rules:\n"
+        "  1. Preserve ALL task text exactly — do not alter, merge, or remove any task.\n"
+        "  2. If there are overdue tasks, place them in a '## 🚨 Overdue' section at the very top.\n"
+        "  3. Within each section, sort by due date (earliest first), then by apparent urgency.\n"
+        "  4. Use ## markdown headers for each section.\n"
+        "  5. Return ONLY the reorganised markdown — no explanations, no commentary."
     )
+
     prompt = (
-        f"Today is {today}.\n\n"
+        f"Today is {today}.\n"
+        f"{overdue_block}"
+        f"{cat_instruction}\n\n"
         f"Please reorganise this planner:\n\n"
         f"---\n{content}\n---"
     )
 
-    print("[DataInputAgent] Asking LLM to organise planner...")
+    print(f"[DataInputAgent] Asking LLM to organise planner "
+          f"({len(overdue)} overdue, {len(categories)} categories)...")
     organised, model = ai_orchestration.generate(prompt, system=system, task_type="parsing")
     print(f"[DataInputAgent] Organised by {model}.")
 
     # Guard: don't overwrite with an error message or empty result
     if not organised or organised.startswith("LLM error") or len(organised) < 50:
-        print(f"[DataInputAgent] LLM returned unusable output — planner unchanged.")
+        print("[DataInputAgent] LLM returned unusable output — planner unchanged.")
         return content
 
     _write_planner(planner, organised.strip() + "\n")
