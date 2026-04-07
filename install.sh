@@ -26,8 +26,11 @@ OS_TYPE=$(uname -s)
 echo -e "Detected Operating System: ${GREEN}$OS_TYPE${NC}"
 
 # Progress Tracking
-TOTAL_STEPS=9
+TOTAL_STEPS=10
 CURRENT_STEP=0
+
+# Global: install mode (set by select_install_mode)
+INSTALL_MODE="local"
 
 show_progress() {
     CURRENT_STEP=$((CURRENT_STEP + 1))
@@ -112,7 +115,49 @@ check_upgrade() {
 }
 
 # ─────────────────────────────────────────────
-# Step 1: Python + Git
+# Step 1: Choose installation mode
+# ─────────────────────────────────────────────
+select_install_mode() {
+    show_progress "Choose Installation Mode..."
+
+    # Ensure .config exists so set_config_key can write to it
+    if [ ! -f ".config" ]; then
+        cp config.template .config
+        echo -e "${GREEN}Created .config from template.${NC}"
+    fi
+
+    echo ""
+    echo -e "${BOLD}Choose your installation mode:${NC}"
+    echo ""
+    echo -e "  ${GREEN}1) Full install${NC}  — local AI (LM Studio or Ollama) + optional cloud APIs"
+    echo -e "     Best for privacy / offline use. Needs 4-8 GB RAM for a local model."
+    echo ""
+    echo -e "  ${CYAN}2) Cloud-only${NC}     — Groq / HuggingFace / OpenAI / Gemini / Claude only"
+    echo -e "     No local model required. Lighter on RAM and disk. Requires API keys."
+    echo ""
+    read -p "Enter 1 or 2 [default: 1]: " mode_choice
+
+    case "$mode_choice" in
+        2)
+            INSTALL_MODE="cloud"
+            set_config_key "ENABLE_LM_STUDIO" "false"
+            set_config_key "ENABLE_OLLAMA" "false"
+            # Switch LLM_PRIORITY away from local models if it still points at ollama
+            CURRENT_PRIORITY=$(grep -E "^LLM_PRIORITY=" .config | cut -d'=' -f2- | tr -d ' ')
+            if [ -z "$CURRENT_PRIORITY" ] || [[ "$CURRENT_PRIORITY" == ollama* ]]; then
+                set_config_key "LLM_PRIORITY" "groq,gemini,openai,claude,huggingface"
+            fi
+            echo -e "${CYAN}Cloud-only mode selected — local AI setup will be skipped.${NC}"
+            ;;
+        *)
+            INSTALL_MODE="local"
+            echo -e "${GREEN}Full install mode selected.${NC}"
+            ;;
+    esac
+}
+
+# ─────────────────────────────────────────────
+# Step 2: Python + Git
 # ─────────────────────────────────────────────
 check_dependencies() {
     show_progress "Checking System Dependencies..."
@@ -191,11 +236,16 @@ setup_python_env() {
 }
 
 # ─────────────────────────────────────────────
-# Step 3: Local LLM (LM Studio or Ollama)
+# Step 4: Local LLM (LM Studio or Ollama)
 # ─────────────────────────────────────────────
 setup_local_ai() {
     show_progress "Checking Local AI..."
     chmod +x scripts/manage_services.sh
+
+    if [ "$INSTALL_MODE" == "cloud" ]; then
+        echo -e "${CYAN}Cloud-only mode — skipping local AI setup.${NC}"
+        return
+    fi
 
     # Determine which backend is configured (default: LM Studio)
     LMS_ENABLED=$(awk -F'=' '/^ENABLE_LM_STUDIO[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
@@ -244,7 +294,7 @@ setup_local_ai() {
 }
 
 # ─────────────────────────────────────────────
-# Step 4: Container runtime (OrbStack / Docker)
+# Step 5: Container runtime (OrbStack / Docker)
 # ─────────────────────────────────────────────
 detect_container_runtime() {
     show_progress "Detecting container runtime..."
@@ -287,7 +337,7 @@ detect_container_runtime() {
 }
 
 # ─────────────────────────────────────────────
-# Step 5: n8n via docker compose
+# Step 6: n8n via docker compose
 # ─────────────────────────────────────────────
 setup_n8n() {
     show_progress "Setting up n8n (workflow automation)..."
@@ -383,7 +433,7 @@ setup_n8n() {
 }
 
 # ─────────────────────────────────────────────
-# Step 6: Configuration (.config keys)
+# Step 7: Configuration (.config keys)
 # ─────────────────────────────────────────────
 setup_configuration() {
     show_progress "System Configuration..."
@@ -395,8 +445,42 @@ setup_configuration() {
         echo -e "${GREEN}Existing .config found.${NC}"
     fi
 
+    if [ "$INSTALL_MODE" == "cloud" ]; then
+        echo ""
+        echo -e "${BLUE}--- Free Cloud API Keys (at least one required) ---${NC}"
+    else
+        echo ""
+        echo -e "${BLUE}--- API Keys (all optional — local AI runs without these) ---${NC}"
+    fi
+
+    # Groq (free tier, fast inference — show first in cloud-only mode)
+    CURRENT_GROQ=$(grep -E "^GROQ_API_KEY=" .config | cut -d'=' -f2- | tr -d ' ')
+    if [ -z "$CURRENT_GROQ" ] || [[ "$CURRENT_GROQ" == *"your_"* ]]; then
+        read -p "Groq API Key — free at console.groq.com [Enter to skip]: " groq_key
+        if [ -n "$groq_key" ]; then
+            set_config_key "GROQ_API_KEY" "$groq_key"
+            set_config_key "ENABLE_GROQ" "true"
+            echo -e "${GREEN}Groq key saved.${NC}"
+        fi
+    else
+        echo -e "${GREEN}Groq key already configured.${NC}"
+    fi
+
+    # HuggingFace
+    CURRENT_HF=$(grep -E "^HF_TOKEN=" .config | cut -d'=' -f2- | tr -d ' ')
+    if [ -z "$CURRENT_HF" ] || [[ "$CURRENT_HF" == *"your_"* ]]; then
+        read -p "HuggingFace Token — free at huggingface.co [Enter to skip]: " hf_key
+        if [ -n "$hf_key" ]; then
+            set_config_key "HF_TOKEN" "$hf_key"
+            set_config_key "ENABLE_HUGGINGFACE" "true"
+            echo -e "${GREEN}HuggingFace token saved.${NC}"
+        fi
+    else
+        echo -e "${GREEN}HuggingFace token already configured.${NC}"
+    fi
+
     echo ""
-    echo -e "${BLUE}--- API Keys (all optional — Ollama runs locally without these) ---${NC}"
+    echo -e "${BLUE}--- Paid Cloud API Keys (optional) ---${NC}"
 
     CURRENT_OPENAI=$(grep -E "^OPENAI_API_KEY=" .config | cut -d'=' -f2- | tr -d ' ')
     if [ -z "$CURRENT_OPENAI" ] || [[ "$CURRENT_OPENAI" == *"your_"* ]]; then
@@ -460,7 +544,7 @@ setup_configuration() {
 }
 
 # ─────────────────────────────────────────────
-# Step 7: Cron / background automation
+# Step 8: Cron / background automation
 # ─────────────────────────────────────────────
 setup_automation() {
     show_progress "Automation & Cron Job Setup..."
@@ -491,7 +575,7 @@ setup_automation() {
 }
 
 # ─────────────────────────────────────────────
-# Step 8: Service check summary + AI advice
+# Step 9: Service check summary + AI advice
 # ─────────────────────────────────────────────
 run_service_checks() {
     show_progress "Service Health Check..."
@@ -504,37 +588,52 @@ run_service_checks() {
 
     LMS_ENABLED=$(awk -F'=' '/^ENABLE_LM_STUDIO[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
     OLLAMA_ENABLED=$(awk -F'=' '/^ENABLE_OLLAMA[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    GROQ_ENABLED=$(awk -F'=' '/^ENABLE_GROQ[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    HF_ENABLED=$(awk -F'=' '/^ENABLE_HUGGINGFACE[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
     OLLAMA_OK=false
 
-    # --- LM Studio (primary when enabled) ---
-    if [ "$LMS_ENABLED" == "true" ]; then
-        LMS_MODEL=$(awk -F'=' '/^LM_STUDIO_MODEL[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
-        if command -v lms > /dev/null 2>&1; then
-            if lms ps 2>/dev/null | grep -q .; then
-                echo -e "  ${GREEN}✓ LM Studio running — model: ${LMS_MODEL}${NC}"
-            else
-                echo -e "  ${YELLOW}⚠ LM Studio enabled but no model loaded${NC}"
-                ISSUES+=("LM Studio model not loaded")
-                ADVICE+=("Open LM Studio, load '${LMS_MODEL:-a model}', and enable the local server — or run: lms server start && lms load ${LMS_MODEL:-<model>}")
-            fi
+    if [ "$INSTALL_MODE" == "cloud" ]; then
+        # --- Cloud-only: show which providers are configured ---
+        echo -e "  ${CYAN}Cloud-only mode — local AI skipped.${NC}"
+        if [ "$GROQ_ENABLED" == "true" ]; then
+            echo -e "  ${GREEN}✓ Groq enabled${NC}"
         else
-            echo -e "  ${YELLOW}⚠ LM Studio enabled but lms CLI not found in PATH${NC}"
-            ISSUES+=("lms CLI not in PATH (ENABLE_LM_STUDIO=true)")
-            ADVICE+=("Open LM Studio at least once to register the lms CLI, then re-run install.sh")
+            echo -e "  ${YELLOW}⚠ Groq not configured (ENABLE_GROQ not set)${NC}"
         fi
-    fi
+        if [ "$HF_ENABLED" == "true" ]; then
+            echo -e "  ${GREEN}✓ HuggingFace enabled${NC}"
+        fi
+    else
+        # --- LM Studio (primary when enabled) ---
+        if [ "$LMS_ENABLED" == "true" ]; then
+            LMS_MODEL=$(awk -F'=' '/^LM_STUDIO_MODEL[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+            if command -v lms > /dev/null 2>&1; then
+                if lms ps 2>/dev/null | grep -q .; then
+                    echo -e "  ${GREEN}✓ LM Studio running — model: ${LMS_MODEL}${NC}"
+                else
+                    echo -e "  ${YELLOW}⚠ LM Studio enabled but no model loaded${NC}"
+                    ISSUES+=("LM Studio model not loaded")
+                    ADVICE+=("Open LM Studio, load '${LMS_MODEL:-a model}', and enable the local server — or run: lms server start && lms load ${LMS_MODEL:-<model>}")
+                fi
+            else
+                echo -e "  ${YELLOW}⚠ LM Studio enabled but lms CLI not found in PATH${NC}"
+                ISSUES+=("lms CLI not in PATH (ENABLE_LM_STUDIO=true)")
+                ADVICE+=("Open LM Studio at least once to register the lms CLI, then re-run install.sh")
+            fi
+        fi
 
-    # --- Ollama (shown only when enabled) ---
-    if [ "$OLLAMA_ENABLED" == "true" ]; then
-        OLLAMA_HOST=$(awk -F'=' '/^OLLAMA_HOST[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
-        [ -z "$OLLAMA_HOST" ] && OLLAMA_HOST="http://localhost:11434"
-        if curl -sf --max-time 3 "${OLLAMA_HOST}/api/tags" > /dev/null 2>&1; then
-            echo -e "  ${GREEN}✓ Ollama API (${OLLAMA_HOST})${NC}"
-            OLLAMA_OK=true
-        else
-            echo -e "  ${RED}✗ Ollama API unreachable (${OLLAMA_HOST})${NC}"
-            ISSUES+=("Ollama API unreachable at ${OLLAMA_HOST}")
-            ADVICE+=("Start Ollama: ollama serve   or open the Ollama app")
+        # --- Ollama (shown only when enabled) ---
+        if [ "$OLLAMA_ENABLED" == "true" ]; then
+            OLLAMA_HOST=$(awk -F'=' '/^OLLAMA_HOST[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+            [ -z "$OLLAMA_HOST" ] && OLLAMA_HOST="http://localhost:11434"
+            if curl -sf --max-time 3 "${OLLAMA_HOST}/api/tags" > /dev/null 2>&1; then
+                echo -e "  ${GREEN}✓ Ollama API (${OLLAMA_HOST})${NC}"
+                OLLAMA_OK=true
+            else
+                echo -e "  ${RED}✗ Ollama API unreachable (${OLLAMA_HOST})${NC}"
+                ISSUES+=("Ollama API unreachable at ${OLLAMA_HOST}")
+                ADVICE+=("Start Ollama: ollama serve   or open the Ollama app")
+            fi
         fi
     fi
 
@@ -548,7 +647,10 @@ run_service_checks() {
         echo -e "  ${GREEN}✓ AI assistant check passed${NC}"
     else
         echo -e "  ${RED}✗ AI assistant check failed${NC}"
-        if [ "$LMS_ENABLED" == "true" ]; then
+        if [ "$INSTALL_MODE" == "cloud" ]; then
+            ISSUES+=("No cloud LLM responding")
+            ADVICE+=("Add at least one API key in .config and set ENABLE_GROQ=true (or ENABLE_GEMINI/OPENAI/CLAUDE=true)")
+        elif [ "$LMS_ENABLED" == "true" ]; then
             ISSUES+=("LM Studio not responding to API calls")
             ADVICE+=("Open LM Studio, load '${LMS_MODEL:-a model}', and enable Server (port 1234)")
         else
@@ -670,6 +772,7 @@ fi
 # Full installation
 # ─────────────────────────────────────────────
 check_upgrade
+select_install_mode
 check_dependencies
 setup_python_env
 setup_local_ai
