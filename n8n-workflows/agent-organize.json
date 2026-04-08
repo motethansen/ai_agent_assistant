@@ -1,0 +1,56 @@
+{
+  "name": "Agent — Organise Planner",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent/organize",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-organize",
+      "name": "Organise Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "agent-organize-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/webhook/agent/organize",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "call-organize",
+      "name": "Run Organise Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-organize",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Organise Trigger": {
+      "main": [[{ "node": "Run Organise Agent", "type": "main", "index": 0 }]]
+    },
+    "Run Organise Agent": {
+      "main": [[{ "node": "Return Result", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["agent", "planner", "organise", "webhook"]
+}

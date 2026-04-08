@@ -1,0 +1,56 @@
+{
+  "name": "Agent — Sync Reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent/sync-reminders",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-sync-reminders",
+      "name": "Sync Reminders Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "agent-sync-reminders-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/webhook/agent/sync-reminders",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "call-sync-reminders",
+      "name": "Run Sync Reminders Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-sync-reminders",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Sync Reminders Trigger": {
+      "main": [[{ "node": "Run Sync Reminders Agent", "type": "main", "index": 0 }]]
+    },
+    "Run Sync Reminders Agent": {
+      "main": [[{ "node": "Return Result", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": ["agent", "reminders", "sync", "webhook"]
+}

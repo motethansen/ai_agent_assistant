@@ -1,5 +1,5 @@
 {
-    "last_check": "2026-04-07T06:00:21.416902",
+    "last_check": "2026-04-08T18:01:49.398336",
     "git": {
         "status": "up_to_date",
         "message": "System is up to date"
@@ -26,8 +26,8 @@
         "message": "Key present"
     },
     "local_calendar": {
-        "status": "missing",
-        "message": "No local calendar at datainput/local_calendar.ics \u2014 run /add-event to create it"
+        "status": "ok",
+        "message": "ICS file: 476 bytes, last modified 7.3h ago"
     },
     "logseq_dir": {
         "status": "ok",
@@ -39,13 +39,13 @@
     },
     "cron_last_run": {
         "status": "ok",
-        "message": "20.0h ago",
-        "age_hours": 20.01
+        "message": "7.0h ago",
+        "age_hours": 7.03
     },
     "reminders_sync": {
         "status": "warning",
-        "message": "Last synced 925h ago",
-        "age_hours": 924.98
+        "message": "Last synced 961h ago",
+        "age_hours": 961.01
     },
     "google_tasks": {
         "status": "disabled",

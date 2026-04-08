@@ -16,23 +16,36 @@
       "name": "Weekday 08:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
-      "position": [240, 300]
+      "position": [240, 200]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "morning-plan",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-morning",
+      "name": "On-Demand Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 420],
+      "webhookId": "morning-plan-ondemand-webhook"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "http://api:5678/webhook/morning-plan",
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": []
-        },
-        "options": {}
+        "url": "http://host.docker.internal:5000/webhook/morning-plan",
+        "sendBody": false,
+        "options": {
+          "timeout": 120000
+        }
       },
-      "id": "http-morning-plan",
+      "id": "call-morning-plan",
       "name": "Run Morning Plan Pipeline",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [460, 300]
+      "position": [500, 300]
     },
     {
       "parameters": {
@@ -46,94 +59,81 @@
           ]
         }
       },
-      "id": "if-ok",
+      "id": "check-plan-ok",
       "name": "Plan OK?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [680, 300]
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const steps = $json.steps || {};\nconst errors = Object.entries(steps).filter(([,v]) => v.toString().startsWith('error'));\nreturn [{ json: {\n  status: 'ok',\n  summary: 'Morning plan ready. Steps: ' + JSON.stringify(steps),\n  plan_preview: ($json.plan || '').slice(0, 500),\n  suggestions_file: $json.suggestions_file || null,\n  step_errors: errors.length > 0 ? errors.map(([k,v]) => `${k}: ${v}`) : null\n}}];"
+      },
+      "id": "format-plan-ok",
+      "name": "Format Plan Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 180]
     },
     {
       "parameters": {
         "values": {
           "string": [
             {
-              "name": "summary",
-              "value": "={{ \"Morning plan ready.\\nSteps: \" + JSON.stringify($json.steps) + \"\\n\\n\" + ($json.plan || '(no plan text)').slice(0, 500) }}"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "set-summary",
-      "name": "Format Plan Summary",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.3,
-      "position": [900, 220]
-    },
-    {
-      "parameters": {
-        "values": {
-          "string": [
+              "name": "status",
+              "value": "error"
+            },
             {
               "name": "error",
-              "value": "={{ \"Morning plan failed. Steps: \" + JSON.stringify($json.steps) }}"
+              "value": "={{ 'Morning plan failed. Response: ' + JSON.stringify($json) }}"
             }
           ]
         },
         "options": {}
       },
-      "id": "set-error",
+      "id": "format-plan-error",
       "name": "Log Error",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.3,
-      "position": [900, 400]
+      "position": [940, 420]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-morning-plan",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1160, 300]
     }
   ],
   "connections": {
     "Weekday 08:00": {
-      "main": [
-        [
-          {
-            "node": "Run Morning Plan Pipeline",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Run Morning Plan Pipeline", "type": "main", "index": 0 }]]
+    },
+    "On-Demand Trigger": {
+      "main": [[{ "node": "Run Morning Plan Pipeline", "type": "main", "index": 0 }]]
     },
     "Run Morning Plan Pipeline": {
-      "main": [
-        [
-          {
-            "node": "Plan OK?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Plan OK?", "type": "main", "index": 0 }]]
     },
     "Plan OK?": {
       "main": [
-        [
-          {
-            "node": "Format Plan Summary",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Log Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Format Plan Summary", "type": "main", "index": 0 }],
+        [{ "node": "Log Error", "type": "main", "index": 0 }]
       ]
+    },
+    "Format Plan Summary": {
+      "main": [[{ "node": "Return Result", "type": "main", "index": 0 }]]
+    },
+    "Log Error": {
+      "main": [[{ "node": "Return Result", "type": "main", "index": 0 }]]
     }
   },
   "active": false,
-  "settings": {
-    "executionOrder": "v1"
-  },
+  "settings": { "executionOrder": "v1" },
   "tags": ["agent", "planning", "morning"]
 }

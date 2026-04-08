@@ -168,7 +168,105 @@ def health():
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
+# ── Agent execution endpoints (called by n8n agent workflows) ──────────────────
+
+class RescheduleRequest(BaseModel):
+    target: str
+    dry_run: bool = False
+    logseq: bool = True
+    obsidian: bool = True
+    filter_text: Optional[str] = None
+
+
+@app.post("/webhook/agent/reschedule")
+def agent_reschedule(body: RescheduleRequest):
+    """Move overdue tasks to a new date. Called by n8n agent/reschedule workflow."""
+    import task_reschedule_agent
+    result = task_reschedule_agent.run(
+        target=body.target,
+        dry_run=body.dry_run,
+        logseq=body.logseq,
+        obsidian=body.obsidian,
+        filter_text=body.filter_text,
+    )
+    if not result:
+        return {"status": "error", "message": "Could not parse target date"}
+    return {"status": "ok", **result}
+
+
+@app.post("/webhook/agent/sync-logseq")
+def agent_sync_logseq():
+    """Sync LogSeq LATER/TODO tasks into the Obsidian planner."""
+    from logseq_later_agent import run as logseq_run
+    try:
+        logseq_run(write_to_obsidian=True)
+        return {"status": "ok", "message": "LogSeq tasks synced to Obsidian"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/webhook/agent/sync-reminders")
+def agent_sync_reminders():
+    """Sync Apple Reminders into the Obsidian planner (no LLM re-organisation)."""
+    try:
+        import datainput_agent
+        datainput_agent.run(organise=False)
+        return {"status": "ok", "message": "Reminders synced to Obsidian"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/webhook/agent/organize")
+def agent_organize():
+    """Organise the Obsidian planner: surface overdue tasks, categorise by project."""
+    try:
+        import datainput_agent
+        datainput_agent.run(organise=True)
+        return {"status": "ok", "message": "Planner organised"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/webhook/agent/morning-sync")
+def agent_morning_sync():
+    """Run the full morning pipeline: sync reminders + LogSeq + generate AI weekly plan."""
+    import calendar_planning_agent
+
+    steps = {}
+
+    try:
+        import datainput_agent
+        datainput_agent.run(organise=False)
+        steps["reminders"] = "ok"
+    except Exception as e:
+        steps["reminders"] = f"error: {e}"
+
+    try:
+        from logseq_later_agent import run as logseq_run
+        logseq_run(write_to_obsidian=True)
+        steps["logseq"] = "ok"
+    except Exception as e:
+        steps["logseq"] = f"error: {e}"
+
+    plan_text = None
+    try:
+        plan_text = calendar_planning_agent.generate_plan(days=7, write_to_obsidian=True)
+        steps["plan"] = "ok" if plan_text else "no output"
+    except Exception as e:
+        steps["plan"] = f"error: {e}"
+
+    suggestions_path = os.path.join("datainput", "calendar_suggestions.md")
+    return {
+        "status": "ok",
+        "steps": steps,
+        "plan": plan_text or "",
+        "suggestions_file": suggestions_path if os.path.exists(suggestions_path) else None,
+    }
+
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
     import uvicorn
-    port = int(get_config_value("WEBHOOK_PORT", "5678"))
+    port = int(get_config_value("WEBHOOK_PORT", "5000"))
     uvicorn.run(app, host="0.0.0.0", port=port)

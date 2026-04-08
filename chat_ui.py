@@ -266,6 +266,7 @@ COMMAND_DESCRIPTIONS = {
     "sync-logseq":    "Sync LogSeq LATER tasks → Obsidian planner",
     "sync-universal": "Full task sync through n8n conflict resolution",
     "google-tasks":   "Sync Google Tasks ↔ Obsidian",
+    "reschedule":     '/reschedule <date> [--dry-run]  — move overdue tasks to a new date',
     "sync":           "Manually trigger task sync from Obsidian and Reminders",
     "pull":           "Sync calendar → Markdown (two-way sync)",
     # LLM & services
@@ -301,7 +302,7 @@ _COMMAND_GROUPS = [
     ("Calendar & Tasks",   ["today", "week", "plan", "cal", "cal-day"]),
     ("Task Management",    ["backlog", "add-task", "done", "add-event", "remove-event",
                             "export-calendar", "import-calendar"]),
-    ("Sync & Planning",    ["sync-logseq", "sync-universal", "google-tasks", "sync", "pull", "organize"]),
+    ("Sync & Planning",    ["sync-logseq", "sync-universal", "google-tasks", "reschedule", "sync", "pull", "organize"]),
     ("LLM & Services",     ["models", "ask", "routing", "services", "model", "settings", "status"]),
     ("Research & AI",      ["cmd", "develop", "gmail", "gmail-filter", "index"]),
     ("Misc",               ["stats", "ui", "docs", "create-agent", "define-agent",

@@ -4,11 +4,11 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "n8n-trigger/add-task",
+        "path": "add-task",
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "webhook-trigger",
+      "id": "webhook-add-task",
       "name": "Inbound Add-Task",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
@@ -17,18 +17,30 @@
     },
     {
       "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst task = body.task || body.description || '';\nif (!task) {\n  return [{ json: { status: 'error', message: 'Missing required field: task or description' } }];\n}\nreturn [{ json: { description: task, date: body.date || null } }];"
+      },
+      "id": "validate-task",
+      "name": "Validate Task Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "http://api:5678/webhook/add-task",
+        "url": "http://host.docker.internal:5000/webhook/add-task",
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ description: $json.body.task, date: $json.body.date || undefined }) }}",
-        "options": {}
+        "body": "={{ JSON.stringify({ description: $json.description, date: $json.date }) }}",
+        "options": {
+          "timeout": 10000
+        }
       },
-      "id": "http-add-task",
+      "id": "call-add-task",
       "name": "Add Task to LogSeq",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [460, 300]
+      "position": [680, 300]
     },
     {
       "parameters": {
@@ -36,40 +48,25 @@
         "responseBody": "={{ $json }}",
         "options": {}
       },
-      "id": "respond-webhook",
+      "id": "respond-add-task",
       "name": "Return Result",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [680, 300]
+      "position": [900, 300]
     }
   ],
   "connections": {
     "Inbound Add-Task": {
-      "main": [
-        [
-          {
-            "node": "Add Task to LogSeq",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Validate Task Input", "type": "main", "index": 0 }]]
+    },
+    "Validate Task Input": {
+      "main": [[{ "node": "Add Task to LogSeq", "type": "main", "index": 0 }]]
     },
     "Add Task to LogSeq": {
-      "main": [
-        [
-          {
-            "node": "Return Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Return Result", "type": "main", "index": 0 }]]
     }
   },
   "active": false,
-  "settings": {
-    "executionOrder": "v1"
-  },
+  "settings": { "executionOrder": "v1" },
   "tags": ["agent", "tasks", "webhook"]
 }

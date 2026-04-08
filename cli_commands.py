@@ -16,6 +16,7 @@ from calendar_agent import CalendarAgent
 from planning_agent import PlanningAgent
 from file_system_agent import FileSystemAgent
 from task_utils import get_unified_tasks
+import task_reschedule_agent
 
 
 def _update_config_key(config_path, key, value):
@@ -1073,6 +1074,37 @@ def handle_chat_mode(obsidian_file):
                     handle_import_calendar(args)
                 elif command == "google-tasks":
                     handle_google_tasks()
+                elif command == "reschedule":
+                    # /reschedule <target date> [--dry-run] [--logseq-only] [--obsidian-only]
+                    # e.g. /reschedule end of next week
+                    #      /reschedule next monday --dry-run
+                    if len(parts) < 2:
+                        chat_ui.render_info(
+                            "Usage: /reschedule <target date> [--dry-run] [--logseq-only] [--obsidian-only]\n"
+                            '  Examples: /reschedule "end of next week"\n'
+                            "            /reschedule next monday --dry-run\n"
+                            "            /reschedule friday --obsidian-only"
+                        )
+                    else:
+                        flags = {p.lstrip("-").replace("-", "_") for p in parts if p.startswith("--")}
+                        date_parts = [p for p in parts[1:] if not p.startswith("--")]
+                        target = " ".join(date_parts)
+                        dry_run = "dry_run" in flags
+                        logseq_only = "logseq_only" in flags
+                        obsidian_only = "obsidian_only" in flags
+                        result = task_reschedule_agent.run(
+                            target=target,
+                            dry_run=dry_run,
+                            logseq=not obsidian_only,
+                            obsidian=not logseq_only,
+                        )
+                        if result:
+                            action = "Would move" if dry_run else "Moved"
+                            chat_ui.render_success(
+                                f"{action} {result['logseq_moved'] + result['obsidian_moved']} overdue task(s) "
+                                f"to {result['target_date']} "
+                                f"(LogSeq: {result['logseq_moved']}, Obsidian: {result['obsidian_moved']})"
+                            )
                 else:
                     chat_ui.render_warning(f"Unknown command: /{command}. Type /commands for help.")
 

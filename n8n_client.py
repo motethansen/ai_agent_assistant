@@ -57,6 +57,36 @@ def is_n8n_running() -> bool:
         return False
 
 
+def trigger_agent(agent_name: str, params: dict, timeout: int = 30) -> dict | None:
+    """
+    POST params to n8n at {N8N_BASE}/agent/{agent_name} and return the JSON response.
+
+    Used by agent_tools.py so LLMs can execute agents through n8n.
+    Returns the parsed JSON dict on success, None if n8n is unreachable or returns an error.
+    """
+    url = f"{N8N_BASE}/agent/{agent_name}"
+    try:
+        resp = requests.post(
+            url,
+            json=params,
+            timeout=timeout,
+            headers={"Content-Type": "application/json"},
+        )
+        resp.raise_for_status()
+        logger.debug("n8n agent/%s -> %s", agent_name, resp.status_code)
+        try:
+            return resp.json()
+        except ValueError:
+            return {"message": resp.text, "status": "ok"}
+    except requests.exceptions.ConnectionError:
+        logger.warning("n8n not reachable at %s — will fall back to direct execution", url)
+    except requests.exceptions.HTTPError as e:
+        logger.warning("n8n agent/%s returned HTTP error: %s", agent_name, e)
+    except Exception as e:
+        logger.warning("n8n trigger_agent failed (%s): %s", agent_name, e)
+    return None
+
+
 def trigger_task_sync(tasks: list, events: list) -> bool:
     """
     Send unified task + calendar event payload to the n8n Universal Task Sync workflow.

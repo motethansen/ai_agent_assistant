@@ -26,6 +26,12 @@ from book_agent import BookAgent
 from travel_agent import TravelAgent
 import calendar_manager
 
+try:
+    from agent_tools import ACTION_TOOLS, ACTION_KEYWORDS
+except Exception:
+    ACTION_TOOLS = []
+    ACTION_KEYWORDS = []
+
 # Load API key from .config or environment
 api_key = get_config_value("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
 
@@ -342,14 +348,19 @@ def get_llm(model_type="chat", query=""):
         return _get_llm_fallback(provider)
 
 def run_agent_query(user_input, context_data=None):
-    """Runs a tool-calling agent to handle a user query."""
+    """Runs a tool-calling agent to handle a user query, including agent-execution tools."""
     llm, model_used = get_llm("chat", user_input)
-    tools = [get_current_time, search_notes, search_books, list_calendar_events, read_file_content]
+    read_tools = [get_current_time, search_notes, search_books, list_calendar_events, read_file_content]
+    tools = read_tools + ACTION_TOOLS
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a professional AI Assistant. Use tools to find information. "
-                   "If asked about tasks, check notes and calendar. "
-                   "Always return a helpful response and suggest actions if needed."),
+        ("system",
+         "You are a professional AI Assistant with the ability to both retrieve information "
+         "and execute tasks. Use read tools to find context, and action tools to actually "
+         "perform operations like rescheduling tasks, syncing notes, or organising the planner. "
+         "When the user asks you to move, reschedule, sync, or organise — use the appropriate "
+         "action tool rather than just describing how to do it. "
+         "Always confirm what action was taken and summarise the result."),
         ("placeholder", "{chat_history}"),
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}"),
@@ -426,7 +437,20 @@ def _get_file_context(user_input):
 
 
 def run_agent_query_stream(user_input, chat_history=None):
-    """Streams LLM response chunks for real-time display. Returns (stream_iterator, model_used)."""
+    """
+    Streams LLM response chunks for real-time display.
+
+    If the query looks like an action request (reschedule, sync, organise, etc.)
+    it routes through the tool-calling AgentExecutor instead of raw streaming,
+    so the LLM can actually execute agents rather than just describing how to.
+    Returns (stream_iterator, model_used).
+    """
+    # Detect action intent — route to tool-calling agent when the user wants
+    # something done, not just answered.
+    if ACTION_KEYWORDS and any(kw in user_input.lower() for kw in ACTION_KEYWORDS):
+        response, model_used = run_agent_query(user_input)
+        return iter([response]), model_used
+
     llm, model_used = get_llm("chat", user_input)
 
     # Pre-fetch file context for LogSeq/Obsidian queries
