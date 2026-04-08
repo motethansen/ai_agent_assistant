@@ -1,9 +1,89 @@
 import os
 import re
+import datetime
 
 from config_utils import get_config_value
 
 _TASK_RE = re.compile(r"^(\s*)-\s+\[([ xX])\]\s+(.*)")
+
+# ---------------------------------------------------------------------------
+# Obsidian Tasks plugin — emoji metadata markers
+# ---------------------------------------------------------------------------
+
+# Priority: emoji → (label, sort weight — lower = more urgent)
+PRIORITY_MAP = {
+    "🔺": ("highest", 0),
+    "⏫": ("high",    1),
+    "🔼": ("medium",  2),
+    "🔽": ("low",     3),
+    "⏬": ("lowest",  4),
+}
+
+_DUE_RE       = re.compile(r'📅\s*(\d{4}-\d{2}-\d{2})')
+_SCHEDULED_RE = re.compile(r'⏳\s*(\d{4}-\d{2}-\d{2})')
+_START_RE     = re.compile(r'🛫\s*(\d{4}-\d{2}-\d{2})')
+_CREATED_RE   = re.compile(r'➕\s*(\d{4}-\d{2}-\d{2})')
+_DONE_RE      = re.compile(r'✅\s*(\d{4}-\d{2}-\d{2})')
+
+
+def _parse_date(m) -> "datetime.date | None":
+    if not m:
+        return None
+    try:
+        return datetime.date.fromisoformat(m.group(1))
+    except ValueError:
+        return None
+
+
+def parse_task_metadata(raw_line: str) -> dict:
+    """
+    Parse an Obsidian task line and return a rich metadata dict:
+      text          — task body with emoji markers stripped
+      priority      — 'highest' | 'high' | 'medium' | 'low' | 'lowest' | None
+      priority_weight — int sort key (0=highest urgency, 4=lowest, 99=none)
+      due_date      — datetime.date or None
+      scheduled_date — datetime.date or None  (⏳)
+      start_date    — datetime.date or None   (🛫)
+      created_date  — datetime.date or None   (➕)
+      is_done       — bool
+    """
+    m = _TASK_RE.match(raw_line)
+    if not m:
+        return {}
+
+    is_done = m.group(2).lower() == "x"
+    body = m.group(3)
+
+    priority = None
+    priority_weight = 99
+    for emoji, (label, weight) in PRIORITY_MAP.items():
+        if emoji in body:
+            priority = label
+            priority_weight = weight
+            body = body.replace(emoji, "", 1)
+            break
+
+    due_date       = _parse_date(_DUE_RE.search(body))
+    scheduled_date = _parse_date(_SCHEDULED_RE.search(body))
+    start_date     = _parse_date(_START_RE.search(body))
+    created_date   = _parse_date(_CREATED_RE.search(body))
+
+    # Strip date markers from display text
+    text = body
+    for pattern in (_DUE_RE, _SCHEDULED_RE, _START_RE, _CREATED_RE, _DONE_RE):
+        text = pattern.sub("", text)
+    text = text.strip()
+
+    return {
+        "text": text,
+        "priority": priority,
+        "priority_weight": priority_weight,
+        "due_date": due_date,
+        "scheduled_date": scheduled_date,
+        "start_date": start_date,
+        "created_date": created_date,
+        "is_done": is_done,
+    }
 
 
 class ObsidianAgent:
@@ -143,11 +223,19 @@ class ObsidianAgent:
                         continue
                     if not is_done and not todo:
                         continue
+                    meta = parse_task_metadata(raw_line)
                     tasks.append({
                         "text": raw_line.rstrip(),
                         "file": rel_path,
                         "line": line_num,
                         "done": is_done,
+                        # rich metadata
+                        "priority": meta.get("priority"),
+                        "priority_weight": meta.get("priority_weight", 99),
+                        "due_date": meta.get("due_date"),
+                        "scheduled_date": meta.get("scheduled_date"),
+                        "start_date": meta.get("start_date"),
+                        "clean_text": meta.get("text", ""),
                     })
         except OSError:
             pass

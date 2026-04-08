@@ -207,6 +207,26 @@ def run_health_checks():
         print(f"  ERROR: {e}")
 
 
+def run_reschedule_agent(target=None):
+    """
+    Move overdue tasks to a target date.
+    Target defaults to end of next week if not specified.
+    Can be overridden via env var RESCHEDULE_TARGET.
+    """
+    target = target or os.environ.get("RESCHEDULE_TARGET", "end of next week")
+    print(f"\n[{_ts()}] === Reschedule Agent (target: {target}) ===")
+    try:
+        import task_reschedule_agent
+        result = task_reschedule_agent.run(target=target)
+        if result:
+            print(f"  LogSeq moved:   {result.get('logseq_moved', 0)}")
+            print(f"  Obsidian moved: {result.get('obsidian_moved', 0)}")
+        return result
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -218,6 +238,7 @@ AGENT_MAP = {
     "calendar":    run_calendar_planning_agent,
     "legacy_sync": run_legacy_calendar_sync,
     "health":      run_health_checks,
+    "reschedule":  run_reschedule_agent,
 }
 
 ALL_AGENTS = ["datainput", "logseq", "google_tasks", "calendar", "legacy_sync", "health"]

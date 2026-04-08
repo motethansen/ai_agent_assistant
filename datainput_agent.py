@@ -157,41 +157,126 @@ def sync_reminders_to_planner():
 
 
 # ---------------------------------------------------------------------------
-# Step 2 — Pre-scan for overdue tasks (Python-side, reliable date comparison)
+# Step 2 — Pre-scan tasks (Python-side, reliable date + priority analysis)
 # ---------------------------------------------------------------------------
 
-def _find_overdue_tasks(content):
+# Obsidian Tasks plugin emoji markers
+_PRIORITY_MAP = {
+    "🔺": ("highest", 0),
+    "⏫": ("high",    1),
+    "🔼": ("medium",  2),
+    "🔽": ("low",     3),
+    "⏬": ("lowest",  4),
+}
+_DUE_PAT       = re.compile(r'📅\s*(\d{4}-\d{2}-\d{2})')
+_SCHEDULED_PAT = re.compile(r'⏳\s*(\d{4}-\d{2}-\d{2})')
+_START_PAT     = re.compile(r'🛫\s*(\d{4}-\d{2}-\d{2})')
+
+
+def _parse_task_line(line: str) -> dict | None:
     """
-    Scan planner markdown for incomplete tasks with a 📅 YYYY-MM-DD date
-    that is strictly before today. Returns list of (task_line, due_date_str).
+    Parse a single markdown task line.
+    Returns None if not an open task (`- [ ]`).
+    Returns dict: {line, due, scheduled, start, priority, priority_weight, clean_text}
+    """
+    if not re.match(r'\s*-\s*\[ \]', line):
+        return None
+
+    priority = None
+    priority_weight = 99
+    for emoji, (label, weight) in _PRIORITY_MAP.items():
+        if emoji in line:
+            priority = label
+            priority_weight = weight
+            break
+
+    def _d(m):
+        if not m:
+            return None
+        try:
+            return datetime.date.fromisoformat(m.group(1))
+        except ValueError:
+            return None
+
+    due       = _d(_DUE_PAT.search(line))
+    scheduled = _d(_SCHEDULED_PAT.search(line))
+    start     = _d(_START_PAT.search(line))
+
+    # Clean text: strip task prefix, emoji markers, and date values
+    clean = re.sub(r'^\s*-\s*\[ \]\s*', '', line.strip())
+    for pat in (_DUE_PAT, _SCHEDULED_PAT, _START_PAT):
+        clean = pat.sub("", clean)
+    for emoji in _PRIORITY_MAP:
+        clean = clean.replace(emoji, "")
+    clean = re.sub(r'\s{2,}', ' ', clean).strip()
+
+    return {
+        "line": line.strip(),
+        "clean": clean,
+        "due": due,
+        "scheduled": scheduled,
+        "start": start,
+        "priority": priority,
+        "priority_weight": priority_weight,
+    }
+
+
+def _analyse_tasks(content: str) -> dict:
+    """
+    Scan planner content and classify open tasks into buckets:
+      overdue        — due date < today
+      due_soon       — due date within URGENT_DAYS (default 3) days
+      unscheduled_hi — high/highest priority but no due date (needs planning)
+      scheduled_soon — scheduled date (⏳) within URGENT_DAYS but no due date
+    Returns dict of lists, each item is a task dict from _parse_task_line.
     """
     today = datetime.date.today()
-    overdue = []
-    date_pattern = re.compile(r'📅\s*(\d{4}-\d{2}-\d{2})')
+    urgent_days = int(get_config_value("URGENT_DAYS", "3"))
+    deadline = today + datetime.timedelta(days=urgent_days)
+
+    buckets = {
+        "overdue": [],
+        "due_soon": [],
+        "unscheduled_hi": [],
+        "scheduled_soon": [],
+    }
+
     for line in content.splitlines():
-        # Only open tasks: - [ ] ...
-        if not re.match(r'\s*-\s*\[ \]', line):
+        task = _parse_task_line(line)
+        if not task:
             continue
-        m = date_pattern.search(line)
-        if not m:
-            continue
-        try:
-            due = datetime.date.fromisoformat(m.group(1))
-            if due < today:
-                overdue.append((line.strip(), m.group(1)))
-        except ValueError:
-            continue
-    return overdue
+
+        if task["due"] and task["due"] < today:
+            buckets["overdue"].append(task)
+        elif task["due"] and today <= task["due"] <= deadline:
+            buckets["due_soon"].append(task)
+        elif task["priority_weight"] <= 1 and not task["due"]:
+            # high or highest priority but no due date — needs explicit scheduling
+            buckets["unscheduled_hi"].append(task)
+        elif task["scheduled"] and task["scheduled"] <= deadline and not task["due"]:
+            buckets["scheduled_soon"].append(task)
+
+    return buckets
 
 
 # ---------------------------------------------------------------------------
 # Step 3 — Organise the planner with LLM
 # ---------------------------------------------------------------------------
 
+def _format_task_list(tasks: list) -> str:
+    lines = []
+    for t in tasks:
+        due_str = f" (due {t['due']})" if t.get("due") else ""
+        sched_str = f" (scheduled {t['scheduled']})" if t.get("scheduled") else ""
+        pri_str = f" [{t['priority']}]" if t.get("priority") else ""
+        lines.append(f"  - {t['clean']}{pri_str}{due_str}{sched_str}")
+    return "\n".join(lines)
+
+
 def organise_planner():
     """
-    Read the full planner file, pre-detect overdue tasks, then send to LLM
-    with explicit category and overdue instructions. Writes result back.
+    Read the full planner file, pre-analyse task urgency/priority, then send
+    to LLM with explicit structured instructions. Writes result back.
     Returns the organised content string.
     """
     planner = _planner_path()
@@ -202,15 +287,51 @@ def organise_planner():
 
     today = datetime.date.today().isoformat()
 
-    # Pre-detect overdue tasks in Python (reliable, doesn't depend on LLM date parsing)
-    overdue = _find_overdue_tasks(content)
-    overdue_block = ""
+    # Python-side analysis — reliable, independent of LLM date parsing
+    buckets = _analyse_tasks(content)
+    overdue        = buckets["overdue"]
+    due_soon       = buckets["due_soon"]
+    unscheduled_hi = buckets["unscheduled_hi"]
+    scheduled_soon = buckets["scheduled_soon"]
+
+    print(f"[DataInputAgent] Task analysis — overdue: {len(overdue)}, "
+          f"due soon: {len(due_soon)}, high-priority unscheduled: {len(unscheduled_hi)}, "
+          f"scheduled soon: {len(scheduled_soon)}")
+
+    # Build the urgency context block for the LLM
+    urgency_parts = []
+
     if overdue:
-        overdue_lines = "\n".join(f"  - {line} (was due {due})" for line, due in overdue)
-        overdue_block = (
-            f"\nIMPORTANT — the following {len(overdue)} task(s) are OVERDUE "
-            f"(due date is before {today}). They MUST appear under a "
-            f"'## 🚨 Overdue' section at the very top of the output:\n{overdue_lines}\n"
+        urgency_parts.append(
+            f"OVERDUE ({len(overdue)} tasks — due date has already passed):\n"
+            + _format_task_list(overdue)
+        )
+
+    if due_soon:
+        urgency_parts.append(
+            f"DUE SOON ({len(due_soon)} tasks — due within the next few days):\n"
+            + _format_task_list(due_soon)
+        )
+
+    if unscheduled_hi:
+        urgency_parts.append(
+            f"NEEDS IMMEDIATE PLANNING ({len(unscheduled_hi)} high/highest-priority tasks with NO due date set):\n"
+            + _format_task_list(unscheduled_hi)
+        )
+
+    if scheduled_soon:
+        urgency_parts.append(
+            f"SCHEDULED SOON but no due date ({len(scheduled_soon)} tasks — scheduled date approaching):\n"
+            + _format_task_list(scheduled_soon)
+        )
+
+    urgency_block = ""
+    if urgency_parts:
+        urgency_block = (
+            "\n\nIMPORTANT — Python pre-scan identified the following tasks needing attention "
+            f"(today is {today}). Use this to guide placement and the review section:\n\n"
+            + "\n\n".join(urgency_parts)
+            + "\n"
         )
 
     # Read user's focus categories from config
@@ -218,36 +339,43 @@ def organise_planner():
     categories = [c.strip() for c in raw_cats.split(",") if c.strip()] if raw_cats else []
     if categories:
         cat_instruction = (
-            f"\nOrganise tasks under these category headings where possible "
+            f"Organise tasks under these category headings where possible "
             f"(use ## headers): {', '.join(categories)}. "
             f"Tasks that don't fit any category go under '## Other'."
         )
     else:
-        cat_instruction = (
-            "\nGroup tasks by project or theme using ## headers."
-        )
+        cat_instruction = "Group tasks by project or theme using ## headers."
 
     system = (
         "You are a personal productivity assistant. "
-        "Your job is to reorganise a markdown task planner into clean, prioritised sections. "
+        "Reorganise a markdown task planner into clean, prioritised sections. "
         "Rules:\n"
-        "  1. Preserve ALL task text exactly — do not alter, merge, or remove any task.\n"
-        "  2. If there are overdue tasks, place them in a '## 🚨 Overdue' section at the very top.\n"
-        "  3. Within each section, sort by due date (earliest first), then by apparent urgency.\n"
-        "  4. Use ## markdown headers for each section.\n"
-        "  5. Return ONLY the reorganised markdown — no explanations, no commentary."
+        "  1. Preserve ALL task text and emoji markers EXACTLY — never alter, merge, or remove any task or its 📅⏳🛫🔺⏫🔼🔽⏬ markers.\n"
+        "  2. Section order (top to bottom):\n"
+        "       a. '## 🚨 Overdue' — tasks whose 📅 date is before today (omit section if none).\n"
+        "       b. '## ⚠️ Needs Review' — tasks that need urgent planning attention:\n"
+        "             • High/highest priority (⏫🔺) with no due date set\n"
+        "             • Due within the next 3 days\n"
+        "             • Scheduled soon (⏳) with no due date\n"
+        "          Include a brief plain-English note after each task explaining WHY it needs review.\n"
+        "          Omit this section if nothing qualifies.\n"
+        "       c. Category sections — one ## heading per project/theme.\n"
+        "       d. '## Other' — tasks that don't fit any category.\n"
+        "  3. Within each category section, sort tasks: highest priority first (🔺⏫🔼🔽⏬), "
+        "     then by 📅 due date ascending, then alphabetically.\n"
+        "  4. Tasks with no date and no priority go last within their section.\n"
+        "  5. Return ONLY the reorganised markdown — no explanations, no preamble, no code fences."
     )
 
     prompt = (
         f"Today is {today}.\n"
-        f"{overdue_block}"
+        f"{urgency_block}\n"
         f"{cat_instruction}\n\n"
         f"Please reorganise this planner:\n\n"
         f"---\n{content}\n---"
     )
 
-    print(f"[DataInputAgent] Asking LLM to organise planner "
-          f"({len(overdue)} overdue, {len(categories)} categories)...")
+    print(f"[DataInputAgent] Asking LLM to organise planner...")
     organised, model = ai_orchestration.generate(prompt, system=system, task_type="parsing")
     print(f"[DataInputAgent] Organised by {model}.")
 
