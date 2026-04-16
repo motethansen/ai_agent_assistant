@@ -14,7 +14,6 @@ console = Console()
 # Map check keys to human-readable labels
 CHECK_LABELS = {
     "git": "Git",
-    "lm_studio": "LM Studio",
     "ollama": "Ollama",
     "gemini": "Gemini API key",
     "google_calendar": "Google Calendar",

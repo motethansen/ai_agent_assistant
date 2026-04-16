@@ -238,51 +238,6 @@ To pull events from Google Calendar into the local calendar, first export the ca
 /import-calendar ~/Downloads/google-calendar.ics
 ```
 
-## LM Studio
-
-[LM Studio](https://lmstudio.ai/) is an optional second local inference backend alongside Ollama.
-
-### 1. Download and install
-
-Download LM Studio from [lmstudio.ai](https://lmstudio.ai/) and install it for your platform.
-
-### 2. Load a model
-
-Open LM Studio, browse the model catalogue, and download a model (e.g. `mistral-7b-instruct`).
-
-### 3. Enable the local server
-
-In LM Studio, open the **Local Server** tab (the `<->` icon) and click **Start Server**. It listens on port `1234` by default.
-
-### 4. Set config keys
-
-In your `.config` file:
-
-```
-ENABLE_LM_STUDIO=true
-LM_STUDIO_MODEL=mistral-7b-instruct-v0.3
-```
-
-LM Studio appears between Ollama and Gemini in the default fallback chain, so it is tried automatically when Ollama is unavailable.
-
-### 5. Headless use (Linux server)
-
-For Linux servers without a GUI, the LM Studio inference engine can run headlessly:
-
-```bash
-lms daemon start
-```
-
-This starts the inference engine without the GUI. You must have run the LM Studio GUI on the machine at least once first to register the `lms` CLI and accept the licence.
-
-### 6. Verify
-
-```bash
-python scripts/status.py
-```
-
-Look for `lm_studio: ok` in the output.
-
 ## n8n Setup (workflow automation)
 
 n8n runs as a Docker container and handles event-driven workflows between your
@@ -339,56 +294,6 @@ python scripts/status.py
 ```
 
 The daemon starts the API server and keeps it running across reboots.
-
----
-
-## NanoClaw Setup (optional — containerised agent isolation)
-
-NanoClaw runs ObsidianAgent inside an isolated Docker container so it can only access the Obsidian vault directory — nothing else on the host filesystem.
-
-### Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) installed and running (`docker info` should succeed)
-- `WORKSPACE_DIR` in `.config` must be an absolute path on the host
-
-### Enable NanoClaw
-
-Add to `.config`:
-```
-NANOCLAW_ENABLED=true
-```
-
-When `NANOCLAW_ENABLED=false` (the default), all existing code runs unchanged — zero Docker dependency.
-
-### Build the Skill image
-
-```bash
-docker compose --profile nanoclaw build
-```
-
-Only needs to be re-run when `obsidian_agent.py` changes.
-
-### Test the Skill manually
-
-```bash
-# List all .md files in your vault
-docker compose run --rm \
-  --volume "${WORKSPACE_DIR}:/vault:ro" \
-  obsidian_skill list_files
-
-# Find all incomplete tasks
-docker compose run --rm \
-  --volume "${WORKSPACE_DIR}:/vault:ro" \
-  obsidian_skill find_tasks
-```
-
-You should see JSON output. If the container is not built yet, run the `build` step above first.
-
-### Notes
-
-- The container can only access `WORKSPACE_DIR` — it cannot reach any other host path
-- Mutation actions (`create_file`, `update_file`) require `write=True` in the Python call, which switches the mount to `:rw`
-- The `obsidian_skill` service uses `profiles: [nanoclaw]` — it is **not** started by `docker compose up`
 
 ---
 

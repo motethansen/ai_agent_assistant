@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from config_utils import get_config_value
 from logseq_agent import LogSeqAgent
+from obsidian_agent import ObsidianAgent
 
 app = FastAPI(title="AI Agent Assistant Webhook API")
 
@@ -21,6 +22,12 @@ class PlanRequest(BaseModel):
     pass
 
 
+class FileOpRequest(BaseModel):
+    path: str
+    content: Optional[str] = None
+    overwrite: bool = False
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _get_logseq_agent():
@@ -29,8 +36,50 @@ def _get_logseq_agent():
         return None, None
     return LogSeqAgent(logseq_dir), logseq_dir
 
+def _get_obsidian_agent():
+    workspace_dir = get_config_value("WORKSPACE_DIR", ".")
+    return ObsidianAgent(workspace_dir=workspace_dir)
+
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
+
+@app.get("/vault/read")
+def read_vault_file(path: str):
+    agent = _get_obsidian_agent()
+    content = agent.read_file(path)
+    if content is None:
+        return {"status": "error", "message": f"File not found: {path}"}
+    return {"status": "ok", "content": content}
+
+
+@app.post("/vault/write")
+def write_vault_file(body: FileOpRequest):
+    agent = _get_obsidian_agent()
+    # Simple check for path traversal could be added here
+    if body.content is None:
+        return {"status": "error", "message": "No content provided"}
+    
+    success = agent.create_file(body.path, body.content, overwrite=body.overwrite)
+    if not success:
+        return {"status": "error", "message": "File already exists and overwrite is false"}
+    return {"status": "ok", "message": f"File written to {body.path}"}
+
+
+@app.get("/vault/tasks")
+def get_vault_tasks(todo: bool = True, done: bool = False):
+    agent = _get_obsidian_agent()
+    tasks = agent.get_tasks(todo=todo, done=done)
+    return {"status": "ok", "count": len(tasks), "tasks": tasks}
+
+
+@app.get("/logseq/tasks")
+def get_logseq_tasks(days: int = 7):
+    agent, _ = _get_logseq_agent()
+    if not agent:
+        return {"status": "error", "message": "LogSeq not configured"}
+    context = agent.context_for_recent(days=days)
+    return {"status": "ok", "context": context}
+
 
 @app.post("/webhook/add-task")
 def add_task(body: AddTaskRequest):

@@ -32,10 +32,6 @@ def _active_model_label():
     """Return a short label for the currently configured LLM."""
     try:
         from config_utils import get_config_value
-        lms = get_config_value("ENABLE_LM_STUDIO", "false").lower() == "true"
-        if lms:
-            model = get_config_value("LM_STUDIO_MODEL", "lmstudio")
-            return model, "lmstudio"
         ollama = get_config_value("ENABLE_OLLAMA", "true").lower() == "true"
         if ollama:
             model = get_config_value("OLLAMA_MODEL", "ollama")
@@ -62,10 +58,8 @@ def print_banner():
     model_name, provider = _active_model_label()
 
     try:
-        from ai_orchestration import is_lmstudio_running, is_ollama_running
-        if provider == "lmstudio":
-            running = is_lmstudio_running()
-        elif provider == "ollama":
+        from ai_orchestration import is_ollama_running
+        if provider == "ollama":
             running = is_ollama_running()
         else:
             running = True
@@ -91,17 +85,12 @@ def print_startup_status():
     """Print model / workspace status lines below the banner."""
     try:
         from config_utils import get_config_value
-        from ai_orchestration import is_lmstudio_running, is_ollama_running, MODELS_ENABLED
+        from ai_orchestration import is_ollama_running, MODELS_ENABLED
 
         model_name, provider = _active_model_label()
 
         # LLM status
-        if provider == "lmstudio":
-            ok = is_lmstudio_running()
-            icon = "[green]✓[/green]" if ok else "[yellow]⚠[/yellow]"
-            console.print(f"  {icon}  LM Studio  [cyan]{model_name}[/cyan]  "
-                          f"[dim]localhost:1234[/dim]")
-        elif provider == "ollama":
+        if provider == "ollama":
             ok = is_ollama_running()
             icon = "[green]✓[/green]" if ok else "[yellow]⚠[/yellow]"
             host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
@@ -372,9 +361,9 @@ def render_settings(config_path):
     route_table = Table(box=box.SIMPLE, show_header=True, header_style="bold dim", pad_edge=False)
     route_table.add_column("Setting", style="cyan", min_width=22)
     route_table.add_column("Value")
-    for key in ["LM_STUDIO_MODEL", "OLLAMA_MODEL", "LLM_PRIORITY",
+    for key in ["OLLAMA_MODEL", "OLLAMA_NUM_CTX", "LLM_PRIORITY",
                 "ROUTING_CHAT", "ROUTING_SCHEDULING", "ROUTING_PARSING", "ROUTING_PLANNING",
-                "ENABLE_LM_STUDIO", "ENABLE_OLLAMA", "ENABLE_GEMINI", "ENABLE_CLAUDE"]:
+                "ENABLE_OLLAMA", "ENABLE_GEMINI", "ENABLE_CLAUDE"]:
         val = get_config_value(key, "")
         route_table.add_row(key, val or "[dim]not set[/dim]")
     console.print(route_table)
@@ -410,22 +399,16 @@ def render_routing(routing_info):
     console.print()
 
 
-def render_services(lmstudio_status=None, ollama_status=None):
-    """Render service status. Accepts lmstudio_status and/or ollama_status booleans."""
+def render_services(ollama_status=None):
+    """Render service status. Accepts ollama_status boolean."""
     table = Table(box=box.SIMPLE, show_header=True, header_style="bold dim", pad_edge=False,
                   title="[bold]Services[/bold]", title_justify="left")
     table.add_column("Service", style="cyan", min_width=14)
     table.add_column("Status")
 
     try:
-        from ai_orchestration import is_lmstudio_running, is_ollama_running, MODELS_ENABLED
+        from ai_orchestration import is_ollama_running, MODELS_ENABLED
         from config_utils import get_config_value
-
-        if MODELS_ENABLED.get("lmstudio"):
-            model = get_config_value("LM_STUDIO_MODEL", "")
-            running = lmstudio_status if lmstudio_status is not None else is_lmstudio_running()
-            status = "[green]running[/green]" if running else "[red]stopped[/red]"
-            table.add_row(f"LM Studio  [dim]{model}[/dim]", status)
 
         if MODELS_ENABLED.get("ollama"):
             running = ollama_status if ollama_status is not None else is_ollama_running()

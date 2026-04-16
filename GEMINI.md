@@ -1,7 +1,7 @@
 # GEMINI.md: AI-Powered Markdown-Calendar-AI Bridge
 
 ## Project Overview
-This project is an automated "AI Assistant" that synchronizes tasks from local Markdown files (Obsidian/Logseq) and Apple Reminders with a Google Calendar. It features a multi-agent architecture designed for privacy and performance, prioritizing local LLMs (Ollama/OpenClaw).
+This project is an automated "AI Assistant" that synchronizes tasks from local Markdown files (Obsidian/Logseq) and Apple Reminders with a Google Calendar. It features a multi-agent architecture designed for privacy and performance, prioritizing local LLMs (Ollama).
 
 ### Main Technologies
 - **Python 3.11+**: Core programming language.
@@ -10,7 +10,7 @@ This project is an automated "AI Assistant" that synchronizes tasks from local M
 - **Chromadb**: Local vector database for RAG-based context retrieval.
 - **Streamlit**: Web-based "Mission Control" dashboard.
 - **LangChain & Ollama**: Integration for advanced agentic workflows and local LLMs.
-- **Local LLMs**: Qwen 3.5 (9B), Ollama, and OpenClaw for private task processing.
+- **Local LLMs**: Qwen 3.5 (9B), Ollama, and other GGUF models for private task processing.
 - **Cloud LLMs**: Gemini, OpenAI, and Claude (Optional).
 
 ## Architecture
@@ -31,7 +31,7 @@ This project is an automated "AI Assistant" that synchronizes tasks from local M
 - Python 3.11+ (Recommended for Google GenAI compatibility)
 - Google Cloud Project with Calendar and Gmail APIs enabled.
 - `credentials.json` (OAuth Client ID) in the root directory.
-- **Docker/OrbStack**: Required to run the local OpenClaw server.
+- **Docker/OrbStack**: Recommended for running optional local automation (n8n).
 
 ### Setup & Management
 ```bash
@@ -56,7 +56,7 @@ make run-ui
 ```
 
 ## Development Conventions
-- **Local-First**: The system defaults to Ollama/OpenClaw to protect user data.
+- **Local-First**: The system defaults to Ollama to protect user data.
 - **Cached Context**: Google Calendar data is cached locally to speed up AI interactions.
 - **Confirmed Actions**: Any file system change or booking requires human confirmation.
 - **Timezone Aware**: All timestamps include local offsets to prevent scheduling shifts.
@@ -65,7 +65,7 @@ make run-ui
 - `main.py`: Entry point and CLI orchestration.
 - `app.py`: Streamlit Web UI and Mission Control.
 - `install.sh`: Self-repairing installation and verification script.
-- `scripts/manage_services.sh`: Local AI service manager (Ollama/OpenClaw).
+- `scripts/manage_services.sh`: Local AI service manager (Ollama).
 - `scripts/check_ai_working.py`: Automated AI functionality verification.
 - `update_manager.py`: Health monitoring and background update tracking.
 - `ai_orchestration.py`: Priority-based LLM routing and RAG context retrieval.

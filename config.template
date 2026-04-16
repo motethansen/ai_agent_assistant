@@ -14,11 +14,6 @@ OLLAMA_HOST=http://localhost:11434
 # OLLAMA_NUM_CTX: Context window size for Ollama models.
 OLLAMA_NUM_CTX=8192
 
-# --- LM Studio Settings (local, GUI-based) ---
-# Set ENABLE_LM_STUDIO=true if you have LM Studio installed and want to use it.
-ENABLE_LM_STUDIO=false
-LM_STUDIO_MODEL=llama-3.2-3b-instruct
-
 # --- Groq Settings (free cloud inference, fast) ---
 # Get a free key at https://console.groq.com
 GROQ_API_KEY=your_groq_api_key_here
@@ -80,7 +75,7 @@ ROUTING_PARSING=ollama
 
 # --- LLM Priority ---
 # Comma-separated fallback order.
-# Full install (local):  ollama,lm_studio,groq,gemini,openai,claude
+# Full install (local):  ollama,groq,gemini,openai,claude
 # Cloud-only install:    groq,gemini,openai,claude,huggingface
 LLM_PRIORITY=ollama,gemini,openai,claude
 

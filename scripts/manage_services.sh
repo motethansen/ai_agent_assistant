@@ -5,41 +5,6 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-start_lmstudio() {
-    # No-op when ENABLE_LM_STUDIO is not true
-    LMS_ENABLED=$(awk -F'=' '/^ENABLE_LM_STUDIO[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
-    if [ "$LMS_ENABLED" != "true" ]; then
-        return
-    fi
-
-    if ! command -v lms > /dev/null 2>&1; then
-        echo -e "${YELLOW}lms CLI not found. Open LM Studio at least once to register it in PATH.${NC}"
-        echo -e "  See: https://lmstudio.ai/docs/cli"
-        return
-    fi
-
-    # Only start if server is not already responding
-    if curl -sf --max-time 2 "http://localhost:1234/v1/models" > /dev/null 2>&1; then
-        echo -e "${GREEN}LM Studio server already running.${NC}"
-    else
-        echo -e "${YELLOW}Starting LM Studio server...${NC}"
-        lms server start
-    fi
-
-    LMS_MODEL=$(awk -F'=' '/^LM_STUDIO_MODEL[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
-    if [ -z "$LMS_MODEL" ]; then
-        echo -e "${YELLOW}Warning: LM_STUDIO_MODEL not set in .config — skipping model load.${NC}"
-        return
-    fi
-
-    if ! lms ps 2>/dev/null | grep -qF "$LMS_MODEL"; then
-        echo -e "${YELLOW}Loading model '$LMS_MODEL' into LM Studio...${NC}"
-        lms load "$LMS_MODEL"
-    fi
-
-    echo -e "${GREEN}LM Studio ready: $LMS_MODEL${NC}"
-}
-
 start_ollama() {
     # Skip if Ollama is disabled in config
     OLLAMA_ENABLED=$(awk -F'=' '/^ENABLE_OLLAMA[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
@@ -86,18 +51,7 @@ start_ollama() {
 }
 
 check_services() {
-    # LM Studio (shown first when it is the primary)
-    LMS_ENABLED=$(awk -F'=' '/^ENABLE_LM_STUDIO[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
-    if [ "$LMS_ENABLED" == "true" ]; then
-        if command -v lms > /dev/null 2>&1 && lms ps 2>/dev/null | grep -q .; then
-            echo -e "LM Studio: ${GREEN}RUNNING${NC}"
-        else
-            echo -e "LM Studio: ${RED}STOPPED${NC}"
-            start_lmstudio
-        fi
-    fi
-
-    # Ollama (only when enabled)
+    # Ollama (primary local backend)
     OLLAMA_ENABLED=$(awk -F'=' '/^ENABLE_OLLAMA[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
     if [ "$OLLAMA_ENABLED" == "true" ]; then
         if pgrep -x "ollama" > /dev/null; then
@@ -112,16 +66,12 @@ check_services() {
 case "$1" in
     start)
         # Start whichever backends are enabled
-        LMS_ENABLED=$(awk -F'=' '/^ENABLE_LM_STUDIO[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
         OLLAMA_ENABLED=$(awk -F'=' '/^ENABLE_OLLAMA[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
-        if [ "$LMS_ENABLED" == "true" ]; then
-            start_lmstudio
-        fi
+        
         if [ "$OLLAMA_ENABLED" == "true" ]; then
             start_ollama
-        fi
-        if [ "$LMS_ENABLED" != "true" ] && [ "$OLLAMA_ENABLED" != "true" ]; then
-            echo -e "${YELLOW}No local LLM enabled. Set ENABLE_LM_STUDIO=true or ENABLE_OLLAMA=true in .config${NC}"
+        else
+            echo -e "${YELLOW}No local LLM enabled. Set ENABLE_OLLAMA=true in .config${NC}"
         fi
         ;;
     check) check_services ;;

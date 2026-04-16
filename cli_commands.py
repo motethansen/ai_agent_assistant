@@ -696,10 +696,8 @@ def handle_chat_mode(obsidian_file):
                     from session import display_docs
                     display_docs()
                 elif command == "services":
-                    from config_utils import get_config_value as _gcv
-                    lms_up = ai_orchestration.is_lmstudio_running() if _gcv("ENABLE_LM_STUDIO", "false").lower() == "true" else None
-                    ollama_up = ai_orchestration.is_ollama_running() if _gcv("ENABLE_OLLAMA", "true").lower() == "true" else None
-                    chat_ui.render_services(lmstudio_status=lms_up, ollama_status=ollama_up)
+                    ollama_up = ai_orchestration.is_ollama_running() if get_config_value("ENABLE_OLLAMA", "true").lower() == "true" else None
+                    chat_ui.render_services(ollama_status=ollama_up)
                 elif command == "models":
                     from rich.table import Table
                     from rich.console import Console as _Console
@@ -709,16 +707,6 @@ def handle_chat_mode(obsidian_file):
                     tbl.add_column("Enabled")
                     tbl.add_column("Model")
                     tbl.add_column("Status")
-
-                    # LM Studio
-                    lms_enabled = get_config_value("ENABLE_LM_STUDIO", "false").lower() == "true"
-                    lms_model = get_config_value("LM_STUDIO_MODEL", "—")
-                    if lms_enabled:
-                        lms_up = ai_orchestration.is_lmstudio_running()
-                        lms_status = "✅ running" if lms_up else "❌ not running"
-                    else:
-                        lms_status = "—"
-                    tbl.add_row("LM Studio", "✅" if lms_enabled else "❌", lms_model if lms_enabled else "—", lms_status)
 
                     # Ollama
                     ollama_enabled = get_config_value("ENABLE_OLLAMA", "true").lower() == "true"
@@ -744,7 +732,7 @@ def handle_chat_mode(obsidian_file):
                     tbl.add_row("OpenAI", "✅" if openai_enabled else "❌",
                                 get_config_value("OPENAI_MODEL", "gpt-4o") if openai_enabled else "—", "—")
 
-                    priority = get_config_value("LLM_PRIORITY", "lmstudio,ollama,gemini,openai,claude")
+                    priority = get_config_value("LLM_PRIORITY", "ollama,gemini,openai,claude")
                     _con.print(tbl)
                     _con.print(f"[dim]Fallback order: {priority}[/dim]")
                 elif command == "model":
@@ -775,10 +763,10 @@ def handle_chat_mode(obsidian_file):
                         )
                     else:
                         provider = parts[1].lower()
-                        # Accept aliases: "lm-studio" → "lmstudio", "gpt" → "openai"
-                        _aliases = {"lm-studio": "lmstudio", "lm_studio": "lmstudio",
-                                    "gpt": "openai", "gpt4": "openai", "gpt-4": "openai",
+                        # Accept aliases: "gpt" → "openai"
+                        _aliases = {"gpt": "openai", "gpt4": "openai", "gpt-4": "openai",
                                     "anthropic": "claude"}
+
                         provider = _aliases.get(provider, provider)
                         if provider not in known_providers:
                             chat_ui.render_warning(
@@ -797,8 +785,7 @@ def handle_chat_mode(obsidian_file):
                                 if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
                                     chat_ui.render_warning(
                                         f"{model_used}: rate-limit / quota exceeded. "
-                                        f"Try again in a moment, switch provider with /ask lmstudio <query>, "
-                                        f"or upgrade your API plan."
+                                        f"Try again in a moment or upgrade your API plan."
                                     )
                                 elif "401" in err or "API_KEY" in err or "authentication" in err.lower():
                                     chat_ui.render_warning(f"{model_used}: invalid or missing API key.")
@@ -811,10 +798,6 @@ def handle_chat_mode(obsidian_file):
                 elif command == "routing":
                     # Build list of available providers/models to route to
                     available_targets = []
-                    lms_enabled = get_config_value("ENABLE_LM_STUDIO", "false").lower() == "true"
-                    if lms_enabled:
-                        lms_model = get_config_value("LM_STUDIO_MODEL", "")
-                        available_targets.append(f"lmstudio ({lms_model})" if lms_model else "lmstudio")
                     ollama_models = ai_orchestration.list_ollama_models()
                     for m in ollama_models:
                         available_targets.append(m)
@@ -826,7 +809,7 @@ def handle_chat_mode(obsidian_file):
                     task_types = ["chat", "scheduling", "parsing", "planning"]
                     print("\n--- Current Routing ---")
                     for i, tt in enumerate(task_types, 1):
-                        current = get_config_value(f"ROUTING_{tt.upper()}", "lmstudio")
+                        current = get_config_value(f"ROUTING_{tt.upper()}", "ollama")
                         print(f"  {i}. {tt:<12} → {current}")
                     if available_targets:
                         print("\n--- Available Targets ---")
@@ -847,7 +830,7 @@ def handle_chat_mode(obsidian_file):
                         except (EOFError, KeyboardInterrupt):
                             pass
                     else:
-                        chat_ui.render_warning("No enabled providers found. Check ENABLE_LM_STUDIO / ENABLE_OLLAMA / ENABLE_GEMINI in .config")
+                        chat_ui.render_warning("No enabled providers found. Check ENABLE_OLLAMA / ENABLE_GEMINI in .config")
                 elif command == "create-agent":
                     if len(parts) >= 2:
                         agent_name = parts[1].lower().replace("-", "_")

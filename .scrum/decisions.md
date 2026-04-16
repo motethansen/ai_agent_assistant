@@ -180,7 +180,7 @@ When making a decision that affects:
 - **Date**: 2026-04-03
 - **Sprint**: Sprint-06
 - **Team**: Scrum Master (SM prompt)
-- **Status**: Proposed
+- **Status**: Superseded by ADR-011
 
 **Context**: ObsidianAgent and LogSeqAgent operate directly on host filesystem paths (`WORKSPACE_DIR`, `LOGSEQ_DIR`). A bug or prompt injection in the LLM response could cause unintended file writes, deletions, or path traversal to areas outside the intended vault. Running agents in isolated containers eliminates this risk.
 
@@ -199,9 +199,35 @@ The Python host retains a fallback path: if NanoClaw is not installed, existing 
 - Performance: container startup adds ~200–500ms per agent invocation — acceptable for non-real-time cron use; not suitable for interactive chat commands without pre-warming
 - NanoClaw Skill manifests (`skill.yaml`) must be versioned alongside agent code — any agent API change requires a corresponding Skill update
 
-**Affected files**: `nanoclaw/skills/obsidian_skill/` (new), `nanoclaw/skills/logseq_skill/` (new), `docker-compose.yml`, `cron_job.py`, `ai_orchestration.py`, `INSTALL.md`
+- **Affected files**: `nanoclaw/skills/obsidian_skill/` (new), `nanoclaw/skills/logseq_skill/` (new), `docker-compose.yml`, `cron_job.py`, `ai_orchestration.py`, `INSTALL.md`
 
 ---
+
+### ADR-011 — Headless API-First Architecture & Ollama Prioritization
+- **Date**: 2026-04-16
+- **Sprint**: Sprint-08
+- **Team**: Gemini CLI Agent
+- **Status**: Accepted
+
+**Context**: The previous architecture combined several "heavy" layers (LM Studio, n8n, Docker-based NanoClaw skills), leading to high memory pressure on macOS. Running GUI-based LLM managers like LM Studio consumed ~500MB+ RAM before loading a model.
+
+**Decision**: 
+1. **Swap LM Studio for Ollama**: Ollama is now the primary local inference backend. It runs as a lightweight background daemon (headless), saving ~1GB of RAM.
+2. **Consolidate Tools into API Server**: The Docker-based NanoClaw skill system is replaced by direct endpoints in `api_server.py`. This eliminates the 200-500ms container startup overhead per tool call.
+3. **API-First Tool Calling**: LLM tools in `agent_tools.py` now prefer calling the local `api_server.py` over n8n or direct subprocesses where possible, ensuring a single, stable interface for both n8n and the LLM.
+4. **Memory Optimization**: Default Ollama context window is set to 4096 tokens (balanced for Apple Silicon). Users are encouraged to use 4-bit (Q4_K_M) quantizations.
+
+**Reasoning**: Headless operation is significantly faster and more memory-efficient on consumer hardware. Consolidating logic into a persistent API server provides a better "Model Context Protocol" (MCP) experience with lower latency.
+
+**Consequences**:
+- `api_server.py` must be running for tool-calling to work efficiently.
+- `ENABLE_LM_STUDIO` is disabled by default.
+- `ROUTING_*` defaults to `ollama`.
+
+**Affected files**: `ai_orchestration.py`, `api_server.py`, `agent_tools.py`, `.config`, `scripts/manage_services.sh`
+
+---
+
 
 ### ADR-010 — n8n as Universal Task Sync middleware
 - **Date**: 2026-04-03

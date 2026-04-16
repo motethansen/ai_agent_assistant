@@ -50,28 +50,6 @@ def check_gemini():
     return {"status": "warning", "message": "GEMINI_API_KEY not set in .config"}
 
 
-def check_lm_studio():
-    """LM Studio local server reachable at http://localhost:1234. Skipped if ENABLE_LM_STUDIO=false."""
-    enabled = get_config_value("ENABLE_LM_STUDIO", "false").lower() == "true"
-    if not enabled:
-        return {"status": "disabled", "message": "LM Studio disabled (ENABLE_LM_STUDIO=false)"}
-    try:
-        response = requests.get("http://localhost:1234/v1/models", timeout=3)
-        if response.status_code == 200:
-            data = response.json()
-            models = [m.get("id", "") for m in data.get("data", [])]
-            active = get_config_value("LM_STUDIO_MODEL", models[0] if models else "unknown")
-            return {
-                "status": "ok",
-                "message": f"LM Studio running, active model: {active}",
-                "active_model": active,
-                "available_models": models,
-            }
-        return {"status": "error", "message": f"LM Studio returned {response.status_code}"}
-    except Exception as e:
-        return {"status": "error", "message": f"LM Studio is not reachable: {e}"}
-
-
 def check_local_calendar():
     """Local ICS calendar file exists and is readable."""
     ics_path = get_config_value("LOCAL_CALENDAR_FILE", "datainput/local_calendar.ics")
@@ -181,7 +159,6 @@ def run_all_checks():
         "last_check": datetime.datetime.now().isoformat(),
         "git": check_git_updates(),
         "ollama": check_ollama_health(),
-        "lm_studio": check_lm_studio(),
         "venv": check_venv_health(),
         "gemini": check_gemini(),
         "local_calendar": check_local_calendar(),

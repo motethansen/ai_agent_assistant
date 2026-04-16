@@ -1,5 +1,5 @@
 {
-    "last_check": "2026-04-08T18:01:49.398336",
+    "last_check": "2026-04-16T22:00:24.412620",
     "git": {
         "status": "up_to_date",
         "message": "System is up to date"
@@ -9,13 +9,8 @@
         "message": "Ollama is not reachable"
     },
     "lm_studio": {
-        "status": "ok",
-        "message": "LM Studio running, active model: qwen2.5-coder-7b-instruct-mlx",
-        "active_model": "qwen2.5-coder-7b-instruct-mlx",
-        "available_models": [
-            "qwen2.5-coder-7b-instruct-mlx",
-            "text-embedding-nomic-embed-text-v1.5"
-        ]
+        "status": "disabled",
+        "message": "LM Studio disabled (ENABLE_LM_STUDIO=false)"
     },
     "venv": {
         "status": "ok",
@@ -27,7 +22,7 @@
     },
     "local_calendar": {
         "status": "ok",
-        "message": "ICS file: 476 bytes, last modified 7.3h ago"
+        "message": "ICS file: 476 bytes, last modified 203.3h ago"
     },
     "logseq_dir": {
         "status": "ok",
@@ -38,14 +33,14 @@
         "message": "/Users/michaelhansen/Library/Mobile Documents/iCloud~md~obsidian/Documents"
     },
     "cron_last_run": {
-        "status": "ok",
-        "message": "7.0h ago",
-        "age_hours": 7.03
+        "status": "warning",
+        "message": "Last run 149.0h ago",
+        "age_hours": 149.0
     },
     "reminders_sync": {
         "status": "warning",
-        "message": "Last synced 961h ago",
-        "age_hours": 961.01
+        "message": "Last synced 1157h ago",
+        "age_hours": 1156.98
     },
     "google_tasks": {
         "status": "disabled",

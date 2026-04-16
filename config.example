@@ -1,16 +1,12 @@
 # Copy this file to .config and fill in your paths and model names.
 # DO NOT COMMIT .config TO GIT — it contains your API keys.
 
-# ── LM Studio (primary local LLM — https://lmstudio.ai) ──────────────────────
-# Download LM Studio, load a model, and enable the local server on port 1234.
-ENABLE_LM_STUDIO=true
-LM_STUDIO_MODEL=qwen2.5-coder-7b-instruct-mlx
-
-# ── Ollama (alternative local LLM — https://ollama.com) ──────────────────────
-# Set ENABLE_OLLAMA=true and ENABLE_LM_STUDIO=false to use Ollama instead.
-ENABLE_OLLAMA=false
-OLLAMA_MODEL=llama3:latest
+# ── Ollama (primary local LLM — https://ollama.com) ──────────────────────
+# Download Ollama, then run: ollama pull qwen3.5:9b
+ENABLE_OLLAMA=true
+OLLAMA_MODEL=qwen3.5:9b
 OLLAMA_HOST=http://localhost:11434
+OLLAMA_NUM_CTX=4096                   # Context window (4096-8192 recommended)
 
 # ── Notes directories ─────────────────────────────────────────────────────────
 WORKSPACE_DIR=/path/to/your/obsidian/vault
@@ -25,11 +21,11 @@ DEEP_WORK_END=12:00
 FOCUS_CATEGORIES=dev,writing,learning # comma-separated focus areas
 
 # ── LLM routing ───────────────────────────────────────────────────────────────
-ROUTING_CHAT=lmstudio
-ROUTING_SCHEDULING=lmstudio
-ROUTING_PARSING=lmstudio
-ROUTING_PLANNING=lmstudio
-LLM_PRIORITY=lmstudio,gemini,openai,claude
+ROUTING_CHAT=ollama
+ROUTING_SCHEDULING=ollama
+ROUTING_PARSING=ollama
+ROUTING_PLANNING=ollama
+LLM_PRIORITY=ollama,gemini,openai,claude
 
 # ── Cloud API keys (optional — fallback only) ─────────────────────────────────
 ENABLE_GEMINI=false
@@ -58,5 +54,5 @@ WEBHOOK_PORT=5678
 
 # ── Apple Calendar integration (macOS only) ───────────────────────────────────
 # Name of the Apple Calendar to push events to when using /add-event
-# Run /ask lmstudio list my calendars  or check the Calendar app for the name
+# Check the Calendar app for the name (e.g. 'Home', 'Work', 'Calendar')
 APPLE_CALENDAR_NAME=Home

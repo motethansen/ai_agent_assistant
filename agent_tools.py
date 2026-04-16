@@ -24,23 +24,65 @@ except ImportError:
         return func
 
 
+import requests
+from config_utils import get_config_value
+
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _call_n8n(agent_name: str, params: dict) -> dict | None:
-    """Try n8n first; return response dict or None."""
+def _call_api(endpoint: str, method: str = "POST", params: dict = None) -> dict | None:
+    """Try the local API server first; then try n8n as fallback."""
+    port = get_config_value("WEBHOOK_PORT", "5000")
+    base_url = f"http://localhost:{port}"
+    
     try:
-        from n8n_client import trigger_agent
-        return trigger_agent(agent_name, params)
+        if method == "GET":
+            resp = requests.get(f"{base_url}/{endpoint.lstrip('/')}", params=params, timeout=10)
+        else:
+            resp = requests.post(f"{base_url}/{endpoint.lstrip('/')}", json=params, timeout=15)
+        
+        if resp.status_code == 200:
+            return resp.json()
     except Exception as e:
-        logger.debug("n8n unavailable for %s: %s", agent_name, e)
-        return None
+        logger.debug("API server unreachable at %s: %s", endpoint, e)
+
+    # Fallback to n8n if relevant (some agents have n8n equivalents)
+    if endpoint.startswith("webhook/agent/"):
+        flow = endpoint.replace("webhook/agent/", "")
+        try:
+            from n8n_client import trigger_agent
+            return trigger_agent(flow, params or {})
+        except Exception:
+            pass
+    return None
 
 
-# ---------------------------------------------------------------------------
-# Tools
-# ---------------------------------------------------------------------------
+@tool
+def read_obsidian_file(path: str) -> str:
+    """
+    Read the content of a file from the Obsidian vault.
+    Provide a path relative to the vault root (e.g. '010 Planning/Planner.md').
+    """
+    result = _call_api("vault/read", method="GET", params={"path": path})
+    if result and result.get("status") == "ok":
+        return result.get("content", "")
+    return f"Error reading file: {result.get('message') if result else 'Server unavailable'}"
+
+
+@tool
+def write_obsidian_file(path: str, content: str, overwrite: bool = False) -> str:
+    """
+    Create or update a file in the Obsidian vault.
+    Provide a path relative to the vault root and the full content string.
+    """
+    result = _call_api("vault/write", method="POST", params={"path": path, "content": content, "overwrite": overwrite})
+    if result and result.get("status") == "ok":
+        return result.get("message", "Success")
+    return f"Error writing file: {result.get('message') if result else 'Server unavailable'}"
+
 
 @tool
 def reschedule_overdue_tasks(target_date: str) -> str:
@@ -52,7 +94,7 @@ def reschedule_overdue_tasks(target_date: str) -> str:
       "end of next week", "next monday", "friday", "2026-04-17"
     Returns a summary of how many tasks were moved.
     """
-    result = _call_n8n("reschedule", {"target": target_date})
+    result = _call_api("webhook/agent/reschedule", {"target": target_date})
     if result and result.get("status") == "ok":
         moved = result.get("logseq_moved", 0) + result.get("obsidian_moved", 0)
         return (
@@ -81,7 +123,7 @@ def sync_logseq_tasks() -> str:
     Scans the last N days of LogSeq journals and all LogSeq pages,
     deduplicates, and appends a '## LogSeq LATER Tasks' block to the planner.
     """
-    result = _call_n8n("sync-logseq", {})
+    result = _call_api("webhook/agent/sync-logseq")
     if result and result.get("status") == "ok":
         return result.get("message", "LogSeq tasks synced to Obsidian.")
 
@@ -101,7 +143,7 @@ def sync_reminders() -> str:
     Reads datainput/reminders.json, deduplicates against already-synced
     reminders, and appends new items under '## Reminders' in the planner.
     """
-    result = _call_n8n("sync-reminders", {})
+    result = _call_api("webhook/agent/sync-reminders")
     if result and result.get("status") == "ok":
         return result.get("message", "Reminders synced to Obsidian.")
 
@@ -121,7 +163,7 @@ def organize_planner() -> str:
     Surfaces overdue tasks, groups items by project category, and rewrites
     the planner with a structured layout. Uses the configured LLM.
     """
-    result = _call_n8n("organize", {})
+    result = _call_api("webhook/agent/organize")
     if result and result.get("status") == "ok":
         return result.get("message", "Planner organised.")
 
@@ -144,7 +186,7 @@ def run_morning_pipeline() -> str:
       3. Generate an AI weekly plan via the calendar planning agent
     Returns a summary of each step's result.
     """
-    result = _call_n8n("morning-sync", {})
+    result = _call_api("webhook/agent/morning-sync")
     if result and result.get("status") == "ok":
         steps = result.get("steps", {})
         summary = ", ".join(f"{k}: {v}" for k, v in steps.items())
@@ -185,6 +227,8 @@ def run_morning_pipeline() -> str:
 # ---------------------------------------------------------------------------
 
 ACTION_TOOLS = [
+    read_obsidian_file,
+    write_obsidian_file,
     reschedule_overdue_tasks,
     sync_logseq_tasks,
     sync_reminders,

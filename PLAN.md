@@ -30,9 +30,9 @@
 - [x] Write the finalized schedule back to the markdown file under a `## Today's Plan` header.
 - [x] Set up background services (Cron job integration).
 
-### Phase 6: OpenClaw and Ollama Integration
-- [x] Add OpenClaw and Ollama modules to the system.
-- [x] Update `install.sh` to install Ollama and OpenClaw locally.
+### Phase 6: Local AI and Ollama Integration
+- [x] Add Ollama modules to the system.
+- [x] Update `install.sh` to install Ollama locally.
 - [x] Add logic to check for successful installation of the modules (including `ollama pull`).
 
 ### Phase 7: Obsidian & Apple Reminders Retrieval
@@ -83,9 +83,9 @@
     - `/clear-history`: Clear conversation history.
 
 ### Phase 12: Multi-LLM Support & Task Routing
-- [x] Implement support for toggling active language models (Gemini, Ollama, OpenClaw) via the `.config` file.
+- [x] Implement support for toggling active language models (Gemini, Ollama, OpenAI) via the `.config` file.
 - [x] Add CLI commands to enable/disable specific models on the fly (e.g., `/model enable ollama`).
-- [x] Ensure local models (Ollama, OpenClaw) are always enabled by default if installed.
+- [x] Ensure local models (Ollama) are always enabled by default if installed.
 - [x] Create a routing mechanism in `ai_orchestration.py` to allow users to specify which LLM handles which specific tasks (e.g., local models for basic parsing, API models for complex scheduling).
 
 ### Phase 13: Dynamic Agent Creation Framework
@@ -124,7 +124,7 @@
 - [x] Support travel research in both CLI and Streamlit Mission Control.
 
 ### Phase 18: Local-First Refactor & Agent Specialisation
-- [x] Implement `MonitoringAgent` to track health of local AI servers (Ollama/OpenClaw).
+- [x] Implement `MonitoringAgent` to track health of local AI servers (Ollama).
 - [x] Create `CalendarAgent` for background sync to local YAML (`googlecalendar.yml`).
 - [x] Implement `PlanningAgent` for atomic updates to Calendar and Obsidian.
 - [x] Refine LogSeq parser to specifically target `LATER` tasks.
@@ -136,12 +136,11 @@
 - [x] Implement streaming LLM responses with live terminal updates via `run_agent_query_stream()`.
 - [x] Add persistent conversation history (JSON, last 200 messages) with `/history` and `/clear-history` commands.
 - [x] Integrate `prompt_toolkit` for enhanced terminal input with command history.
-- [x] Add `ensure_openclaw()` for auto-starting OpenClaw gateway from chat via `/services` command.
-- [x] Implement complexity-based LLM routing: simple tasks (parse, list, filter) -> Ollama; complex tasks (plan, analyze, code) -> OpenClaw/OpenAI/Claude.
+- [x] Implement complexity-based LLM routing: simple tasks (parse, list, filter) -> Ollama; complex tasks (plan, analyze, code) -> Gemini/OpenAI/Claude.
 - [x] Wire `ROUTING_SCHEDULING`, `ROUTING_PARSING`, `ROUTING_CHAT` config values into `get_routing()`.
 - [x] Add direct OpenAI and Claude API support via `langchain-openai` and `langchain-anthropic`.
 - [x] Add `/routing` command to show active routing configuration per task type.
-- [x] Upgrade `/models` to show both enabled and available status for all 5 backends.
+- [x] Upgrade `/models` to show both enabled and available status for all model backends.
 - [x] Upgrade `/backlog` to render Rich tables grouped by category with source indicators.
 
 ## Summary of Planned Development

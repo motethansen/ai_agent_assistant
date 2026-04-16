@@ -51,7 +51,7 @@ This is the non-obvious one. The agent doesn't work without an LLM backend. You 
 - Open the app, search for a model (I use `qwen2.5-coder-7b-instruct-mlx` on Apple Silicon)
 - Click Load, then go to Local Server → Start Server
 - The server runs on `http://localhost:1234`
-- Set `ENABLE_LM_STUDIO=true` and `LM_STUDIO_MODEL=<your model name>` in `.config`
+- Set `ENABLE_OLLAMA=true` and `OLLAMA_MODEL=qwen3.5:9b` in `.config`
 
 **Ollama** (better for Linux / headless servers):
 ```bash

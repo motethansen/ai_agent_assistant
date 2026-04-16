@@ -1,9 +1,9 @@
 # AI Agent Assistant
 
-A local-first personal AI assistant that bridges your Markdown notes (Obsidian + LogSeq), your calendar, and your task lists — all from the terminal, powered by local LLMs.
+A local-first personal AI assistant that bridges your Markdown notes (Obsidian + LogSeq), your calendar, and your task lists — all from the terminal, powered by local LLMs. Optimized for **headless, low-memory operation** on Apple Silicon and Linux.
 
-> **Primary LLM**: LM Studio (local, no cloud required)
-> **Fallback chain**: LM Studio → Groq → Gemini → OpenAI → Claude
+> **Primary LLM**: Ollama (local, headless)
+> **Fallback chain**: Ollama → Groq → Gemini → OpenAI → Claude
 
 ---
 
@@ -31,14 +31,13 @@ These must be installed and running before `./install.sh` will fully succeed.
 | **Python 3.11+** | Runtime | `brew install python@3.12` (macOS) / `apt install python3.12` (Linux) |
 | **Git** | Clone and updates | `brew install git` / `apt install git` |
 
-### Local LLM — choose one (or both)
+### Local LLM (Headless)
 
 | Dependency | Why | Install |
 |---|---|---|
-| **LM Studio** _(recommended)_ | Primary local LLM inference — no internet required after model download. Provides a model management GUI. | [lmstudio.ai](https://lmstudio.ai) — download the macOS or Linux app, open it, load a model, and enable the local server (port 1234) |
-| **Ollama** _(alternative)_ | Headless local LLM — better for Linux servers without a GUI | `curl -fsSL https://ollama.com/install.sh \| sh` then `ollama pull qwen2.5:14b` |
+| **Ollama** | **Headless local LLM** — zero GUI overhead, significantly faster and lower-RAM. Best for Apple Silicon and Linux. | `curl -fsSL https://ollama.com/install.sh \| sh` then `ollama pull qwen3.5:9b` |
 
-> You need at least one local LLM **or** a cloud API key (Gemini/OpenAI). LM Studio is the default.
+> You need at least one local LLM **or** a cloud API key (Gemini/OpenAI). **Ollama is the primary backend.**
 
 ### Notes & Vault Tools — you need the folders, not the apps
 
@@ -79,11 +78,12 @@ Only needed if LM Studio / Ollama are unavailable or you want cloud fallback.
 | **Apple Calendar** | Push events from `/add-event` directly into Apple Calendar | Must have granted Calendar access to Terminal in System Settings → Privacy → Automation |
 | **Apple Reminders** export | Sync Reminders into Obsidian planner | Run `python debug_reminders.py` to export to `datainput/reminders.json` via AppleScript |
 
-### Optional — NanoClaw (containerised agents)
+### Optional — Tool-Calling & Automation
 
-| Dependency | Why | Notes |
+| Dependency | Why | Install |
 |---|---|---|
-| **Docker** | Run ObsidianAgent and LogSeqAgent in isolated containers | Set `NANOCLAW_ENABLED=true` in `.config` after `docker compose build` |
+| **FastAPI** | Internal **API Server** (`api_server.py`) — serves as the "brain" and Tool hub. Replaces NanoClaw Docker skills. | `pip install fastapi uvicorn` (done by installer) |
+| **Docker** | Runs n8n for scheduled automation and Google connector | [orbstack.dev](https://orbstack.dev) (macOS) / [docs.docker.com](https://docs.docker.com/desktop/) |
 
 ---
 
@@ -119,17 +119,14 @@ All settings live in `.config` (copy from `config.example`). **Never commit `.co
 | Key | Description | Example |
 |---|---|---|
 | `AI_Assistant_Token` | HuggingFace token — used for RAG embeddings and the Inference API | `hf_...` |
-| `LM_STUDIO_MODEL` | Model loaded in LM Studio | `qwen2.5-coder-7b-instruct-mlx` |
-| `ENABLE_LM_STUDIO` | Use LM Studio as primary LLM | `true` |
-| `ENABLE_OLLAMA` | Use Ollama (alternative local LLM) | `false` |
-| `ENABLE_GROQ` | Use Groq cloud inference (free tier) | `false` |
-| `GROQ_API_KEY` | Groq API key — get one at [console.groq.com](https://console.groq.com) | `gsk_...` |
-| `GROQ_MODEL` | Groq model ID — see [console.groq.com/docs/models](https://console.groq.com/docs/models) | `llama-3.3-70b-versatile` |
-| `LLM_PRIORITY` | Fallback chain | `lmstudio,groq,gemini,openai,claude` |
-| `ROUTING_CHAT` | LLM for chat | `lmstudio` |
-| `ROUTING_SCHEDULING` | LLM for scheduling | `lmstudio` |
-| `ROUTING_PARSING` | LLM for task parsing | `lmstudio` |
-| `ROUTING_PLANNING` | LLM for daily plan generation | `lmstudio` |
+| `ENABLE_OLLAMA` | Use Ollama (primary local backend) | `true` |
+| `OLLAMA_MODEL` | Default Ollama model | `qwen3.5:9b` |
+| `OLLAMA_NUM_CTX` | Context window size (optimized for RAM) | `4096` |
+| `LLM_PRIORITY` | Fallback chain | `ollama,groq,gemini,openai,claude` |
+| `ROUTING_CHAT` | LLM for chat | `ollama` |
+| `ROUTING_SCHEDULING` | LLM for scheduling | `ollama` |
+| `ROUTING_PARSING` | LLM for task parsing | `ollama` |
+| `ROUTING_PLANNING` | LLM for daily plan generation | `ollama` |
 | `WORKSPACE_DIR` | Path to Obsidian vault | `/path/to/vault` |
 | `LOGSEQ_DIR` | Path to LogSeq graph | `/path/to/logseq` |
 | `OBSIDIAN_PLANNER_FILE` | Planner note (relative to vault) | `Planner.md` |
@@ -257,18 +254,18 @@ See `README_N8N.md` for detailed import and configuration steps.
 ## LLM Routing
 
 ```
-ROUTING_CHAT=lmstudio          # all chat → LM Studio
-ROUTING_SCHEDULING=lmstudio    # scheduling decisions → LM Studio
-ROUTING_PARSING=lmstudio       # task parsing → LM Studio
-ROUTING_PLANNING=lmstudio      # daily plan generation → LM Studio
-LLM_PRIORITY=lmstudio,groq,gemini,openai,claude   # fallback if LM Studio unavailable
+ROUTING_CHAT=ollama          # all chat → Ollama
+ROUTING_SCHEDULING=ollama    # scheduling decisions → Ollama
+ROUTING_PARSING=ollama       # task parsing → Ollama
+ROUTING_PLANNING=ollama      # daily plan generation → Ollama
+LLM_PRIORITY=ollama,groq,gemini,openai,claude   # fallback if Ollama unavailable
 ```
 
 To route a single query to a specific provider without changing routing config:
 ```
 /ask gemini find tasks about academic papers in obsidian
 /ask groq summarise my overdue tasks
-/ask lmstudio summarise my overdue tasks
+/ask ollama summarise my overdue tasks
 ```
 
 To use Groq as a free cloud fallback (no local GPU needed):
@@ -276,16 +273,6 @@ To use Groq as a free cloud fallback (no local GPU needed):
 ENABLE_GROQ=true
 GROQ_API_KEY=gsk_...
 GROQ_MODEL=llama-3.3-70b-versatile
-LLM_PRIORITY=lmstudio,groq,gemini,openai,claude
-```
-
-Browse all available Groq models at [console.groq.com/docs/models](https://console.groq.com/docs/models) and update `GROQ_MODEL` to switch.
-
-To switch to Ollama as the primary backend:
-```
-ENABLE_OLLAMA=true
-ENABLE_LM_STUDIO=false
-ROUTING_CHAT=ollama
 LLM_PRIORITY=ollama,groq,gemini,openai,claude
 ```
 

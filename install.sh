@@ -129,7 +129,7 @@ select_install_mode() {
     echo ""
     echo -e "${BOLD}Choose your installation mode:${NC}"
     echo ""
-    echo -e "  ${GREEN}1) Full install${NC}  — local AI (LM Studio or Ollama) + optional cloud APIs"
+    echo -e "  ${GREEN}1) Full install${NC}  — local AI (Ollama) + optional cloud APIs"
     echo -e "     Best for privacy / offline use. Needs 4-8 GB RAM for a local model."
     echo ""
     echo -e "  ${CYAN}2) Cloud-only${NC}     — Groq / HuggingFace / OpenAI / Gemini / Claude only"
@@ -140,7 +140,6 @@ select_install_mode() {
     case "$mode_choice" in
         2)
             INSTALL_MODE="cloud"
-            set_config_key "ENABLE_LM_STUDIO" "false"
             set_config_key "ENABLE_OLLAMA" "false"
             # Switch LLM_PRIORITY away from local models if it still points at ollama
             CURRENT_PRIORITY=$(grep -E "^LLM_PRIORITY=" .config | cut -d'=' -f2- | tr -d ' ')
@@ -247,22 +246,8 @@ setup_local_ai() {
         return
     fi
 
-    # Determine which backend is configured (default: LM Studio)
-    LMS_ENABLED=$(awk -F'=' '/^ENABLE_LM_STUDIO[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
+    # Determine which backend is configured
     OLLAMA_ENABLED=$(awk -F'=' '/^ENABLE_OLLAMA[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
-
-    # ── LM Studio path ──
-    if [ "$LMS_ENABLED" == "true" ]; then
-        echo -e "${CYAN}Primary LLM: LM Studio${NC}"
-        if command -v lms > /dev/null 2>&1; then
-            echo -e "${GREEN}lms CLI found.${NC}"
-        else
-            echo -e "${YELLOW}lms CLI not found in PATH.${NC}"
-            echo "  LM Studio must be installed and opened at least once to register 'lms'."
-            echo "  Download: https://lmstudio.ai"
-            echo -e "  ${YELLOW}⚠ Skipping LM Studio start — open LM Studio manually, load a model, and enable the local server.${NC}"
-        fi
-    fi
 
     # ── Ollama path ──
     if [ "$OLLAMA_ENABLED" == "true" ]; then
@@ -285,9 +270,9 @@ setup_local_ai() {
     fi
 
     # ── Neither enabled ──
-    if [ "$LMS_ENABLED" != "true" ] && [ "$OLLAMA_ENABLED" != "true" ]; then
+    if [ "$OLLAMA_ENABLED" != "true" ]; then
         echo -e "${YELLOW}No local LLM enabled in .config.${NC}"
-        echo "  Set ENABLE_LM_STUDIO=true (recommended) or ENABLE_OLLAMA=true"
+        echo "  Set ENABLE_OLLAMA=true"
     fi
 
     ./scripts/manage_services.sh start
@@ -604,25 +589,7 @@ run_service_checks() {
             echo -e "  ${GREEN}✓ HuggingFace enabled${NC}"
         fi
     else
-        # --- LM Studio (primary when enabled) ---
-        if [ "$LMS_ENABLED" == "true" ]; then
-            LMS_MODEL=$(awk -F'=' '/^LM_STUDIO_MODEL[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
-            if command -v lms > /dev/null 2>&1; then
-                if lms ps 2>/dev/null | grep -q .; then
-                    echo -e "  ${GREEN}✓ LM Studio running — model: ${LMS_MODEL}${NC}"
-                else
-                    echo -e "  ${YELLOW}⚠ LM Studio enabled but no model loaded${NC}"
-                    ISSUES+=("LM Studio model not loaded")
-                    ADVICE+=("Open LM Studio, load '${LMS_MODEL:-a model}', and enable the local server — or run: lms server start && lms load ${LMS_MODEL:-<model>}")
-                fi
-            else
-                echo -e "  ${YELLOW}⚠ LM Studio enabled but lms CLI not found in PATH${NC}"
-                ISSUES+=("lms CLI not in PATH (ENABLE_LM_STUDIO=true)")
-                ADVICE+=("Open LM Studio at least once to register the lms CLI, then re-run install.sh")
-            fi
-        fi
-
-        # --- Ollama (shown only when enabled) ---
+        # --- Ollama (primary local backend) ---
         if [ "$OLLAMA_ENABLED" == "true" ]; then
             OLLAMA_HOST=$(awk -F'=' '/^OLLAMA_HOST[ ]*=/ {print $2}' .config 2>/dev/null | tr -d ' \r')
             [ -z "$OLLAMA_HOST" ] && OLLAMA_HOST="http://localhost:11434"
@@ -650,9 +617,6 @@ run_service_checks() {
         if [ "$INSTALL_MODE" == "cloud" ]; then
             ISSUES+=("No cloud LLM responding")
             ADVICE+=("Add at least one API key in .config and set ENABLE_GROQ=true (or ENABLE_GEMINI/OPENAI/CLAUDE=true)")
-        elif [ "$LMS_ENABLED" == "true" ]; then
-            ISSUES+=("LM Studio not responding to API calls")
-            ADVICE+=("Open LM Studio, load '${LMS_MODEL:-a model}', and enable Server (port 1234)")
         else
             ISSUES+=("Ollama LLM not responding")
             ADVICE+=("Run: ollama serve   then: ollama pull <model>   (check OLLAMA_MODEL in .config)")

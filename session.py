@@ -27,21 +27,15 @@ def display_stats():
     # LLM backend status
     print("\n🤖 LLM Backend:")
     try:
-        from ai_orchestration import is_lmstudio_running, is_ollama_running, MODELS_ENABLED
+        from ai_orchestration import is_ollama_running, MODELS_ENABLED
         from config_utils import get_config_value
-        if MODELS_ENABLED.get("lmstudio"):
-            lms_model = get_config_value("LM_STUDIO_MODEL", "")
-            status = "✓ Running" if is_lmstudio_running() else "✗ Not responding"
-            print(f"  LM Studio ({lms_model}): {status}")
         if MODELS_ENABLED.get("ollama"):
             status = "✓ Running" if is_ollama_running() else "✗ Not responding"
             print(f"  Ollama: {status}")
-        routing = get_config_value("ROUTING_CHAT", "lmstudio")
+        routing = get_config_value("ROUTING_CHAT", "ollama")
         print(f"  Active routing: {routing}")
     except Exception as e:
         print(f"  Could not check LLM status: {e}")
-    else:
-        print("  Cannot list models without API key")
 
     # Calendar Status
     print("\n📅 Calendar Integration:")

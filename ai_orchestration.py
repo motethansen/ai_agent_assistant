@@ -10,6 +10,9 @@ try:
     from langchain_ollama import ChatOllama
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.tools import tool
+    from langchain_core.language_models.chat_models import BaseChatModel
+    from langchain_core.messages import BaseMessage, ChatMessage, AIMessage, HumanMessage, SystemMessage
+    from langchain_core.outputs import ChatResult, ChatGeneration
     try:
         from langchain.agents import AgentExecutor, create_tool_calling_agent
     except ImportError:
@@ -19,6 +22,7 @@ except ImportError:
     AgentExecutor = None
     create_tool_calling_agent = None
     ChatPromptTemplate = None
+    BaseChatModel = object
     def tool(func): return func  # Fallback decorator
 
 from rag_agent import RAGAgent
@@ -48,7 +52,6 @@ MODELS_ENABLED = {
     "openai": get_config_value("ENABLE_OPENAI", "false").lower() == "true",
     "claude": get_config_value("ENABLE_CLAUDE", "false").lower() == "true",
     "ollama": get_config_value("ENABLE_OLLAMA", "true").lower() == "true",
-    "lmstudio": get_config_value("ENABLE_LM_STUDIO", "false").lower() == "true",
     "groq": get_config_value("ENABLE_GROQ", "false").lower() == "true",
 }
 
@@ -144,29 +147,6 @@ def list_ollama_models():
     except Exception:
         return []
 
-def is_lmstudio_running():
-    """Checks if the LM Studio daemon is reachable via the lmstudio SDK."""
-    try:
-        import lmstudio as lms
-        lms.list_downloaded_models()
-        return True
-    except Exception:
-        return False
-
-def _call_lmstudio(prompt, system=None, model=None):
-    """Call LM Studio via the official lmstudio Python SDK (WebSocket-based)."""
-    try:
-        import lmstudio as lms
-        model_id = model or get_config_value("LM_STUDIO_MODEL", "")
-        m = lms.llm(model_id)
-        chat = {"messages": [{"role": "user", "content": prompt}]}
-        if system:
-            chat["messages"].insert(0, {"role": "system", "content": system})
-        result = m.respond(chat)
-        return str(result), f"lmstudio/{model_id}"
-    except Exception as e:
-        return f"LLM error: {e}", "lmstudio/unknown"
-
 def is_openai_available():
     """Checks if OpenAI API key is configured and enabled."""
     key = get_config_value("OPENAI_API_KEY", "")
@@ -207,8 +187,6 @@ def _is_model_available(model, try_start=False):
     """Check if a model backend is both enabled and reachable."""
     if model == "ollama":
         return MODELS_ENABLED.get("ollama", False) and is_ollama_running()
-    if model == "lmstudio":
-        return MODELS_ENABLED.get("lmstudio", False) and is_lmstudio_running()
     if model == "gemini":
         return MODELS_ENABLED.get("gemini", False) and api_key and "your_gemini" not in api_key
     if model == "openai":
@@ -237,16 +215,18 @@ def get_routing(task_type="chat", query=""):
     complexity = classify_complexity(query) if query else "simple"
 
     if complexity == "simple":
-        for model in ["lmstudio", "ollama", "groq", "gemini"]:
+        # Prioritize Ollama for simple tasks
+        for model in ["ollama", "groq", "gemini"]:
             if _is_model_available(model, try_start=True):
                 return model
     else:
-        for model in ["lmstudio", "openai", "claude", "groq", "gemini", "ollama"]:
+        # Prioritize Groq/Gemini/OpenAI for complex tasks, then Ollama
+        for model in ["groq", "gemini", "openai", "claude", "ollama"]:
             if _is_model_available(model, try_start=True):
                 return model
 
     # Fallback through priority list
-    priority_str = get_config_value("LLM_PRIORITY", "lmstudio,ollama,groq,gemini,openai,claude")
+    priority_str = get_config_value("LLM_PRIORITY", "ollama,groq,gemini,openai,claude")
     for model in [m.strip().lower() for m in priority_str.split(",")]:
         if _is_model_available(model, try_start=True):
             return model
@@ -256,28 +236,19 @@ def get_routing(task_type="chat", query=""):
         if MODELS_ENABLED.get(model, False):
             return model
 
-    return "lmstudio"
+    return "ollama"
 
 def _build_llm(provider):
     """
     Build and return a (LangChain LLM instance, label) for a specific provider name.
     Does NOT call get_routing() — use this when you already know the provider.
     """
-    if provider == "lmstudio":
-        from langchain_openai import ChatOpenAI
-        lms_model = get_config_value("LM_STUDIO_MODEL", "")
-        lms_host = get_config_value("LM_STUDIO_HOST", "http://localhost:1234")
-        return ChatOpenAI(
-            model=lms_model,
-            base_url=f"{lms_host}/v1",
-            api_key="lm-studio",
-            temperature=0,
-        ), f"lmstudio/{lms_model}"
 
     if provider == "ollama":
-        model = get_config_value("OLLAMA_MODEL", "qwen3:8b")
+        model = get_config_value("OLLAMA_MODEL", "qwen3.5:8b")
         host = get_config_value("OLLAMA_HOST", "http://localhost:11434")
-        ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "8192"))
+        # Default to 4096 for better memory efficiency on Apple Silicon
+        ctx_size = int(get_config_value("OLLAMA_NUM_CTX", "4096"))
         return ChatOllama(model=model, base_url=host, num_ctx=ctx_size, temperature=0), f"ollama/{model}"
 
     if provider == "gemini":
@@ -320,7 +291,7 @@ def _build_llm(provider):
 
 def _get_llm_fallback(exclude=None):
     """Walk LLM_PRIORITY and return the first available (LLM, label) that isn't `exclude`."""
-    priority_str = get_config_value("LLM_PRIORITY", "lmstudio,ollama,groq,gemini,openai,claude")
+    priority_str = get_config_value("LLM_PRIORITY", "ollama,groq,gemini,openai,claude")
     for name in [m.strip().lower() for m in priority_str.split(",")]:
         if name == exclude:
             continue
@@ -329,7 +300,7 @@ def _get_llm_fallback(exclude=None):
                 return _build_llm(name)
             except Exception:
                 continue
-    raise RuntimeError("No LLM backend is available. Check ENABLE_LM_STUDIO / ENABLE_OLLAMA in .config.")
+    raise RuntimeError("No LLM backend is available. Check ENABLE_OLLAMA in .config.")
 
 
 def get_llm(model_type="chat", query=""):

@@ -29,10 +29,11 @@ graph TD
     end
 
     subgraph "LLM Backends"
-        LMStudio["LM Studio (primary — local)"]
+        Ollama["Ollama (primary — local, headless)"]
         Gemini["Gemini API (fallback)"]
         OpenAI["OpenAI API (fallback)"]
         Claude["Claude API (fallback)"]
+        Groq["Groq API (fallback)"]
     end
 
     subgraph "Automation"
@@ -65,7 +66,7 @@ graph TD
     LocalCal --> TermViews
 
     %% LLM routing
-    AIOrch -->|ROUTING_CHAT/SCHEDULING/PARSING/PLANNING| LMStudio
+    AIOrch -->|ROUTING_CHAT/SCHEDULING/PARSING/PLANNING| Ollama
     AIOrch -.->|fallback| Gemini
     AIOrch -.->|fallback| OpenAI
     AIOrch -.->|fallback| Claude
@@ -123,10 +124,10 @@ Rich terminal rendering for calendar and task data. All views read from Obsidian
 | Cal day | `/cal-day YYYY-MM-DD` | Single-day drill-down |
 
 ### ai_orchestration
-The LLM router. Routes requests to the correct backend based on `ROUTING_*` config keys. Falls back through `LLM_PRIORITY` chain if the primary is unavailable.
+The LLM router. Routes requests to the correct backend based on `ROUTING_*` config keys. Defaults to **Ollama** for all tasks. Falls back through `LLM_PRIORITY` chain if the primary is unavailable.
 
-- **Providers**: `lmstudio`, `ollama`, `gemini`, `openai`, `claude`
-- **Key functions**: `generate(prompt)`, `generate_with(provider, prompt)`, `generate_stream(prompt)`
+- **Providers**: `ollama`, `gemini`, `openai`, `claude`, `groq`
+- **Key functions**: `generate(prompt)`, `get_llm(type)`, `run_agent_query(input)`
 
 ### cron_job.py
 Orchestrates all agents in sequence with a lockfile (prevents concurrent runs) and a 5-minute hard timeout. Run directly or triggered via n8n's `POST /webhook/morning-plan`.
@@ -141,6 +142,10 @@ Webhook server for n8n integration. Runs on `WEBHOOK_PORT` (default 5678).
 
 | Endpoint | Description |
 |----------|-------------|
+| `GET /vault/read` | Read a file from the Obsidian vault |
+| `POST /vault/write` | Create/update an Obsidian file (replaces NanoClaw) |
+| `GET /vault/tasks` | List all tasks from Obsidian vault |
+| `GET /logseq/tasks` | List recent LogSeq journal context |
 | `POST /webhook/add-task` | Add a task to today's LogSeq journal |
 | `GET /webhook/backlog` | Return unified task backlog as JSON |
 | `POST /webhook/plan` | Trigger scheduling via ai_orchestration |
@@ -169,11 +174,10 @@ Webhook server for n8n integration. Runs on `WEBHOOK_PORT` (default 5678).
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `ENABLE_LM_STUDIO` | `false` | Enable LM Studio backend |
-| `LM_STUDIO_MODEL` | — | Model name loaded in LM Studio |
-| `ENABLE_OLLAMA` | `true` | Enable Ollama backend |
-| `OLLAMA_MODEL` | `llama3:latest` | Ollama model name |
-| `LLM_PRIORITY` | `ollama,gemini,openai,claude` | Fallback chain |
+| `ENABLE_OLLAMA` | `true` | Enable Ollama (primary local backend) |
+| `OLLAMA_MODEL` | `qwen3.5:9b` | Default Ollama model |
+| `OLLAMA_NUM_CTX` | `4096` | Context window size (optimized for RAM) |
+| `LLM_PRIORITY` | `ollama,groq,gemini,openai,claude` | Fallback chain |
 | `ROUTING_CHAT` | `ollama` | LLM for chat |
 | `ROUTING_SCHEDULING` | `ollama` | LLM for scheduling |
 | `ROUTING_PARSING` | `ollama` | LLM for parsing |
