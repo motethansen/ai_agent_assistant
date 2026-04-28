@@ -153,7 +153,8 @@ fi
 if [[ "$LLM_CHOICE" != "3" ]]; then
     echo ""
     echo "  Groq API key (optional) — get free key at: https://console.groq.com"
-    read -p "$(echo -e ${BOLD}Groq API key (press Enter to skip): ${NC})" GROQ_API_KEY
+    printf "${BOLD}Groq API key (press Enter to skip): ${NC}"
+    read GROQ_API_KEY
 fi
 
 # ── 7. Paths ───────────────────────────────────────────────────────────────────
