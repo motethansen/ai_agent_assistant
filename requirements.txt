@@ -1,47 +1,23 @@
-watchdog
-google-api-python-client
-google-auth-oauthlib
-google-auth-httplib2
-google-genai
+# AI Agent Assistant — dependencies
+# Core (always installed)
+google-genai>=1.0.0              # Gemini (Flash + Pro) — new SDK
+groq>=0.11.0                     # Groq (Llama 3.3)
+icalendar>=5.0.0                 # ICS calendar read/write
+rich>=13.0.0                     # Terminal UI
+python-frontmatter>=1.1.0        # Obsidian YAML frontmatter
+watchdog>=4.0.0                  # File watcher for cron sync
+python-dateutil>=2.9.0           # Date parsing
+httpx>=0.27.0                    # HTTP client
+pyyaml>=6.0.0                    # YAML parsing
+pytest>=8.0.0                    # Tests
+pytest-mock>=3.0.0               # Test mocks
 
-# Direct LLM SDKs
-anthropic
-openai
+# Optional — uncomment to enable
 
-# LangChain — RAG (Chroma vector store + document loaders) + LLM streaming adapters
-langchain-core
-langchain-community
-langchain-chroma
-langchain-text-splitters
-langchain-ollama
-langchain-openai          # used by LM Studio (OpenAI-compat) and OpenAI backends
-langchain-google-genai    # used by Gemini backend
-langchain-anthropic       # used by Claude backend
+# Ollama (local LLM — only if OLLAMA_ENABLED=true in .config)
+# ollama>=0.3.0
 
-# Testing & Reporting
-pytest
-pytest-mock
-pytest-html
-
-# Frontend
-streamlit
-
-# Apple Reminders retrieval
-pyobjc-framework-EventKit
-
-# RAG & Contextual Intelligence
-chromadb
-sentence-transformers
-pypdf
-unstructured[pdf]
-tiktoken
-EbookLib
-beautifulsoup4
-pyyaml
-requests
-
-icalendar
-
-# Rich Terminal UI & Input
-rich
-prompt_toolkit
+# Google Calendar API (only if GOOGLE_CAL_ENABLED=true in .config)
+# google-auth>=2.0.0
+# google-auth-httplib2>=0.2.0
+# google-api-python-client>=2.0.0

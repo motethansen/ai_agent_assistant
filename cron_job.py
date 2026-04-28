@@ -1,285 +1,88 @@
 """
-Cron Job Orchestrator
-
-Runs all agents in sequence. Designed to be called by cron every hour,
-or triggered via n8n webhook.
-
-Safety features:
-  - Lockfile prevents concurrent runs (stale locks auto-expire after MAX_RUN_SECONDS).
-  - Global timeout kills the process if it hangs.
-
-Agents run in this order:
-  1. DataInput Agent   — sync Apple Reminders → Obsidian planner, then organise
-  2. LogSeq LATER Agent — scan journals + pages, write summary to Obsidian
-  3. Calendar Planning Agent — Gemini analyses calendar + tasks, saves weekly plan
-  4. (Legacy) Google Calendar ↔ Markdown sync via AI scheduler
+Background cron runner — runs the sync agent on a configurable interval.
 
 Usage:
-  python cron_job.py             # run all agents
-  python cron_job.py --agents datainput logseq  # run specific agents only
+    python cron_job.py              # run once and exit
+    python cron_job.py --loop       # run continuously on SYNC_INTERVAL_MINUTES
+
+The process uses a lock file to prevent concurrent runs.
+Set up via launchd (macOS) or crontab — see install.sh.
 """
 
-import os
-import sys
-import signal
-import datetime
 import argparse
-import atexit
-import subprocess
+import datetime
+import sys
+import time
+from pathlib import Path
 
-from config_utils import get_config_value
-
-# ---------------------------------------------------------------------------
-# Safety: global timeout and lockfile
-# ---------------------------------------------------------------------------
-
-MAX_RUN_SECONDS = 300  # 5 minutes — hard kill if exceeded
-LOCKFILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cron_job.lock")
+_LOCK_FILE = Path(__file__).parent / "output" / ".cron.lock"
+_LOG_FILE  = Path(__file__).parent / "output" / "cron.log"
+_LOCK_TIMEOUT_SECONDS = 300
 
 
-def _timeout_handler(signum, frame):
-    print(f"\n[TIMEOUT] cron_job.py exceeded {MAX_RUN_SECONDS}s — terminating.")
-    _release_lock()
-    sys.exit(1)
+def _log(msg: str) -> None:
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{ts}] {msg}"
+    print(line, flush=True)
+    _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_LOG_FILE, "a") as f:
+        f.write(line + "\n")
 
 
-def _acquire_lock():
-    """Create a lockfile with our PID. Abort if another instance is running."""
-    if os.path.exists(LOCKFILE):
-        try:
-            with open(LOCKFILE, "r") as f:
-                old_pid = int(f.read().strip())
-            # Check if old process is still alive
-            os.kill(old_pid, 0)
-            # Process exists — check if the lock is stale (older than MAX_RUN_SECONDS)
-            lock_age = datetime.datetime.now().timestamp() - os.path.getmtime(LOCKFILE)
-            if lock_age > MAX_RUN_SECONDS:
-                print(f"[LOCK] Stale lock from PID {old_pid} ({lock_age:.0f}s old) — removing.")
-                try:
-                    os.kill(old_pid, signal.SIGTERM)
-                except ProcessLookupError:
-                    pass
-            else:
-                print(f"[LOCK] Another cron_job.py is running (PID {old_pid}) — aborting.")
-                sys.exit(0)
-        except (ProcessLookupError, ValueError, OSError):
-            # Old process is gone — lock is stale
-            pass
-
-    with open(LOCKFILE, "w") as f:
-        f.write(str(os.getpid()))
+def _acquire_lock() -> bool:
+    _LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if _LOCK_FILE.exists():
+        age = time.time() - _LOCK_FILE.stat().st_mtime
+        if age < _LOCK_TIMEOUT_SECONDS:
+            return False
+        _LOCK_FILE.unlink()
+    _LOCK_FILE.write_text(str(datetime.datetime.now()))
+    return True
 
 
-def _release_lock():
-    try:
-        if os.path.exists(LOCKFILE):
-            with open(LOCKFILE, "r") as f:
-                pid = int(f.read().strip())
-            if pid == os.getpid():
-                os.remove(LOCKFILE)
-    except Exception:
-        pass
+def _release_lock() -> None:
+    if _LOCK_FILE.exists():
+        _LOCK_FILE.unlink()
 
 
-# Register cleanup
-atexit.register(_release_lock)
-signal.signal(signal.SIGALRM, _timeout_handler)
-
-
-def _ts():
-    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def run_datainput_agent():
-    print(f"\n[{_ts()}] === DataInput Agent ===")
-    try:
-        import datainput_agent
-        result = datainput_agent.run(organise=True)
-        print(f"  New reminders synced: {len(result['new_tasks'])}")
-        print(f"  Planner organised:    {result['organised']}")
-        return result
-    except Exception as e:
-        print(f"  ERROR: {e}")
-        return None
-
-
-def run_logseq_later_agent():
-    print(f"\n[{_ts()}] === LogSeq LATER Agent ===")
-    try:
-        import logseq_later_agent
-        tasks = logseq_later_agent.run(write_to_obsidian=True)
-        print(f"  LATER tasks found: {len(tasks)}")
-        return tasks
-    except Exception as e:
-        print(f"  ERROR: {e}")
-        return []
-
-
-def run_google_tasks_agent():
-    """Pull Google Tasks → Obsidian, push Obsidian completions → Google Tasks."""
-    enabled = get_config_value("ENABLE_GOOGLE_TASKS", "false").lower() == "true"
-    if not enabled:
-        print(f"[{_ts()}] google_tasks: ENABLE_GOOGLE_TASKS=false — skipping")
-        return
-    print(f"\n[{_ts()}] === Google Tasks Agent ===")
-    try:
-        import google_tasks_agent
-        result = google_tasks_agent.run(sync_back=True)
-        # ADR-010: n8n handles the actual work; result is success/fail of triggers
-        pulled = "triggered" if result and result.get("pulled") else "failed/skipped"
-        pushed = "triggered" if result and result.get("pushed") else "failed/skipped"
-        print(f"[{_ts()}] google_tasks: pull {pulled}, push {pushed}")
-        return result
-    except Exception as e:
-        print(f"[{_ts()}] google_tasks: error — {e}")
-        return None
-
-
-def run_calendar_planning_agent():
-    print(f"\n[{_ts()}] === Calendar Planning Agent ===")
-    try:
-        import calendar_planning_agent
-        result = calendar_planning_agent.run(write_to_obsidian=False)
-        if result:
-            print("  Plan generated — see datainput/calendar_suggestions.md")
-        return result
-    except Exception as e:
-        print(f"  ERROR: {e}")
-        return None
-
-
-def run_legacy_calendar_sync():
-    """
-    Original cron logic: generate AI schedule and sync to Google Calendar.
-    Kept as optional step — only runs if CALENDAR_SYNC=true in .config.
-    """
-    if get_config_value("CALENDAR_SYNC", "false").lower() != "true":
+def run_once() -> None:
+    if not _acquire_lock():
+        _log("skipped — another instance is running")
         return
 
-    print(f"\n[{_ts()}] === Legacy Calendar Sync ===")
     try:
-        import main as app
-        import calendar_manager
-        import ai_orchestration
-
-        obsidian_path = get_config_value("WORKSPACE_DIR", ".")
-        calendar_id   = get_config_value("CALENDAR_ID", "primary")
-
-        tasks = app.get_unified_tasks(obsidian_path)
-        if not tasks:
-            print("  No tasks found.")
-            return
-
-        service = calendar_manager.get_calendar_service()
-        if not service:
-            print("  Google Calendar service unavailable.")
-            return
-
-        busy_slots = calendar_manager.get_busy_slots(service, calendar_ids=[calendar_id])
-        logseq_dir = get_config_value("LOGSEQ_DIR", None)
-
-        schedule = ai_orchestration.generate_schedule(
-            tasks, busy_slots,
-            workspace_dir=obsidian_path,
-            logseq_dir=logseq_dir
+        _log("sync started")
+        from agents.sync_agent import run as sync_run
+        result = sync_run()
+        _log(
+            f"sync done — {result['tasks_added']} tasks, "
+            f"{result['notes_added']} notes, {result['skipped']} skipped"
         )
-
-        if schedule:
-            calendar_manager.create_events(service, schedule, calendar_id=calendar_id)
-            target_file = os.path.join(obsidian_path, "daily_note.md")
-            if os.path.isdir(obsidian_path) and os.path.exists(target_file):
-                from observer import update_markdown_plan
-                update_markdown_plan(target_file, schedule)
-            print("  Calendar sync complete.")
-        else:
-            print("  Failed to generate schedule.")
-
     except Exception as e:
-        print(f"  ERROR: {e}")
+        _log(f"sync error: {e}")
+    finally:
+        _release_lock()
 
 
-def run_health_checks():
-    print(f"\n[{_ts()}] === Health Checks ===")
-    try:
-        import update_manager
-        update_manager.run_all_checks()
-    except Exception as e:
-        print(f"  ERROR: {e}")
-
-
-def run_reschedule_agent(target=None):
-    """
-    Move overdue tasks to a target date.
-    Target defaults to end of next week if not specified.
-    Can be overridden via env var RESCHEDULE_TARGET.
-    """
-    target = target or os.environ.get("RESCHEDULE_TARGET", "end of next week")
-    print(f"\n[{_ts()}] === Reschedule Agent (target: {target}) ===")
-    try:
-        import task_reschedule_agent
-        result = task_reschedule_agent.run(target=target)
-        if result:
-            print(f"  LogSeq moved:   {result.get('logseq_moved', 0)}")
-            print(f"  Obsidian moved: {result.get('obsidian_moved', 0)}")
-        return result
-    except Exception as e:
-        print(f"  ERROR: {e}")
-        return None
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-AGENT_MAP = {
-    "datainput":   run_datainput_agent,
-    "logseq":      run_logseq_later_agent,
-    "google_tasks": run_google_tasks_agent,
-    "calendar":    run_calendar_planning_agent,
-    "legacy_sync": run_legacy_calendar_sync,
-    "health":      run_health_checks,
-    "reschedule":  run_reschedule_agent,
-}
-
-ALL_AGENTS = ["datainput", "logseq", "google_tasks", "calendar", "legacy_sync", "health"]
-
-
-def main():
-    # Prevent concurrent runs and enforce hard timeout
-    _acquire_lock()
-    signal.alarm(MAX_RUN_SECONDS)
-
-    parser = argparse.ArgumentParser(description="AI Agent Assistant — Cron Orchestrator")
-    parser.add_argument(
-        "--agents", nargs="*",
-        help=f"Run specific agents. Choices: {', '.join(AGENT_MAP.keys())}. Default: all."
-    )
-    args = parser.parse_args()
-
-    agents_to_run = args.agents if args.agents else ALL_AGENTS
-
-    print(f"\n{'='*60}")
-    print(f"Cron Sync Started at {_ts()} (PID {os.getpid()}, timeout {MAX_RUN_SECONDS}s)")
-    print(f"Agents: {', '.join(agents_to_run)}")
-    print(f"{'='*60}")
-
-    results = {}
-    for name in agents_to_run:
-        fn = AGENT_MAP.get(name)
-        if fn:
-            results[name] = fn()
-        else:
-            print(f"  Unknown agent: {name}")
-
-    print(f"\n[{_ts()}] Cron Sync Complete.")
-
-    # Rotate logs — archive entries older than 7 days
-    rotate_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts", "rotate_logs.sh")
-    if os.path.exists(rotate_script):
-        subprocess.run(["bash", rotate_script], capture_output=True)
-
-    return results
+def run_loop(interval_minutes: int) -> None:
+    _log(f"cron loop started — interval: {interval_minutes} min")
+    while True:
+        run_once()
+        time.sleep(interval_minutes * 60)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="AI Agent Assistant cron runner")
+    parser.add_argument("--loop", action="store_true", help="Run continuously on schedule")
+    parser.add_argument("--interval", type=int, default=None, help="Override sync interval (minutes)")
+    args = parser.parse_args()
+
+    sys.path.insert(0, str(Path(__file__).parent))
+    import config
+
+    interval = args.interval or config.sync.interval_minutes()
+
+    if args.loop:
+        run_loop(interval)
+    else:
+        run_once()

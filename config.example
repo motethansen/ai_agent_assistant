@@ -1,58 +1,71 @@
-# Copy this file to .config and fill in your paths and model names.
-# DO NOT COMMIT .config TO GIT — it contains your API keys.
+# AI Agent Assistant — configuration template
+# Copy to .config and fill in your values:  cp config.example .config
+# Or run the interactive setup:             ./install.sh
+#
+# DO NOT COMMIT .config — it contains your API keys (.gitignore already covers it)
 
-# ── Ollama (primary local LLM — https://ollama.com) ──────────────────────
-# Download Ollama, then run: ollama pull qwen3.5:9b
-ENABLE_OLLAMA=true
-OLLAMA_MODEL=qwen3.5:9b
-OLLAMA_HOST=http://localhost:11434
-OLLAMA_NUM_CTX=4096                   # Context window (4096-8192 recommended)
+# ── Paths (required) ──────────────────────────────────────────────────────────
 
-# ── Notes directories ─────────────────────────────────────────────────────────
 WORKSPACE_DIR=/path/to/your/obsidian/vault
 LOGSEQ_DIR=/path/to/your/logseq/graph
-OBSIDIAN_PLANNER_FILE=Planner.md      # relative path inside WORKSPACE_DIR
-LOGSEQ_JOURNAL_DAYS=30                # how many recent journal days to scan
 
-# ── Planning preferences ──────────────────────────────────────────────────────
-CHRONOTYPE=morning_owl                # morning_owl | night_owl | balanced
-DEEP_WORK_START=09:00
-DEEP_WORK_END=12:00
-FOCUS_CATEGORIES=dev,writing,learning # comma-separated focus areas
+# File names are relative to WORKSPACE_DIR
+OBSIDIAN_DASHBOARD_FILE=Dashboard.md
+
+# How many recent LogSeq journal days to scan on each sync
+LOGSEQ_JOURNAL_DAYS=2
 
 # ── LLM routing ───────────────────────────────────────────────────────────────
-ROUTING_CHAT=ollama
-ROUTING_SCHEDULING=ollama
-ROUTING_PARSING=ollama
-ROUTING_PLANNING=ollama
-LLM_PRIORITY=ollama,gemini,openai,claude
+# Assign a provider to each task type. Available values:
+#   gemini-flash  → Gemini 2.0 Flash (free tier, recommended default)
+#   gemini-pro    → Gemini 1.5 Pro (free tier, lower rate limit — use for planning)
+#   groq          → Groq Llama 3.3 70B (free tier, very fast)
+#   ollama        → Local Ollama (only if OLLAMA_ENABLED=true)
 
-# ── Cloud API keys (optional — fallback only) ─────────────────────────────────
-ENABLE_GEMINI=false
-# GEMINI_API_KEY=your_key_here
+ROUTING_CHAT=gemini-flash        # interactive chat + Q&A
+ROUTING_PLANNING=gemini-pro      # day/week schedule generation
+ROUTING_NOTES=gemini-flash       # note organisation + wikilink suggestions
+ROUTING_QUICK=groq               # fast one-liners, task parsing
 
-ENABLE_OPENAI=false
-# OPENAI_API_KEY=your_key_here
+# ── Gemini (Google AI Studio — free tier) ─────────────────────────────────────
+# Get your free API key at: https://aistudio.google.com
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_FLASH_MODEL=gemini-2.0-flash
+GEMINI_PRO_MODEL=gemini-1.5-pro
 
-ENABLE_CLAUDE=false
-# CLAUDE_API_KEY=your_key_here
+# ── Groq (free tier) ─────────────────────────────────────────────────────────
+# Get your free API key at: https://console.groq.com
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=llama-3.3-70b-versatile
 
-# ── Local ICS calendar (no credentials required) ─────────────────────────────
-LOCAL_CALENDAR_FILE=datainput/local_calendar.ics
+# ── Ollama (local — optional) ─────────────────────────────────────────────────
+# Set to true only if Ollama is installed (install.sh can do this for you)
+OLLAMA_ENABLED=false
+OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_HOST=http://localhost:11434
 
-# ── Google Tasks two-way sync (via n8n) ───────────────────────────────────────
-# Google Calendar and Tasks credentials are managed in n8n — see INSTALL.md
-ENABLE_GOOGLE_TASKS=false
-GOOGLE_TASKS_LIST=@default
-ENABLE_GOOGLE_CALENDAR=false
+# ── Planning preferences ──────────────────────────────────────────────────────
+CHRONOTYPE=morning_owl           # morning_owl | night_owl | balanced
+DEEP_WORK_START=09:00
+DEEP_WORK_END=12:00
+FOCUS_CATEGORIES=dev,writing,learning
 
-# ── n8n workflow automation (optional) ────────────────────────────────────────
-# docker compose up -d n8n   →   http://localhost:5679
-# python api_server.py       →   http://localhost:5678
-N8N_WEBHOOK_URL=http://localhost:5679/webhook
-WEBHOOK_PORT=5678
+# ── Sync ──────────────────────────────────────────────────────────────────────
+# How often the background sync agent runs (LogSeq → Obsidian)
+SYNC_INTERVAL_MINUTES=30
 
-# ── Apple Calendar integration (macOS only) ───────────────────────────────────
-# Name of the Apple Calendar to push events to when using /add-event
-# Check the Calendar app for the name (e.g. 'Home', 'Work', 'Calendar')
+# ── Calendar ──────────────────────────────────────────────────────────────────
+# Tasks tagged #gcal in Obsidian are synced to calendar
+# Change the tag if you prefer a different label (e.g. cal, calendar)
+GCAL_TAG=gcal
+
+# ICS file — always generated as a drag-drop fallback (no credentials needed)
+LOCAL_CALENDAR_FILE=output/local_calendar.ics
+
+# Google Calendar API (optional — ICS export always works without this)
+# Set to true and provide a credentials JSON file to push events directly
+GOOGLE_CAL_ENABLED=false
+GOOGLE_CAL_CREDENTIALS=
+
+# Apple Calendar (macOS only) — name of the calendar to push events to
 APPLE_CALENDAR_NAME=Home
