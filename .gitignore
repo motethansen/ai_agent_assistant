@@ -31,3 +31,11 @@ vector_db/
 
 # Logs
 logs/
+
+# Generated runtime files
+output/*.log
+output/*.ics
+output/.synced_hashes.json
+output/.cron.lock
+output/chat_history.json
+output/.synced_reminders.json
