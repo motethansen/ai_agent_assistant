@@ -5,29 +5,34 @@ Task types map to providers via .config ROUTING_* keys.
 Call pattern:
     from llm.router import ask, stream, provider_for
     response = ask("Summarise my tasks", task="planning")
+    response = ask("Follow-up", task="chat", history=[{"role": "user", ...}, ...])
 """
 
 import config
 from typing import Literal, Generator
 
-TaskType = Literal["chat", "planning", "notes", "quick", "offline"]
+TaskType = Literal["chat", "planning", "notes", "quick", "offline", "reasoning"]
 
-# Maps config provider names to their modules (lazy import to avoid hard dep on ollama)
 _PROVIDER_MAP = {
-    "gemini-flash": ("llm.gemini", {"model": "flash"}),
-    "gemini-pro":   ("llm.gemini", {"model": "pro"}),
-    "groq":         ("llm.groq",   {}),
-    "ollama":       ("llm.ollama", {}),
+    "gemini-flash": ("llm.gemini",   {"model": "flash"}),
+    "gemini-pro":   ("llm.gemini",   {"model": "pro"}),
+    "groq":         ("llm.groq",     {}),
+    "deepseek":     ("llm.deepseek", {}),
+    "ollama":       ("llm.ollama",   {}),
 }
+
+# Preference order for fallback chain (primary is always tried first)
+_FALLBACK_ORDER = ["gemini-flash", "gemini-pro", "groq", "deepseek", "ollama"]
 
 
 def _routing_key(task: TaskType) -> str:
     return {
-        "chat":     config.llm.routing_chat(),
-        "planning": config.llm.routing_planning(),
-        "notes":    config.llm.routing_notes(),
-        "quick":    config.llm.routing_quick(),
-        "offline":  config.llm.routing_offline(),
+        "chat":      config.llm.routing_chat(),
+        "planning":  config.llm.routing_planning(),
+        "notes":     config.llm.routing_notes(),
+        "quick":     config.llm.routing_quick(),
+        "offline":   config.llm.routing_offline(),
+        "reasoning": config.llm.routing_reasoning(),
     }[task]
 
 
@@ -43,7 +48,6 @@ def _kwargs_for(name: str) -> dict:
 
 
 def provider_for(task: TaskType) -> str:
-    """Return the provider name configured for this task type."""
     return _routing_key(task)
 
 
@@ -55,10 +59,17 @@ def is_available(provider_name: str) -> bool:
         return False
 
 
-def ask(prompt: str, task: TaskType = "chat", system: str = "") -> str:
+def ask(
+    prompt: str,
+    task: TaskType = "chat",
+    system: str = "",
+    history: list[dict] | None = None,
+) -> str:
     """
     Send a prompt to the configured provider for this task type.
-    Falls back to the next available provider if the primary fails.
+    Falls back through the chain if the primary provider fails.
+
+    history: optional list of prior turns [{"role": "user"|"assistant", "content": str}, ...]
     """
     primary = _routing_key(task)
     candidates = _build_fallback_chain(primary)
@@ -70,7 +81,7 @@ def ask(prompt: str, task: TaskType = "chat", system: str = "") -> str:
             if not mod.is_available():
                 continue
             kwargs = _kwargs_for(name)
-            return mod.chat(prompt, system=system, **kwargs)
+            return mod.chat(prompt, system=system, history=history, **kwargs)
         except Exception as e:
             last_error = e
             continue
@@ -81,10 +92,17 @@ def ask(prompt: str, task: TaskType = "chat", system: str = "") -> str:
     )
 
 
-def stream(prompt: str, task: TaskType = "chat", system: str = "") -> Generator[str, None, None]:
+def stream(
+    prompt: str,
+    task: TaskType = "chat",
+    system: str = "",
+    history: list[dict] | None = None,
+) -> Generator[str, None, None]:
     """
     Stream response chunks from the configured provider.
     Falls back to ask() (non-streaming) if provider doesn't support streaming.
+
+    history: optional list of prior turns [{"role": "user"|"assistant", "content": str}, ...]
     """
     primary = _routing_key(task)
     candidates = _build_fallback_chain(primary)
@@ -96,10 +114,10 @@ def stream(prompt: str, task: TaskType = "chat", system: str = "") -> Generator[
                 continue
             kwargs = _kwargs_for(name)
             if hasattr(mod, "stream"):
-                yield from mod.stream(prompt, system=system, **kwargs)
+                yield from mod.stream(prompt, system=system, history=history, **kwargs)
                 return
             else:
-                yield mod.chat(prompt, system=system, **kwargs)
+                yield mod.chat(prompt, system=system, history=history, **kwargs)
                 return
         except Exception:
             continue
@@ -108,21 +126,18 @@ def stream(prompt: str, task: TaskType = "chat", system: str = "") -> Generator[
 
 
 def _build_fallback_chain(primary: str) -> list[str]:
-    """Primary provider first, then remaining providers in preference order."""
-    preference = ["gemini-flash", "gemini-pro", "groq", "ollama"]
-    chain = [primary] + [p for p in preference if p != primary]
-    return chain
+    return [primary] + [p for p in _FALLBACK_ORDER if p != primary]
 
 
 def all_providers() -> list[dict]:
     """Return status info for all known providers — used by /status and /model."""
     results = []
-    for name in ["gemini-flash", "gemini-pro", "groq", "ollama"]:
+    for name in _FALLBACK_ORDER:
         try:
             mod = _import_provider(name)
             info = mod.info()
             info["configured_for"] = [
-                task for task in ("chat", "planning", "notes", "quick", "offline")
+                task for task in ("chat", "planning", "notes", "quick", "offline", "reasoning")
                 if _routing_key(task) == name
             ]
             results.append(info)

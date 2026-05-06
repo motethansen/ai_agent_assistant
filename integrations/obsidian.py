@@ -168,6 +168,7 @@ class ObsidianVault:
                 rel = str(abs_path.relative_to(self.vault_dir))
                 try:
                     text = abs_path.read_text(encoding="utf-8", errors="replace")
+                    mtime = abs_path.stat().st_mtime
                 except OSError:
                     continue
                 lines = [l for l in text.splitlines() if l.strip()]
@@ -179,6 +180,7 @@ class ObsidianVault:
                     "first_lines": first_lines,
                     "tags": list(set(tags)),
                     "size": len(text),
+                    "mtime": mtime,
                 })
         return notes
 

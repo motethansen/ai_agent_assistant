@@ -17,26 +17,34 @@ LOGSEQ_JOURNAL_DAYS=2
 
 # ── LLM routing ───────────────────────────────────────────────────────────────
 # Assign a provider to each task type. Available values:
-#   gemini-flash  → Gemini 2.0 Flash (free tier, recommended default)
-#   gemini-pro    → Gemini 1.5 Pro (free tier, lower rate limit — use for planning)
+#   gemini-flash  → Gemini 2.0 Flash (free tier, fast)
+#   gemini-pro    → Gemini 2.5 Flash (free tier, better quality for planning)
 #   groq          → Groq Llama 3.3 70B (free tier, very fast)
+#   deepseek      → DeepSeek V3/R1 (free trial credits, strong reasoning)
 #   ollama        → Local Ollama (only if OLLAMA_ENABLED=true)
 
 ROUTING_CHAT=gemini-flash        # interactive chat + Q&A
 ROUTING_PLANNING=gemini-pro      # day/week schedule generation
 ROUTING_NOTES=gemini-flash       # note organisation + wikilink suggestions
 ROUTING_QUICK=groq               # fast one-liners, task parsing
+ROUTING_REASONING=deepseek       # deep analysis, complex reasoning
 
 # ── Gemini (Google AI Studio — free tier) ─────────────────────────────────────
 # Get your free API key at: https://aistudio.google.com
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_FLASH_MODEL=gemini-2.0-flash
-GEMINI_PRO_MODEL=gemini-1.5-pro
+GEMINI_PRO_MODEL=gemini-2.5-flash-preview-04-17
 
 # ── Groq (free tier) ─────────────────────────────────────────────────────────
 # Get your free API key at: https://console.groq.com
 GROQ_API_KEY=your_groq_api_key_here
 GROQ_MODEL=llama-3.3-70b-versatile
+
+# ── DeepSeek (free trial credits, then ~$0.14/1M tokens) ─────────────────────
+# Sign up at: https://platform.deepseek.com
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 # ── Ollama (local — optional) ─────────────────────────────────────────────────
 # Set to true only if Ollama is installed (install.sh can do this for you)

@@ -86,6 +86,10 @@ class paths:
     def output() -> str:
         return str(Path(__file__).parent / "output")
 
+    @staticmethod
+    def knowledge_graph() -> str:
+        return str(Path(__file__).parent / "output" / "knowledge_graph.ttl")
+
 
 class llm:
     @staticmethod
@@ -109,6 +113,10 @@ class llm:
         return get("ROUTING_OFFLINE", "ollama")
 
     @staticmethod
+    def routing_reasoning() -> str:
+        return get("ROUTING_REASONING", "deepseek")
+
+    @staticmethod
     def gemini_api_key() -> str:
         return get("GEMINI_API_KEY", "")
 
@@ -118,7 +126,7 @@ class llm:
 
     @staticmethod
     def gemini_pro_model() -> str:
-        return get("GEMINI_PRO_MODEL", "gemini-1.5-pro")
+        return get("GEMINI_PRO_MODEL", "gemini-2.5-flash-preview-04-17")
 
     @staticmethod
     def groq_api_key() -> str:
@@ -139,6 +147,18 @@ class llm:
     @staticmethod
     def ollama_host() -> str:
         return get("OLLAMA_HOST", "http://localhost:11434")
+
+    @staticmethod
+    def deepseek_api_key() -> str:
+        return get("DEEPSEEK_API_KEY", "")
+
+    @staticmethod
+    def deepseek_model() -> str:
+        return get("DEEPSEEK_MODEL", "deepseek-chat")
+
+    @staticmethod
+    def deepseek_base_url() -> str:
+        return get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
 
 class planning:
@@ -190,9 +210,10 @@ class calendar:
 # ── Validation ────────────────────────────────────────────────────────────────
 
 REQUIRED_FOR_ONLINE = {
-    "gemini-flash": ("GEMINI_API_KEY", "Get a free key at https://aistudio.google.com"),
-    "gemini-pro":   ("GEMINI_API_KEY", "Get a free key at https://aistudio.google.com"),
-    "groq":         ("GROQ_API_KEY",   "Get a free key at https://console.groq.com"),
+    "gemini-flash": ("GEMINI_API_KEY",  "Get a free key at https://aistudio.google.com"),
+    "gemini-pro":   ("GEMINI_API_KEY",  "Get a free key at https://aistudio.google.com"),
+    "groq":         ("GROQ_API_KEY",    "Get a free key at https://console.groq.com"),
+    "deepseek":     ("DEEPSEEK_API_KEY","Sign up at https://platform.deepseek.com (free trial credits)"),
 }
 
 
@@ -206,7 +227,7 @@ def validate(exit_on_error: bool = False) -> list[str]:
     if not get("LOGSEQ_DIR"):
         warnings.append("LOGSEQ_DIR not set — LogSeq graph path required")
 
-    for task in ("ROUTING_CHAT", "ROUTING_PLANNING", "ROUTING_NOTES", "ROUTING_QUICK"):
+    for task in ("ROUTING_CHAT", "ROUTING_PLANNING", "ROUTING_NOTES", "ROUTING_QUICK", "ROUTING_REASONING"):
         provider = get(task, "")
         if provider in REQUIRED_FOR_ONLINE:
             key_name, hint = REQUIRED_FOR_ONLINE[provider]
@@ -243,6 +264,8 @@ def summary() -> dict:
         "llm_planning": llm.routing_planning(),
         "llm_notes": llm.routing_notes(),
         "llm_quick": llm.routing_quick(),
+        "llm_reasoning": llm.routing_reasoning(),
+        "deepseek_key": "set" if llm.deepseek_api_key() else "not set",
         "ollama_enabled": llm.ollama_enabled(),
         "ollama_model": llm.ollama_model() if llm.ollama_enabled() else "—",
         "google_cal": calendar.google_enabled(),

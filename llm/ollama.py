@@ -21,23 +21,17 @@ def is_available() -> bool:
     return _available
 
 
-def chat(prompt: str, system: str = "") -> str:
+def chat(prompt: str, system: str = "", history: list[dict] | None = None) -> str:
     import ollama as _ollama
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
+    messages = _build_messages(prompt, system, history)
     response = _ollama.chat(model=config.llm.ollama_model(), messages=messages)
     return response["message"]["content"].strip()
 
 
-def stream(prompt: str, system: str = ""):
+def stream(prompt: str, system: str = "", history: list[dict] | None = None):
     """Yield text chunks for streaming terminal output."""
     import ollama as _ollama
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
+    messages = _build_messages(prompt, system, history)
     for chunk in _ollama.chat(
         model=config.llm.ollama_model(),
         messages=messages,
@@ -46,6 +40,17 @@ def stream(prompt: str, system: str = ""):
         delta = chunk["message"]["content"]
         if delta:
             yield delta
+
+
+def _build_messages(prompt: str, system: str, history: list[dict] | None) -> list[dict]:
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    if history:
+        for msg in history:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+    messages.append({"role": "user", "content": prompt})
+    return messages
 
 
 def info() -> dict:

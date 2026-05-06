@@ -35,13 +35,11 @@ def _model_name(model: str) -> str:
     return config.llm.gemini_flash_model()
 
 
-def chat(prompt: str, model: str = "flash", system: str = "") -> str:
+def chat(prompt: str, model: str = "flash", system: str = "", history: list[dict] | None = None) -> str:
     from google.genai import types
     client = _get_client()
-    contents = prompt
-    config_obj = None
-    if system:
-        config_obj = types.GenerateContentConfig(system_instruction=system)
+    contents = _build_contents(prompt, history, types)
+    config_obj = types.GenerateContentConfig(system_instruction=system) if system else None
 
     response = client.models.generate_content(
         model=_model_name(model),
@@ -51,21 +49,31 @@ def chat(prompt: str, model: str = "flash", system: str = "") -> str:
     return response.text.strip()
 
 
-def stream(prompt: str, model: str = "flash", system: str = ""):
+def stream(prompt: str, model: str = "flash", system: str = "", history: list[dict] | None = None):
     """Yield text chunks for streaming terminal output."""
     from google.genai import types
     client = _get_client()
-    config_obj = None
-    if system:
-        config_obj = types.GenerateContentConfig(system_instruction=system)
+    contents = _build_contents(prompt, history, types)
+    config_obj = types.GenerateContentConfig(system_instruction=system) if system else None
 
     for chunk in client.models.generate_content_stream(
         model=_model_name(model),
-        contents=prompt,
+        contents=contents,
         config=config_obj,
     ):
         if chunk.text:
             yield chunk.text
+
+
+def _build_contents(prompt: str, history: list[dict] | None, types):
+    if not history:
+        return prompt
+    contents = []
+    for msg in history:
+        role = "user" if msg["role"] == "user" else "model"
+        contents.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
+    contents.append(types.Content(role="user", parts=[types.Part(text=prompt)]))
+    return contents
 
 
 def info() -> dict:

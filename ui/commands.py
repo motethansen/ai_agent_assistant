@@ -42,6 +42,8 @@ def dispatch(line: str) -> str | None:
         "cal-export":      cmd_cal_export,
         "model":           cmd_model,
         "status":          cmd_status,
+        "kg":              cmd_kg,
+        "rebuild-kg":      cmd_rebuild_kg,
         "help":            cmd_help,
     }
 
@@ -94,13 +96,25 @@ def cmd_backlog(_arg: str) -> None:
 
 def cmd_add_task(arg: str) -> str:
     if not arg.strip():
-        return "Usage: /add-task <task description>"
+        return "Usage: /add-task <description>  or  /add-task <description> due:YYYY-MM-DD"
     from integrations.obsidian import ObsidianVault
     vault = ObsidianVault()
-    today = datetime.date.today()
-    task_line = f"- [ ] {arg.strip()}\n"
-    vault.append_to_file("Dashboard.md", f"\n{task_line}")
-    return f"Added: {arg.strip()}"
+
+    # Parse optional due date suffix: "buy milk due:2026-05-10"
+    import re
+    due_match = re.search(r'\bdue:(\d{4}-\d{2}-\d{2})\b', arg)
+    due_str = ""
+    description = arg.strip()
+    if due_match:
+        due_str = f" 📅 {due_match.group(1)}"
+        description = arg[:due_match.start()].strip()
+
+    task_line = f"- [ ] {description}{due_str}"
+
+    existing = vault.read_section("inbox") or ""
+    combined = (task_line + "\n" + existing).strip() if existing else task_line
+    vault.write_section("inbox", combined)
+    return f"Added to inbox: {description}{due_str}"
 
 
 def cmd_done(arg: str) -> str:
@@ -245,6 +259,81 @@ def cmd_cal_export(_arg: str) -> None:
     console.print(
         f"[green]Done[/green] — {stats['added']} events added, {stats['skipped']} skipped\n"
         f"ICS exported to: [cyan]{ics_path}[/cyan]"
+    )
+
+
+def cmd_kg(arg: str) -> None:
+    """Query the knowledge graph or show its stats."""
+    try:
+        from agents.knowledge_agent import graph_stats, query as kg_query
+    except ImportError:
+        console.print("[red]rdflib not installed — run: pip install rdflib[/red]")
+        return
+
+    if not arg.strip():
+        s = graph_stats()
+        if s["triples"] == 0:
+            console.print("[dim]Knowledge graph is empty. Run /rebuild-kg to build it.[/dim]")
+            return
+        console.print(
+            f"[bold]Knowledge graph[/bold]  "
+            f"{s['triples']} triples · {s['notes']} notes · "
+            f"{s['tasks']} tasks · {s['tags']} tags"
+        )
+        return
+
+    # Pass natural-language query to LLM to convert to SPARQL, then execute
+    from llm import router
+    system = (
+        "You are a SPARQL query generator for a personal knowledge graph.\n"
+        "Prefix: PREFIX kn: <http://knowledgebase.local/>\n"
+        "Classes: kn:Note, kn:Task, kn:Tag\n"
+        "Properties: kn:path, kn:title, kn:modified, kn:text, kn:file, "
+        "kn:dueDate, kn:priority, kn:isDone (boolean), kn:name, "
+        "kn:hasTag, kn:linksTo, kn:hasTask\n"
+        "Return ONLY the SPARQL SELECT query — no explanation, no markdown fences."
+    )
+    console.print("[dim]Generating SPARQL query...[/dim]")
+    sparql = router.ask(arg, task="quick", system=system)
+    sparql = sparql.strip().lstrip("```sparql").lstrip("```").rstrip("```").strip()
+
+    results = kg_query(sparql)
+    if not results:
+        console.print("[dim]No results.[/dim]")
+        return
+    if "error" in results[0]:
+        console.print(f"[red]SPARQL error:[/red] {results[0]['error']}")
+        console.print(f"[dim]Generated query:\n{sparql}[/dim]")
+        return
+
+    from rich.table import Table
+    from rich import box
+    if not results:
+        console.print("[dim]No results.[/dim]")
+        return
+    keys = list(results[0].keys())
+    table = Table(box=box.SIMPLE_HEAD, show_header=True, header_style="bold cyan")
+    for k in keys:
+        table.add_column(k)
+    for row in results[:50]:
+        table.add_row(*[row.get(k, "") for k in keys])
+    console.print(table)
+    if len(results) > 50:
+        console.print(f"[dim]… {len(results) - 50} more rows not shown[/dim]")
+
+
+def cmd_rebuild_kg(_arg: str) -> None:
+    try:
+        from agents.knowledge_agent import run as kg_run, graph_stats
+    except ImportError:
+        console.print("[red]rdflib not installed — run: pip install rdflib[/red]")
+        return
+    console.print("[dim]Rebuilding knowledge graph from scratch...[/dim]")
+    result = kg_run(full_rebuild=True)
+    s = graph_stats()
+    console.print(
+        f"[green]Done[/green] — {result['indexed']} notes indexed · "
+        f"{s['triples']} triples · {s['tasks']} tasks · {s['tags']} tags"
     )
 
 

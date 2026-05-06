@@ -54,9 +54,16 @@ Rules:
 
 
 def _summarise_notes(notes: list[dict], max_notes: int = 80) -> str:
-    """Format notes for LLM context — title + first lines only."""
+    """Format notes for LLM context — most recently modified first."""
+    sorted_notes = sorted(notes, key=lambda n: n.get("mtime", 0), reverse=True)
+    if len(sorted_notes) > max_notes:
+        from ui.views import console
+        console.print(
+            f"[dim]Note: {len(sorted_notes)} notes found — analysing the {max_notes} "
+            f"most recently modified. Use /organise <subfolder> to target a specific area.[/dim]"
+        )
     lines = []
-    for n in notes[:max_notes]:
+    for n in sorted_notes[:max_notes]:
         title = n["title"]
         folder = str(Path(n["path"]).parent)
         preview = " | ".join(n["first_lines"][:2])[:120]
