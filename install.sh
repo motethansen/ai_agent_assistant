@@ -42,7 +42,7 @@ ok "Virtual environment ready"
 # ── 3. Core dependencies ───────────────────────────────────────────────────────
 info "Installing core dependencies..."
 pip install -q --upgrade pip
-pip install -q google-genai groq icalendar rich python-frontmatter watchdog python-dateutil httpx pyyaml pytest pytest-mock
+pip install -q -r requirements.txt
 ok "Core dependencies installed"
 
 # ── 4. Ollama (optional) ───────────────────────────────────────────────────────
