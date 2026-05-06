@@ -23,23 +23,14 @@ _SYNCED_FILE    = Path(__file__).parent.parent / "output" / ".synced_reminders.j
 
 _APPLESCRIPT = """
 tell application "Reminders"
-    set output to "["
-    set first_item to true
+    set output to ""
     repeat with reminderList in lists
         repeat with r in reminders of reminderList
             if completed of r is false then
-                set t to name of r
-                set t to do shell script "echo " & quoted form of t & " | sed 's/\\\\/\\\\\\\\/g; s/\"/\\\\\"/g'"
-                if first_item then
-                    set first_item to false
-                else
-                    set output to output & ","
-                end if
-                set output to output & "{\\"task\\":\\"" & t & "\\"}"
+                set output to output & name of r & "|||"
             end if
         end repeat
     end repeat
-    set output to output & "]"
     return output
 end tell
 """
@@ -59,15 +50,15 @@ def export_from_apple() -> list[dict]:
         ["osascript", "-e", _APPLESCRIPT],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=120,
     )
     if result.returncode != 0:
         raise RuntimeError(f"AppleScript failed: {result.stderr.strip()}")
 
-    try:
-        reminders = json.loads(result.stdout.strip())
-    except json.JSONDecodeError as e:
-        raise RuntimeError(f"Could not parse AppleScript output: {e}")
+    raw = result.stdout.strip()
+    # Names are delimited by ||| — encode in Python to avoid AppleScript JSON escaping issues
+    names = [n.strip() for n in raw.split("|||") if n.strip()]
+    reminders = [{"task": name} for name in names]
 
     _REMINDERS_JSON.parent.mkdir(parents=True, exist_ok=True)
     _REMINDERS_JSON.write_text(json.dumps(reminders, indent=2))
