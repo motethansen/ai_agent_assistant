@@ -55,9 +55,9 @@
 
 ### Phase 9: Automated Testing & Reporting
 - [x] Create a `tests/` directory with unit and integration tests (using `pytest`).
-- [ ] Implement mock objects for Google Calendar and Gemini API calls to allow offline testing.
+- [x] Implement mock objects for Google Calendar and Gemini API calls to allow offline testing.
 - [x] Create a `Makefile` to automate test execution (`make test`) and environment setup.
-- [ ] Implement a reporting mechanism (e.g., `pytest-html` or JSON reports) to capture and address errors.
+- [x] Implement a reporting mechanism (e.g., `pytest-html` or JSON reports) to capture and address errors.
 
 ### Phase 10: Documentation & Frontend
 - [x] Create a `docs/` directory with comprehensive Markdown documentation.
