@@ -111,7 +111,8 @@ def run_once() -> None:
                 kg = kg_run()
                 _log(
                     f"knowledge graph done — {kg['indexed']} indexed, "
-                    f"{kg['skipped']} skipped, {kg.get('removed', 0)} removed"
+                    f"{kg['skipped']} skipped, {kg.get('removed', 0)} removed, "
+                    f"{kg.get('links_resolved', 0)} links resolved"
                 )
                 _mark_kg_run()
             except Exception as e:

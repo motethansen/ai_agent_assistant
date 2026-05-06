@@ -277,8 +277,9 @@ def cmd_kg(arg: str) -> None:
             return
         console.print(
             f"[bold]Knowledge graph[/bold]  "
-            f"{s['triples']} triples · {s['notes']} notes · "
-            f"{s['tasks']} tasks · {s['tags']} tags"
+            f"{s['triples']:,} triples · {s['notes']:,} notes · "
+            f"{s['tasks']:,} tasks · {s['tags']:,} tags · "
+            f"{s['links']:,} links ({s['dangling_links']:,} dangling)"
         )
         return
 
@@ -290,7 +291,7 @@ def cmd_kg(arg: str) -> None:
         "Classes: kn:Note, kn:Task, kn:Tag\n"
         "Properties: kn:path, kn:title, kn:modified, kn:text, kn:file, "
         "kn:dueDate, kn:priority, kn:isDone (boolean), kn:name, "
-        "kn:hasTag, kn:linksTo, kn:hasTask\n"
+        "kn:hasTag, kn:linksTo, kn:hasTask, kn:danglingLink (boolean — true for broken links)\n"
         "Return ONLY the SPARQL SELECT query — no explanation, no markdown fences."
     )
     console.print("[dim]Generating SPARQL query...[/dim]")
@@ -333,7 +334,8 @@ def cmd_rebuild_kg(_arg: str) -> None:
     s = graph_stats()
     console.print(
         f"[green]Done[/green] — {result['indexed']} notes indexed · "
-        f"{s['triples']} triples · {s['tasks']} tasks · {s['tags']} tags"
+        f"{s['triples']:,} triples · {s['tasks']:,} tasks · "
+        f"{s['links']:,} links ({s['dangling_links']:,} dangling)"
     )
 
 

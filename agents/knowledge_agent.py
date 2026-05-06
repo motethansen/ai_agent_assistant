@@ -40,6 +40,11 @@ _EXCLUDE_DIRS = {
 
 KN_BASE = "http://knowledgebase.local/"
 _WIKILINK_RE = re.compile(r'\[\[([^\]|]+)(?:\|[^\]]+)?\]\]')
+# File extensions that are never note targets — used to skip ![[image.png]] embeds
+_NON_NOTE_EXT = re.compile(
+    r'\.(png|jpg|jpeg|gif|svg|pdf|mp4|mp3|webp|ico|bmp|tiff?|zip|docx?|xlsx?|pptx?)$',
+    re.IGNORECASE,
+)
 
 
 # ── URI helpers ───────────────────────────────────────────────────────────────
@@ -99,7 +104,8 @@ def _remove_note_triples(g, KN, rel_path: str) -> None:
 
 
 def _index_file(g, KN, RDF, XSD, abs_path: Path, rel_path: str) -> None:
-    """Parse one vault file and add its triples to graph g."""
+    """Parse one vault file and add note/tag/task triples to graph g.
+    Wikilink resolution is handled separately in _build_links."""
     from rdflib import URIRef, Literal
 
     try:
@@ -122,11 +128,6 @@ def _index_file(g, KN, RDF, XSD, abs_path: Path, rel_path: str) -> None:
         g.add((tag_node, RDF.type, KN.Tag))
         g.add((tag_node, KN.name, Literal(tag)))
 
-    # Wikilinks
-    for linked_title in _WIKILINK_RE.findall(text):
-        linked = URIRef(_note_uri(linked_title.strip()))
-        g.add((note, KN.linksTo, linked))
-
     # Tasks
     for line_num, raw_line in enumerate(text.splitlines(), start=1):
         if not _TASK_RE.match(raw_line):
@@ -146,6 +147,69 @@ def _index_file(g, KN, RDF, XSD, abs_path: Path, rel_path: str) -> None:
             g.add((task, KN.priority, Literal(meta["priority"])))
 
 
+def _build_links(g, KN, vault_dir: Path, current_paths: set) -> dict:
+    """
+    Rebuild ALL linksTo triples from scratch using a resolved title→path index.
+    Runs on every update (fast — regex only) so link targets are always current.
+
+    Obsidian resolution rules applied:
+    - Case-insensitive title match
+    - Shortest path wins when multiple notes share a title (Obsidian's disambiguation)
+    - Dangling links are kept with a kn:danglingLink flag so broken links are queryable
+
+    Returns {resolved, dangling}.
+    """
+    from rdflib import URIRef, Literal
+
+    # Remove all stale linksTo triples
+    g.remove((None, KN.linksTo, None))
+    g.remove((None, KN.danglingLink, None))
+
+    # Build title → shortest-path index (case-insensitive)
+    title_index: dict[str, str] = {}
+    for path in current_paths:
+        title = Path(path).stem.lower()
+        if title not in title_index or len(path) < len(title_index[title]):
+            title_index[title] = path
+
+    stats = {"resolved": 0, "dangling": 0}
+
+    for rel_path in current_paths:
+        abs_path = vault_dir / rel_path
+        try:
+            text = abs_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+
+        source = URIRef(_note_uri(rel_path))
+        seen_targets: set = set()  # deduplicate per-file
+
+        for raw_title in _WIKILINK_RE.findall(text):
+            title = raw_title.strip()
+            # Skip image/file embeds (![[image.png]]) and relative paths
+            if title.startswith("./") or title.startswith("../") or _NON_NOTE_EXT.search(title):
+                continue
+            key = title.lower()
+            if key in seen_targets:
+                continue
+            seen_targets.add(key)
+
+            resolved_path = title_index.get(key)
+            if resolved_path:
+                target = URIRef(_note_uri(resolved_path))
+                stats["resolved"] += 1
+            else:
+                # Dangling link — record so broken-link queries work
+                target = URIRef(KN_BASE + "dangling_" + hashlib.sha1(key.encode()).hexdigest()[:10])
+                g.add((target, KN.title, Literal(title)))
+                g.add((target, KN.danglingLink, Literal(True)))
+                stats["dangling"] += 1
+
+            g.add((source, KN.linksTo, target))
+
+    return stats
+
+
 def _declare_ontology(g, KN, RDF, OWL, RDFS, XSD) -> None:
     g.bind("kn", KN)
     g.bind("owl", OWL)
@@ -153,7 +217,7 @@ def _declare_ontology(g, KN, RDF, OWL, RDFS, XSD) -> None:
     for cls in (KN.Note, KN.Task, KN.Tag):
         g.add((cls, RDF.type, OWL.Class))
     for prop in (KN.path, KN.title, KN.modified, KN.text, KN.file,
-                 KN.dueDate, KN.priority, KN.name, KN.isDone):
+                 KN.dueDate, KN.priority, KN.name, KN.isDone, KN.danglingLink):
         g.add((prop, RDF.type, OWL.DatatypeProperty))
     for prop in (KN.hasTag, KN.linksTo, KN.hasTask):
         g.add((prop, RDF.type, OWL.ObjectProperty))
@@ -164,8 +228,10 @@ def _declare_ontology(g, KN, RDF, OWL, RDFS, XSD) -> None:
 def run(full_rebuild: bool = False) -> dict:
     """
     Incremental update of the knowledge graph.
-    Only re-indexes files whose mtime has changed.
-    Returns {indexed, skipped, removed}.
+    Note/tag/task triples: only re-indexed when mtime changes.
+    linksTo triples: always rebuilt from scratch (fast regex pass) so
+    renamed targets are immediately reflected without a full rebuild.
+    Returns {indexed, skipped, removed, links_resolved, links_dangling}.
     """
     from rdflib import Graph, Namespace
     from rdflib.namespace import RDF, OWL, RDFS, XSD
@@ -174,17 +240,20 @@ def run(full_rebuild: bool = False) -> dict:
 
     vault_dir = Path(config.paths.obsidian())
     if not vault_dir.is_dir():
-        return {"error": "Vault directory not found", "indexed": 0, "skipped": 0, "removed": 0}
+        return {"error": "Vault directory not found", "indexed": 0, "skipped": 0,
+                "removed": 0, "links_resolved": 0, "links_dangling": 0}
 
     g = Graph() if full_rebuild else _load_graph()
     mtimes = {} if full_rebuild else _load_mtimes()
 
     _declare_ontology(g, KN, RDF, OWL, RDFS, XSD)
 
-    stats = {"indexed": 0, "skipped": 0, "removed": 0}
+    stats = {"indexed": 0, "skipped": 0, "removed": 0,
+             "links_resolved": 0, "links_dangling": 0}
     new_mtimes: dict = {}
     current_paths: set = set()
 
+    # Phase 1 — re-index changed note/tag/task triples
     for dirpath, dirs, files in os.walk(vault_dir):
         dirs[:] = [d for d in dirs if d not in _EXCLUDE_DIRS]
         for fname in files:
@@ -209,6 +278,11 @@ def run(full_rebuild: bool = False) -> dict:
     for old_path in set(mtimes.keys()) - current_paths:
         _remove_note_triples(g, KN, old_path)
         stats["removed"] += 1
+
+    # Phase 2 — rebuild ALL linksTo triples with title→path resolution
+    link_stats = _build_links(g, KN, vault_dir, current_paths)
+    stats["links_resolved"] = link_stats["resolved"]
+    stats["links_dangling"] = link_stats["dangling"]
 
     _save_graph(g)
     _save_mtimes(new_mtimes)
@@ -257,26 +331,95 @@ def query(sparql_str: str) -> list[dict]:
 def graph_stats() -> dict:
     """Return counts of nodes/triples in the graph."""
     if not _GRAPH_FILE.exists():
-        return {"triples": 0, "notes": 0, "tasks": 0, "tags": 0}
+        return {"triples": 0, "notes": 0, "tasks": 0, "tags": 0,
+                "links": 0, "dangling_links": 0}
 
-    from rdflib import Namespace
+    from rdflib import Namespace, Literal
     from rdflib.namespace import RDF
     KN = Namespace(KN_BASE)
     g = _load_graph()
 
     return {
-        "triples": len(g),
-        "notes":   sum(1 for _ in g.subjects(RDF.type, KN.Note)),
-        "tasks":   sum(1 for _ in g.subjects(RDF.type, KN.Task)),
-        "tags":    sum(1 for _ in g.subjects(RDF.type, KN.Tag)),
+        "triples":       len(g),
+        "notes":         sum(1 for _ in g.subjects(RDF.type, KN.Note)),
+        "tasks":         sum(1 for _ in g.subjects(RDF.type, KN.Task)),
+        "tags":          sum(1 for _ in g.subjects(RDF.type, KN.Tag)),
+        "links":         sum(1 for _ in g.triples((None, KN.linksTo, None))),
+        "dangling_links": sum(1 for _ in g.subjects(KN.danglingLink, Literal(True))),
     }
 
 
 if __name__ == "__main__":
     import sys
-    full = "--rebuild" in sys.argv
-    print("Running knowledge graph update" + (" (full rebuild)" if full else " (incremental)") + "...")
-    result = run(full_rebuild=full)
-    print(f"Done — {result['indexed']} indexed, {result['skipped']} skipped, {result['removed']} removed")
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Build or update a SPARQL knowledge graph from an Obsidian vault.",
+        epilog="""
+Examples
+--------
+  # Use the vault configured in .config (WORKSPACE_DIR):
+  python -m agents.knowledge_agent
+
+  # Point at any Obsidian vault directly (no .config needed):
+  python -m agents.knowledge_agent --vault ~/Documents/MyVault
+
+  # Full rebuild (wipes existing graph):
+  python -m agents.knowledge_agent --rebuild
+
+  # Query the graph interactively after building:
+  python - <<'EOF'
+  from agents.knowledge_agent import query
+  rows = query(\"\"\"
+    PREFIX kn: <http://knowledgebase.local/>
+    SELECT ?text ?due WHERE {
+      ?t a kn:Task ; kn:text ?text ; kn:isDone false .
+      OPTIONAL { ?t kn:dueDate ?due }
+    } ORDER BY ?due LIMIT 20
+  \"\"\")
+  for r in rows: print(r)
+  EOF
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--rebuild", action="store_true",
+                        help="Wipe the existing graph and rebuild from scratch")
+    parser.add_argument("--vault", metavar="PATH",
+                        help="Path to Obsidian vault (overrides WORKSPACE_DIR in .config)")
+    parser.add_argument("--output", metavar="PATH",
+                        help="Directory for knowledge_graph.ttl and cache files "
+                             "(default: output/ inside the project)")
+    args = parser.parse_args()
+
+    # Allow standalone use without a .config file
+    if args.vault:
+        import os
+        os.environ["WORKSPACE_DIR"] = args.vault
+        # reload config so the override takes effect
+        import importlib
+        import config as _cfg
+        importlib.reload(_cfg)
+
+    if args.output:
+        global _GRAPH_FILE, _MTIMES_FILE
+        _GRAPH_FILE  = Path(args.output) / "knowledge_graph.ttl"
+        _MTIMES_FILE = Path(args.output) / ".kg_mtimes.json"
+        Path(args.output).mkdir(parents=True, exist_ok=True)
+
+    mode = "full rebuild" if args.rebuild else "incremental"
+    vault_path = args.vault or config.paths.obsidian()
+    print(f"Knowledge graph update ({mode})")
+    print(f"Vault : {vault_path}")
+    print(f"Output: {_GRAPH_FILE}")
+    print()
+
+    result = run(full_rebuild=args.rebuild)
+    if result.get("error"):
+        print(f"Error: {result['error']}")
+        sys.exit(1)
+
+    print(f"Notes  — {result['indexed']} indexed, {result['skipped']} skipped, {result['removed']} removed")
+    print(f"Links  — {result['links_resolved']} resolved, {result['links_dangling']} dangling")
     s = graph_stats()
-    print(f"Graph: {s['triples']} triples · {s['notes']} notes · {s['tasks']} tasks · {s['tags']} tags")
+    print(f"Graph  — {s['triples']:,} triples · {s['notes']:,} notes · {s['tasks']:,} tasks · "
+          f"{s['tags']:,} tags · {s['links']:,} links ({s['dangling_links']:,} dangling)")
