@@ -243,7 +243,7 @@ def print_help() -> None:
         ("/plan week",           "Generate weekly AI schedule"),
         ("/backlog",             "All pending tasks grouped by urgency"),
         ("/reschedule",         "Move overdue/today tasks to a new date (interactive)"),
-        ("/add-task <txt>",      "Add task to inbox (supports due:YYYY-MM-DD)"),
+        ("/add-task <txt>",      "Add task to inbox  · due:YYYY-MM-DD  · #gcal → becomes calendar event"),
         ("/done <text>",         "Mark a task complete"),
         ("/sync",                "Run LogSeq → Obsidian sync now"),
         ("/sync-reminders",      "Pull Apple Reminders into inbox"),
@@ -255,7 +255,7 @@ def print_help() -> None:
         ("/kg <question>",       "Query knowledge graph in plain English"),
         ("/rebuild-kg",          "Force full knowledge graph rebuild"),
         ("/cal",                 "Show upcoming calendar events"),
-        ("/cal-export",          "Export #gcal tasks to .ics file"),
+        ("/cal-export",          "Convert #gcal tasks → .ics file (import into Apple Calendar)"),
         ("/model",               "Show LLM routing"),
         ("/status",              "System status + provider health"),
         ("/chat",                "Open multi-turn chat mode"),
@@ -264,7 +264,7 @@ def print_help() -> None:
     ]
 
     table = Table(box=box.SIMPLE, show_header=False, expand=True)
-    table.add_column("Command", style="cyan", width=24)
+    table.add_column("Command", style="cyan", width=36)
     table.add_column("Description")
     for cmd, desc in commands:
         table.add_row(cmd, desc)
