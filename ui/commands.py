@@ -39,6 +39,7 @@ def dispatch(line: str) -> str | None:
         "organize":          cmd_organise,
         "organise-projects": cmd_organise_projects,
         "organize-projects": cmd_organise_projects,
+        "reschedule":        cmd_reschedule,
         "links":             cmd_links,
         "cal":             cmd_cal,
         "cal-export":      cmd_cal_export,
@@ -246,6 +247,228 @@ def cmd_organise_projects(arg: str) -> None:
         for e in stats["errors"]:
             console.print(f"  [red]Error:[/red] {e}")
     console.print("[dim]Each project folder now contains a _plan.md.[/dim]")
+
+
+def _parse_target_date(expr: str) -> datetime.date | None:
+    """
+    Parse a natural-language date expression into a datetime.date.
+
+    Supported:
+        today, tomorrow
+        next week           → next Monday
+        next weekend        → next Saturday
+        next month          → 1st of next calendar month
+        monday … sunday     → next occurrence of that weekday
+        in N days / in N weeks
+        YYYY-MM-DD          → literal ISO date
+    """
+    import re as _re
+    expr = expr.strip().lower()
+    today = datetime.date.today()
+
+    _SIMPLE = {
+        "today":        today,
+        "tomorrow":     today + datetime.timedelta(days=1),
+        "next week":    today + datetime.timedelta(days=(7 - today.weekday())),
+        "next weekend":  None,  # computed below
+        "next month":   None,  # computed below
+        "weekend":      None,  # alias
+    }
+
+    if expr == "today":
+        return today
+    if expr == "tomorrow":
+        return today + datetime.timedelta(days=1)
+    if expr in ("next week",):
+        days = (7 - today.weekday()) % 7 or 7   # next Monday
+        return today + datetime.timedelta(days=days)
+    if expr in ("next weekend", "weekend"):
+        days = (5 - today.weekday()) % 7 or 7   # next Saturday
+        return today + datetime.timedelta(days=days)
+    if expr == "next month":
+        if today.month == 12:
+            return datetime.date(today.year + 1, 1, 1)
+        return datetime.date(today.year, today.month + 1, 1)
+
+    # "in N days"
+    m = _re.match(r'in\s+(\d+)\s+days?$', expr)
+    if m:
+        return today + datetime.timedelta(days=int(m.group(1)))
+
+    # "in N weeks"
+    m = _re.match(r'in\s+(\d+)\s+weeks?$', expr)
+    if m:
+        return today + datetime.timedelta(weeks=int(m.group(1)))
+
+    # weekday name  e.g. "friday" or "next friday"
+    _DAYS = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
+    for day_name in _DAYS:
+        if expr == day_name or expr == f"next {day_name}":
+            target_wd = _DAYS.index(day_name)
+            days = (target_wd - today.weekday()) % 7 or 7
+            return today + datetime.timedelta(days=days)
+
+    # ISO literal
+    try:
+        return datetime.date.fromisoformat(expr)
+    except ValueError:
+        pass
+
+    return None
+
+
+def _parse_selection(arg: str, tasks: list[dict]) -> list[dict] | None:
+    """
+    Parse a task-selection token against the numbered task list.
+    Returns list of selected tasks, or None if arg is unrecognised.
+
+    Tokens:
+        all             → every task
+        overdue         → tasks with due_date < today
+        today           → tasks due today
+        1,3,5           → specific 1-based indices
+        1-4             → inclusive range
+    """
+    import re as _re
+    arg = arg.strip().lower()
+    td = datetime.date.today()
+
+    if arg == "all":
+        return list(tasks)
+    if arg == "overdue":
+        return [t for t in tasks if t.get("due_date") and t["due_date"] < td]
+    if arg == "today":
+        return [t for t in tasks if t.get("due_date") == td]
+
+    # range: 1-4
+    m = _re.match(r'^(\d+)-(\d+)$', arg)
+    if m:
+        lo, hi = int(m.group(1)), int(m.group(2))
+        return [tasks[i - 1] for i in range(lo, hi + 1) if 1 <= i <= len(tasks)]
+
+    # comma list: 1,3,5
+    if _re.match(r'^[\d,\s]+$', arg):
+        indices = [int(x.strip()) for x in arg.split(",") if x.strip().isdigit()]
+        return [tasks[i - 1] for i in indices if 1 <= i <= len(tasks)]
+
+    return None
+
+
+def cmd_reschedule(arg: str) -> None:
+    """
+    Reschedule overdue and/or today's tasks to a new date.
+
+    Usage:
+        /reschedule                           → interactive prompts
+        /reschedule overdue next weekend
+        /reschedule today in 4 days
+        /reschedule all next week
+        /reschedule 1,3 next month
+        /reschedule 1-5 2026-06-01
+    """
+    import re as _re
+    from integrations.obsidian import ObsidianVault
+
+    vault = ObsidianVault()
+    today = datetime.date.today()
+
+    # Load overdue + today tasks sorted overdue-first, then today, then by priority
+    all_tasks = vault.get_tasks()
+    candidates = sorted(
+        [t for t in all_tasks if t.get("due_date") and t["due_date"] <= today],
+        key=lambda t: (t["due_date"], t.get("priority_weight", 99)),
+    )
+
+    if not candidates:
+        console.print("[green]No overdue or today tasks — you're all caught up![/green]")
+        return
+
+    # ── Display numbered list ─────────────────────────────────────────────────
+    console.print()
+    console.print("[bold]Overdue & today tasks:[/bold]")
+    for i, t in enumerate(candidates, 1):
+        due = t["due_date"]
+        age = (today - due).days
+        label = "[red]today[/red]" if age == 0 else f"[red]{age}d overdue[/red]"
+        prio = f" {t['priority']}" if t.get("priority") else ""
+        source = f" [dim]({t['file']}:{t['line']})[/dim]"
+        console.print(f"  [bold]{i:>2}.[/bold] {t['text'][:60]}{prio} — {label}{source}")
+    console.print()
+
+    # ── Parse inline args or prompt ───────────────────────────────────────────
+    # Try to split arg into "selection" + "date expression"
+    # Strategy: greedily try longer date expressions first
+    selection_str = ""
+    date_str = ""
+
+    if arg.strip():
+        # Date keywords that may be multi-word
+        _DATE_PATTERNS = [
+            r'next\s+weekend', r'next\s+week', r'next\s+month',
+            r'next\s+\w+day',
+            r'in\s+\d+\s+\w+',
+            r'\d{4}-\d{2}-\d{2}',
+            r'\w+day',     # monday–sunday
+            r'tomorrow', r'today',
+        ]
+        combined = arg.strip()
+        date_match = None
+        for pat in _DATE_PATTERNS:
+            m = _re.search(pat, combined, _re.IGNORECASE)
+            if m:
+                date_match = m
+                break
+        if date_match:
+            date_str = date_match.group().strip()
+            selection_str = combined[:date_match.start()].strip()
+
+    if not selection_str:
+        selection_str = console.input(
+            "[bold]Which tasks?[/bold] (all / overdue / today / 1,3 / 1-4): "
+        ).strip()
+
+    selected = _parse_selection(selection_str, candidates)
+    if selected is None:
+        console.print(f"[red]Couldn't parse selection:[/red] {selection_str!r}")
+        return
+    if not selected:
+        console.print("[dim]No tasks match that selection.[/dim]")
+        return
+
+    if not date_str:
+        date_str = console.input(
+            "[bold]Reschedule to?[/bold] (next week / next weekend / next month / in N days / YYYY-MM-DD): "
+        ).strip()
+
+    new_date = _parse_target_date(date_str)
+    if new_date is None:
+        console.print(f"[red]Couldn't parse date:[/red] {date_str!r}")
+        return
+
+    day_name = new_date.strftime("%A, %d %b %Y")
+    console.print(
+        f"\nMove [bold]{len(selected)}[/bold] task(s) → "
+        f"[green]{day_name}[/green]?"
+    )
+    for t in selected:
+        console.print(f"  · {t['text'][:70]}")
+    console.print()
+
+    answer = console.input("[bold]Apply? (y/N):[/bold] ").strip().lower()
+    if answer != "y":
+        console.print("[dim]No changes made.[/dim]")
+        return
+
+    done, failed = 0, []
+    for t in selected:
+        if vault.update_task_date(t, new_date):
+            done += 1
+        else:
+            failed.append(t["text"])
+
+    console.print(f"\n[green]Rescheduled {done} task(s) to {day_name}.[/green]")
+    for f in failed:
+        console.print(f"  [red]Failed:[/red] {f}")
 
 
 def cmd_links(arg: str) -> None:

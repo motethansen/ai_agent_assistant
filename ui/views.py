@@ -242,6 +242,7 @@ def print_help() -> None:
         ("/plan",                "Generate today's AI schedule"),
         ("/plan week",           "Generate weekly AI schedule"),
         ("/backlog",             "All pending tasks grouped by urgency"),
+        ("/reschedule",         "Move overdue/today tasks to a new date (interactive)"),
         ("/add-task <txt>",      "Add task to inbox (supports due:YYYY-MM-DD)"),
         ("/done <text>",         "Mark a task complete"),
         ("/sync",                "Run LogSeq → Obsidian sync now"),

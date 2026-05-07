@@ -216,6 +216,31 @@ class ObsidianVault:
                     return True
         return False
 
+    def update_task_date(self, task: dict, new_date: datetime.date) -> bool:
+        """
+        Rewrite the due-date emoji (📅 YYYY-MM-DD) on a specific task line,
+        identified by task['file'] and task['line'] (1-based).
+        Appends a due date if the task has none.
+        """
+        abs_path = self.vault_dir / task["file"]
+        if not abs_path.exists():
+            return False
+        try:
+            lines = abs_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return False
+        idx = task["line"] - 1
+        if idx < 0 or idx >= len(lines):
+            return False
+        old = lines[idx]
+        new_ds = new_date.isoformat()
+        if _DUE_RE.search(old):
+            lines[idx] = _DUE_RE.sub(f"📅 {new_ds}", old)
+        else:
+            lines[idx] = old.rstrip() + f" 📅 {new_ds}"
+        abs_path.write_text("\n".join(lines), encoding="utf-8")
+        return True
+
     def move_file(self, from_rel: str, to_rel: str) -> bool:
         """Move a note to a new location within the vault. Creates dest dir."""
         src = self.vault_dir / from_rel
