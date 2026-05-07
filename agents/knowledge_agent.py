@@ -401,7 +401,6 @@ Examples
         importlib.reload(_cfg)
 
     if args.output:
-        global _GRAPH_FILE, _MTIMES_FILE
         _GRAPH_FILE  = Path(args.output) / "knowledge_graph.ttl"
         _MTIMES_FILE = Path(args.output) / ".kg_mtimes.json"
         Path(args.output).mkdir(parents=True, exist_ok=True)
