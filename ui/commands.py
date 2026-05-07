@@ -535,44 +535,69 @@ def cmd_kg(arg: str) -> None:
         )
         return
 
-    # Pass natural-language query to LLM to convert to SPARQL, then execute
+    # Step 1 — generate SPARQL with explicit field selection rules
     from llm import router
-    system = (
-        "You are a SPARQL query generator for a personal knowledge graph.\n"
-        "Prefix: PREFIX kn: <http://knowledgebase.local/>\n"
-        "Classes: kn:Note, kn:Task, kn:Tag\n"
-        "Properties: kn:path, kn:title, kn:modified, kn:text, kn:file, "
-        "kn:dueDate, kn:priority, kn:isDone (boolean), kn:name, "
-        "kn:hasTag, kn:linksTo, kn:hasTask, kn:danglingLink (boolean — true for broken links)\n"
-        "Return ONLY the SPARQL SELECT query — no explanation, no markdown fences."
+    sparql_system = (
+        "You are a SPARQL query generator for a personal Obsidian knowledge graph.\n"
+        "PREFIX kn: <http://knowledgebase.local/>\n\n"
+        "Schema:\n"
+        "  kn:Note  — kn:path (file path), kn:title (note name), kn:modified\n"
+        "  kn:Task  — kn:text (task body), kn:file (source path), kn:isDone (boolean),\n"
+        "             kn:dueDate, kn:priority\n"
+        "  kn:Tag   — kn:name (tag string)\n"
+        "  Relations: kn:hasTag, kn:hasTask, kn:linksTo\n\n"
+        "RULES — you MUST follow these:\n"
+        "  1. Always SELECT human-readable literals, never bare node variables.\n"
+        "     For notes: SELECT ?title ?path   For tasks: SELECT ?text ?file ?dueDate\n"
+        "  2. Never use SELECT ?s or SELECT ?n — these return opaque URIs.\n"
+        "  3. Always add LIMIT 30 unless counting.\n"
+        "  4. Tag names are lowercase strings (e.g. \"academic\", \"dev\").\n"
+        "  5. kn:isDone values are the string 'true' or 'false'.\n\n"
+        "Return ONLY the SPARQL SELECT query — no explanation, no markdown."
     )
     console.print("[dim]Generating SPARQL query...[/dim]")
-    sparql = router.ask(arg, task="quick", system=system)
-    sparql = sparql.strip().lstrip("```sparql").lstrip("```").rstrip("```").strip()
+    sparql = router.ask(arg, task="quick", system=sparql_system)
+    # Strip any markdown fences the LLM may have added
+    import re as _re
+    sparql = _re.sub(r'^```[a-z]*\s*', '', sparql.strip(), flags=_re.IGNORECASE)
+    sparql = sparql.rstrip('`').strip()
 
     results = kg_query(sparql)
     if not results:
-        console.print("[dim]No results.[/dim]")
+        console.print("[dim]No results found in knowledge graph.[/dim]")
         return
     if "error" in results[0]:
         console.print(f"[red]SPARQL error:[/red] {results[0]['error']}")
-        console.print(f"[dim]Generated query:\n{sparql}[/dim]")
+        console.print(f"[dim]Query used:\n{sparql}[/dim]")
         return
 
-    from rich.table import Table
-    from rich import box
-    if not results:
-        console.print("[dim]No results.[/dim]")
-        return
-    keys = list(results[0].keys())
-    table = Table(box=box.SIMPLE_HEAD, show_header=True, header_style="bold cyan")
-    for k in keys:
-        table.add_column(k)
-    for row in results[:50]:
-        table.add_row(*[row.get(k, "") for k in keys])
-    console.print(table)
-    if len(results) > 50:
-        console.print(f"[dim]… {len(results) - 50} more rows not shown[/dim]")
+    # Step 2 — ask LLM to interpret results as a natural-language answer
+    def _fmt_rows(rows: list[dict], limit: int = 30) -> str:
+        lines = []
+        for i, row in enumerate(rows[:limit], 1):
+            parts = [f"{k}: {v}" for k, v in row.items() if v]
+            lines.append(f"{i}. {' | '.join(parts)}")
+        if len(rows) > limit:
+            lines.append(f"… and {len(rows) - limit} more")
+        return "\n".join(lines)
+
+    answer_system = (
+        "You are a personal knowledge assistant. "
+        "Answer concisely using the search results below. "
+        "Use markdown — bullet lists for multiple items, bold for note titles. "
+        "Include file paths in parentheses so the user can find the note."
+    )
+    answer_prompt = (
+        f"Question: {arg}\n\n"
+        f"Knowledge graph results:\n{_fmt_rows(results)}\n\n"
+        "Give a direct, helpful answer based on these results."
+    )
+    console.print("[dim]Interpreting results...[/dim]")
+    answer = router.ask(answer_prompt, task="quick", system=answer_system)
+    console.print()
+    console.print(Markdown(answer))
+    console.print()
+    console.print(f"[dim]{len(results)} result(s) · query: {sparql.splitlines()[0][:80]}…[/dim]")
 
 
 def cmd_rebuild_kg(_arg: str) -> None:
