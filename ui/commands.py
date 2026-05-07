@@ -35,9 +35,11 @@ def dispatch(line: str) -> str | None:
         "sync":            cmd_sync,
         "sync-reminders":  cmd_sync_reminders,
         "notes":           cmd_notes,
-        "organise":        cmd_organise,
-        "organize":        cmd_organise,
-        "links":           cmd_links,
+        "organise":          cmd_organise,
+        "organize":          cmd_organise,
+        "organise-projects": cmd_organise_projects,
+        "organize-projects": cmd_organise_projects,
+        "links":             cmd_links,
         "cal":             cmd_cal,
         "cal-export":      cmd_cal_export,
         "model":           cmd_model,
@@ -219,6 +221,31 @@ def cmd_organise(arg: str) -> None:
                 console.print(f"  [red]Error:[/red] {e}")
     else:
         console.print("[dim]No changes made.[/dim]")
+
+
+def cmd_organise_projects(arg: str) -> None:
+    subdir = arg.strip() or None
+    scope = f"[bold]{subdir}[/bold]" if subdir else "whole vault"
+    console.print(f"[dim]Scanning {scope} for projects...[/dim]")
+    console.print("[dim]URL-only tasks will be fetched — this may take a moment.[/dim]")
+
+    from agents.project_agent import run
+    stats = run(subdir=subdir)
+
+    if stats["projects_updated"] == 0 and not stats["errors"]:
+        console.print("[green]No projects with open tasks found.[/green]")
+        return
+
+    console.print(
+        f"\n[green]Done[/green] — "
+        f"[bold]{stats['projects_updated']}[/bold] project plan(s) written, "
+        f"[bold]{stats['url_tasks']}[/bold] URL task(s) enriched"
+        + (f", [bold]{stats['skipped']}[/bold] skipped" if stats["skipped"] else "")
+    )
+    if stats["errors"]:
+        for e in stats["errors"]:
+            console.print(f"  [red]Error:[/red] {e}")
+    console.print("[dim]Each project folder now contains a _plan.md.[/dim]")
 
 
 def cmd_links(arg: str) -> None:
