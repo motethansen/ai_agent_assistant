@@ -1,207 +1,294 @@
-# AI Agent Assistant — System Architecture & Agent Flows
+# AI Agent Assistant — Architecture & Agent Reference
 
-This document provides a technical overview of how the AI Agent Assistant operates, its internal agents, and the flow of data across the system.
+Technical overview of the system's agents, data flows, LLM routing, and knowledge graph design.
 
 ---
 
 ## System Architecture
 
-```mermaid
-graph TD
-    subgraph "Local Sources"
-        Obsidian["Obsidian Vault (.md)"]
-        LogSeq["LogSeq Graph (.md)"]
-        AppleRem["Apple Reminders (macOS)"]
-        ICS["Local ICS Calendar"]
-    end
-
-    subgraph "Core Agents"
-        DataInput["datainput_agent — Reminders → Obsidian planner"]
-        LogSeqLater["logseq_later_agent — LATER tasks → Obsidian planner"]
-        CalPlan["calendar_planning_agent — AI day/week plan"]
-        CronJob["cron_job.py — orchestrates all agents"]
-        TermViews["terminal_views — /today /week /plan /cal"]
-        ObsAgent["obsidian_agent — read/write .md tasks"]
-        LSAgent["logseq_agent — read/write LogSeq journals"]
-        LocalCal["local_calendar_agent — ICS add/remove/list"]
-        GTasks["google_tasks_agent — Google Tasks ↔ Obsidian"]
-        AIOrch["ai_orchestration — LLM router + fallback"]
-    end
-
-    subgraph "LLM Backends"
-        Ollama["Ollama (primary — local, headless)"]
-        Gemini["Gemini API (fallback)"]
-        OpenAI["OpenAI API (fallback)"]
-        Claude["Claude API (fallback)"]
-        Groq["Groq API (fallback)"]
-    end
-
-    subgraph "Automation"
-        N8N["n8n (Docker port 5679)"]
-        APIServer["api_server.py (FastAPI port 5678)"]
-    end
-
-    %% Data flows
-    AppleRem -->|reminders.json| DataInput
-    DataInput -->|## Reminders block| Obsidian
-    LogSeq -->|LATER/TODO tasks| LogSeqLater
-    LogSeqLater -->|## LogSeq LATER Tasks block| Obsidian
-    Obsidian --> ObsAgent
-    LogSeq --> LSAgent
-    ICS --> LocalCal
-
-    %% Planning pipeline
-    ObsAgent --> CalPlan
-    LSAgent --> CalPlan
-    LocalCal --> CalPlan
-    CalPlan -->|calendar_suggestions.md| Obsidian
-    CronJob --> DataInput
-    CronJob --> LogSeqLater
-    CronJob --> CalPlan
-    CronJob --> GTasks
-
-    %% Terminal views
-    ObsAgent --> TermViews
-    LSAgent --> TermViews
-    LocalCal --> TermViews
-
-    %% LLM routing
-    AIOrch -->|ROUTING_CHAT/SCHEDULING/PARSING/PLANNING| Ollama
-    AIOrch -.->|fallback| Gemini
-    AIOrch -.->|fallback| OpenAI
-    AIOrch -.->|fallback| Claude
-    CalPlan --> AIOrch
-
-    %% n8n automation
-    N8N -->|POST /webhook/morning-plan| APIServer
-    APIServer --> CronJob
-    N8N -->|POST /webhook/add-task| APIServer
-    APIServer --> LSAgent
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Data Sources                             │
+│  Obsidian vault (.md)  ·  LogSeq graph (.md)  ·  Apple Reminders│
+│  Apple Calendar (read-only)                                     │
+└───────────┬─────────────────┬──────────────┬────────────────────┘
+            │                 │              │
+            ▼                 ▼              ▼
+┌───────────────────────────────────────────────────────────────┐
+│                        Integrations                           │
+│  integrations/obsidian.py   integrations/logseq.py           │
+│  integrations/calendar.py                                     │
+└───────┬───────────────────────────────────────────┬───────────┘
+        │                                           │
+        ▼                                           ▼
+┌──────────────────────────┐          ┌─────────────────────────┐
+│         Agents           │          │      LLM Router          │
+│  planning_agent          │◄────────►│  llm/router.py           │
+│  knowledge_agent (KG)    │          │                          │
+│  notes_agent             │          │  gemini-flash  (chat)    │
+│  sync_agent              │          │  gemini-pro    (planning)│
+│  reminders_agent         │          │  groq          (quick)   │
+└──────────┬───────────────┘          │  ollama        (offline) │
+           │                          └─────────────────────────┘
+           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       Terminal UI (ui/)                         │
+│  chat.py — multi-turn chat with history                        │
+│  commands.py — /command dispatcher                             │
+│  views.py — Rich-rendered calendar, task, and status views     │
+└───────────────────────────────────┬─────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        Cron Orchestrator                        │
+│  cron_job.py — sync · knowledge graph · morning plan           │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Agent Roles
+## Agents
 
-### datainput_agent
-Reads `datainput/reminders.json` (Apple Reminders export), deduplicates against `datainput/synced_reminders.json`, and appends new tasks to the Obsidian planner under `## Reminders`. Optionally calls the LLM to re-organise the full planner.
+### `agents/planning_agent.py`
 
-- **Entry**: `run(organise=True)`
-- **Writes**: Obsidian `Planner.md` (or `OBSIDIAN_PLANNER_FILE`)
+Generates a concrete daily or weekly schedule from the user's tasks and calendar events.
 
-### logseq_later_agent
-Scans LogSeq journals (last N days, default 30) and all pages for `LATER`-marked tasks. Deduplicates by task text and writes a `## LogSeq LATER Tasks` block to the Obsidian planner.
+- **Entry:** `run(mode="today" | "week")`
+- **Reads:** Obsidian tasks (via `ObsidianVault`), Apple Calendar events (via `CalendarReader`)
+- **Writes:** Returns a markdown plan string; cron runner writes it into `Dashboard.md`
+- **LLM:** `ROUTING_PLANNING` (default: `gemini-pro`)
+- **Triggered by:** `/plan`, `/plan week`, `python main.py --plan`, morning cron (07:00–10:00 window)
 
-- **Entry**: `run(write_to_obsidian=True)`
-- **Config**: `LOGSEQ_JOURNAL_DAYS`, `LOGSEQ_DIR`, `OBSIDIAN_PLANNER_FILE`
+### `agents/knowledge_agent.py`
 
-### calendar_planning_agent
-Fetches calendar events (local ICS → n8n YAML cache fallback), loads Apple Reminders and LogSeq tasks, and sends everything to the configured LLM (`ROUTING_PLANNING`) to generate a concrete day-by-day plan. Saves to `datainput/calendar_suggestions.md` and optionally appends to the Obsidian planner.
+Builds and maintains a **semantic RDF/OWL knowledge graph** over the entire Obsidian vault. The graph is persisted as a human-readable Turtle (`.ttl`) file and is SPARQL-queryable at runtime.
 
-- **Entry**: `generate_plan(days=7, write_to_obsidian=False)`
-- **LLM**: routes via `ROUTING_PLANNING` (default: LLM_PRIORITY chain → LM Studio)
+- **Entry:** `run(full_rebuild=False)`, `query(sparql_str)`, `graph_stats()`
+- **Graph file:** `output/knowledge_graph.ttl`
+- **Incremental updates:** tracks file mtimes in `output/.kg_mtimes.json` — only re-indexes changed files
+- **LLM role:** `ROUTING_REASONING` (Groq) translates plain-English `/kg` questions into SPARQL
+- **Triggered by:** `/kg`, `/rebuild-kg`, daily cron job
 
-### local_calendar_agent
-Manages a local RFC 5545 ICS file (`datainput/local_calendar.ics`). Supports add, remove, list, today, export, and import — no Google OAuth required.
+**Graph schema:**
 
-- **CLI commands**: `/add-event`, `/remove-event`, `/export-calendar`, `/import-calendar`
+| Class | Properties |
+|---|---|
+| `kn:Note` | `kn:path`, `kn:title`, `kn:modified`, `kn:text`, `kn:hasTag`, `kn:linksTo`, `kn:hasTask` |
+| `kn:Task` | `kn:text`, `kn:file`, `kn:dueDate`, `kn:priority`, `kn:isDone`, `kn:hasTag` |
+| `kn:Tag` | `kn:name` |
 
-### google_tasks_agent
-Pulls tasks from Google Tasks into Obsidian planner; pushes `[x]` completions from Obsidian back to Google Tasks. Auth managed via n8n (no token.json in Python).
+**Namespace prefix:** `PREFIX kn: <http://knowledgebase.local/>`
 
-- **Entry**: `run()`
-- **CLI command**: `/google-tasks`
+Broken wikilinks are indexed as `kn:danglingLink true` so they can be surfaced and fixed. The graph is rebuilt from scratch with `/rebuild-kg` or `python cron_job.py --rebuild-kg`.
 
-### terminal_views
-Rich terminal rendering for calendar and task data. All views read from Obsidian + LogSeq + Apple Reminders via `_load_unified_tasks()` and from the local ICS calendar.
+### `agents/notes_agent.py`
 
-| View | Command | Description |
-|------|---------|-------------|
-| Today | `/today` | Events + tasks due today; overdue in red |
-| Week | `/week` | 7-day count summary (events + tasks per day) |
-| Plan | `/plan [horizon]` | Tasks bucketed: today / week / month / year / backlog |
-| Cal grid | `/cal [month year]` | Month grid; `*`=event `•`=task `‼`=both |
-| Cal day | `/cal-day YYYY-MM-DD` | Single-day drill-down |
+Analyses the vault structure and suggests improvements: folder moves and new wikilinks between semantically related notes. Operates in two modes — full analysis (`/organise`) or links-only (`/links`). Both modes are dry-run by default and require explicit confirmation before applying changes.
 
-### ai_orchestration
-The LLM router. Routes requests to the correct backend based on `ROUTING_*` config keys. Defaults to **Ollama** for all tasks. Falls back through `LLM_PRIORITY` chain if the primary is unavailable.
+- **Entry:** `run(subdir=None)`, `run_links_only(subdir=None)`, `apply(result)`
+- **LLM:** `ROUTING_NOTES` (default: `gemini-flash`)
+- **Triggered by:** `/organise`, `/links`
 
-- **Providers**: `ollama`, `gemini`, `openai`, `claude`, `groq`
-- **Key functions**: `generate(prompt)`, `get_llm(type)`, `run_agent_query(input)`
+### `agents/sync_agent.py`
 
-### cron_job.py
-Orchestrates all agents in sequence with a lockfile (prevents concurrent runs) and a 5-minute hard timeout. Run directly or triggered via n8n's `POST /webhook/morning-plan`.
+Syncs LogSeq `LATER`/`TODO` tasks into the Obsidian vault, deduplicating by task text so re-runs are safe.
+
+- **Entry:** `run()`
+- **Reads:** LogSeq journals (last `LOGSEQ_JOURNAL_DAYS` days) and all LogSeq pages
+- **Writes:** Obsidian inbox note
+- **Triggered by:** `/sync`, morning cron (every run)
+
+### `agents/reminders_agent.py`
+
+Exports Apple Reminders (via AppleScript on macOS), deduplicates against a sync ledger, and adds new items to the Obsidian inbox.
+
+- **Entry:** `run(export_first=True)`
+- **Reads:** AppleScript → `datainput/reminders.json`
+- **Dedup ledger:** `datainput/synced_reminders.json`
+- **Triggered by:** `/sync-reminders`
+
+---
+
+## Integrations
+
+### `integrations/obsidian.py`
+
+Direct file-system read/write for Obsidian `.md` files. No REST API dependency — operates on the vault directory via `WORKSPACE_DIR`.
+
+Key operations:
+- `ObsidianVault.get_tasks()` — parse all `[ ]` task lines with due dates, tags, and priorities
+- `ObsidianVault.mark_task_done(text)` — toggle `[ ]` → `[x]`
+- `ObsidianVault.list_notes()` — enumerate vault notes with titles and first lines
+- `ObsidianVault.read_section(name)` / `write_section(name, content)` — named-section read/write in the inbox note
+- `parse_task_metadata(line)` — extract due date, priority, tags from a task line
+
+### `integrations/logseq.py`
+
+Parses LogSeq journals and page files for `LATER` and `TODO` markers. Handles the `[[date]]` journal link format and nested block structure.
+
+### `integrations/calendar.py`
+
+Two classes:
+
+| Class | Role |
+|---|---|
+| `CalendarReader` | Reads Apple Calendar events via EventKit (macOS) or ICS files |
+| `CalendarWriter` | Writes `#gcal`-tagged Obsidian tasks to a local `.ics` file |
+
+The `.ics` export path is set by `LOCAL_CALENDAR_FILE` (default: `output/local_calendar.ics`).
+
+---
+
+## LLM Router (`llm/router.py`)
+
+Single entry point for all LLM calls. Task types map to providers via `.config` `ROUTING_*` keys.
+
+```python
+from llm.router import ask, stream, provider_for
+
+response = ask("Summarise my tasks", task="planning")
+for chunk in stream("What's on my calendar?", task="chat"):
+    print(chunk, end="")
+```
+
+### Provider map
+
+| Provider key | Module | Notes |
+|---|---|---|
+| `gemini-flash` | `llm/gemini.py` | Fast, good for chat and note queries |
+| `gemini-pro` | `llm/gemini.py` | Higher-quality reasoning, used for planning |
+| `groq` | `llm/groq.py` | Very low latency, used for quick/reasoning tasks |
+| `ollama` | `llm/ollama.py` | Local, offline. Only active when `OLLAMA_ENABLED=true` |
+
+### Routing config
+
+| Task type | Config key | Default |
+|---|---|---|
+| Chat / freeform | `ROUTING_CHAT` | `gemini-flash` |
+| Day/week planning | `ROUTING_PLANNING` | `gemini-pro` |
+| Vault note queries | `ROUTING_NOTES` | `gemini-flash` |
+| Fast single-turn | `ROUTING_QUICK` | `groq` |
+| Reasoning / SPARQL | `ROUTING_REASONING` | `groq` |
+| Offline fallback | `ROUTING_OFFLINE` | `ollama` |
+
+### Fallback chain
+
+If the primary provider returns an error or is unavailable, the router falls back through:
+```
+gemini-flash → gemini-pro → groq → ollama
+```
+
+---
+
+## Terminal UI (`ui/`)
+
+### `ui/chat.py`
+
+Multi-turn conversational chat with:
+- **Conversation history** persisted to `output/chat_history.json` (last 50 messages)
+- **Context window:** last 6 turns sent to the LLM per request
+- **Streaming output** via the router's `stream()` interface
+- **Slash commands** work inline — type `/today` mid-conversation
+- **Exit from chat:** `/back` returns to main loop; `/exit` or Ctrl-C exits the assistant
+
+### `ui/commands.py`
+
+Slash command dispatcher. Each command is a handler function; `dispatch(line)` routes `/cmd arg` to the correct handler and returns a string response or `None` (for commands that print directly).
+
+### `ui/views.py`
+
+Rich terminal rendering:
+- `print_today(events, tasks)` — today's view with overdue highlighting
+- `print_events(events)` — event list with time and calendar name
+- `print_tasks(tasks)` / `print_backlog(tasks)` — task list grouped by urgency
+- `print_model_routing(providers)` — provider availability and routing table
+- `print_status(config, providers)` — full system health panel
+- `print_help()` — command reference table
+
+---
+
+## Cron Orchestrator (`cron_job.py`)
+
+Runs via launchd (macOS) or crontab on `SYNC_INTERVAL_MINUTES` (default: 30 min).
 
 ```bash
-python cron_job.py                              # all agents
-python cron_job.py --agents datainput logseq    # specific agents
+python cron_job.py              # run once and exit
+python cron_job.py --loop       # continuous (for testing)
+python cron_job.py --rebuild-kg # force full KG rebuild, then exit
 ```
 
-### api_server.py (FastAPI)
-Webhook server for n8n integration. Runs on `WEBHOOK_PORT` (default 5678).
+**Lock file:** `output/.cron.lock` — prevents concurrent runs. Auto-cleared after 5 minutes.
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /vault/read` | Read a file from the Obsidian vault |
-| `POST /vault/write` | Create/update an Obsidian file (replaces NanoClaw) |
-| `GET /vault/tasks` | List all tasks from Obsidian vault |
-| `GET /logseq/tasks` | List recent LogSeq journal context |
-| `POST /webhook/add-task` | Add a task to today's LogSeq journal |
-| `GET /webhook/backlog` | Return unified task backlog as JSON |
-| `POST /webhook/plan` | Trigger scheduling via ai_orchestration |
-| `POST /webhook/morning-plan` | Full pipeline: datainput → logseq → AI plan |
-| `GET /health` | Health check (Ollama status, LOGSEQ_DIR) |
+**Log:** `output/cron.log` — timestamped run log.
+
+### Job schedule
+
+| Job | Frequency | Agents called |
+|---|---|---|
+| **Sync** | Every run | `sync_agent.run()` |
+| **Knowledge graph** | Once daily (any time) | `knowledge_agent.run()` |
+| **Morning plan** | Once daily, 07:00–10:00 | `planning_agent.run()` → writes `Dashboard.md` |
 
 ---
 
-## Data Flow — Morning Plan Pipeline
+## Data & Output Files
 
-```
-08:00 weekdays
-  n8n schedule trigger
-    → POST http://api:5678/webhook/morning-plan
-      → datainput_agent.run()          # Apple Reminders → Obsidian
-      → logseq_later_agent.run()       # LogSeq LATER → Obsidian
-      → calendar_planning_agent        # LM Studio → day/week plan
-        → datainput/calendar_suggestions.md
-      → return {status, steps, plan}
-    ← n8n formats summary
-```
+| Path | Written by | Contents |
+|---|---|---|
+| `output/knowledge_graph.ttl` | `knowledge_agent` | Full RDF graph in Turtle format |
+| `output/.kg_mtimes.json` | `knowledge_agent` | File mtime cache for incremental updates |
+| `output/cron.log` | `cron_job` | Timestamped cron run log |
+| `output/chat_history.json` | `ui/chat.py` | Last 50 chat messages |
+| `output/local_calendar.ics` | `CalendarWriter` | ICS export of `#gcal`-tagged tasks |
+| `datainput/reminders.json` | `reminders_agent` | Apple Reminders export |
+| `datainput/synced_reminders.json` | `reminders_agent` | Sync dedup ledger |
 
 ---
 
 ## Configuration Reference
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `ENABLE_OLLAMA` | `true` | Enable Ollama (primary local backend) |
-| `OLLAMA_MODEL` | `qwen3.5:9b` | Default Ollama model |
-| `OLLAMA_NUM_CTX` | `4096` | Context window size (optimized for RAM) |
-| `LLM_PRIORITY` | `ollama,groq,gemini,openai,claude` | Fallback chain |
-| `ROUTING_CHAT` | `ollama` | LLM for chat |
-| `ROUTING_SCHEDULING` | `ollama` | LLM for scheduling |
-| `ROUTING_PARSING` | `ollama` | LLM for parsing |
-| `ROUTING_PLANNING` | _(uses LLM_PRIORITY)_ | LLM for daily plan |
-| `WORKSPACE_DIR` | — | Obsidian vault root |
-| `LOGSEQ_DIR` | — | LogSeq graph root |
-| `OBSIDIAN_PLANNER_FILE` | `Planner.md` | Planner note relative path |
-| `LOGSEQ_JOURNAL_DAYS` | `30` | Days of journals to scan |
-| `DEEP_WORK_START/END` | `09:00`/`12:00` | Focus window for plan |
-| `CHRONOTYPE` | `morning_owl` | Affects plan scheduling |
-| `N8N_WEBHOOK_URL` | `http://localhost:5678/webhook` | n8n base URL |
-| `WEBHOOK_PORT` | `5678` | api_server.py port |
+Full list of supported `.config` keys:
 
----
+```ini
+# Paths
+WORKSPACE_DIR=          # Obsidian vault root (required)
+LOGSEQ_DIR=             # LogSeq graph root (required for sync)
+OBSIDIAN_DASHBOARD_FILE=Dashboard.md
+LOGSEQ_JOURNAL_DAYS=2
 
-## Sprint History
+# LLM routing
+ROUTING_CHAT=gemini-flash
+ROUTING_PLANNING=gemini-pro
+ROUTING_NOTES=gemini-flash
+ROUTING_QUICK=groq
+ROUTING_REASONING=groq
+ROUTING_OFFLINE=ollama
 
-| Sprint | Goal | Status |
-|--------|------|--------|
-| 01 | Remove OpenClaw, Ollama-first LLM, LogSeq parsing, n8n webhooks | ✅ |
-| 02 | Obsidian direct parsing, LogSeq→Obsidian sync, `--plan` flag, cron safety | ✅ |
-| 03 | Per-task LLM routing, `config.example`, evening review | ✅ |
-| 04 | `main.py` refactor, test suite (42 tests), Rich status dashboard, `/today` + `/week` | ✅ |
-| 05 | Local ICS calendar engine, Google Tasks two-way sync | ✅ |
-| 06 | LM Studio adapter, NanoClaw containerised Obsidian + LogSeq skills | ✅ |
-| 07 | LM Studio native SDK, `lms` CLI lifecycle, n8n local setup, Google OAuth → n8n | ✅ |
-| 08 | `/plan` time-horizon buckets, `/cal` month grid, Ollama/LM Studio planning, n8n morning-plan webhook | ✅ |
+# Gemini
+GEMINI_API_KEY=
+GEMINI_FLASH_MODEL=gemini-2.0-flash
+GEMINI_PRO_MODEL=gemini-2.5-flash-preview-04-17
+
+# Groq
+GROQ_API_KEY=
+GROQ_MODEL=llama-3.3-70b-versatile
+
+# Ollama
+OLLAMA_ENABLED=false
+OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_HOST=http://localhost:11434
+
+# Planning
+CHRONOTYPE=morning_owl
+DEEP_WORK_START=09:00
+DEEP_WORK_END=12:00
+FOCUS_CATEGORIES=dev,writing,learning
+
+# Sync
+SYNC_INTERVAL_MINUTES=30
+
+# Calendar
+GCAL_TAG=gcal
+LOCAL_CALENDAR_FILE=output/local_calendar.ics
+APPLE_CALENDAR_NAME=Home
+```

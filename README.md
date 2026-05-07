@@ -1,109 +1,75 @@
 # AI Agent Assistant
 
-A local-first personal AI assistant that bridges your Markdown notes (Obsidian + LogSeq), your calendar, and your task lists — all from the terminal, powered by local LLMs. Optimized for **headless, low-memory operation** on Apple Silicon and Linux.
+A **local-first personal AI assistant** that bridges your Markdown notes (Obsidian + LogSeq), Apple Calendar, and task lists — all from the terminal, powered by a smart LLM routing layer. Optimised for headless, low-memory operation on Apple Silicon and Linux.
 
-> **Primary LLM**: Ollama (local, headless)
-> **Fallback chain**: Ollama → Groq → Gemini → OpenAI → Claude
+> **Primary LLMs:** Gemini Flash (chat/notes) · Gemini Pro (planning) · Groq (fast queries)
+> **Offline fallback:** Ollama (local, headless)
 
 ---
 
 ## What It Does
 
-- Reads tasks from **Obsidian** and **LogSeq** (`LATER` / `TODO` markers)
-- Syncs **Apple Reminders** into your Obsidian planner
-- Shows your schedule as a **unix `cal`-style month grid** in the terminal
-- Generates a **day-by-day AI plan** using your calendar and task data
-- Pushes events to **Apple Calendar** directly from the terminal
-- **Detects and surfaces overdue tasks**, categorised by your focus areas
-- Triggers the full planning pipeline from **n8n** on a schedule (weekdays 08:00)
-- Runs completely **offline** — no cloud accounts required by default
+- **Reads tasks** from Obsidian and LogSeq (`LATER` / `TODO` markers) and Apple Reminders
+- **Generates AI plans** (daily or weekly) using your calendar events and task backlog
+- **Builds a semantic knowledge graph** (RDF/OWL) over your entire vault — queryable in plain English
+- **Suggests wikilinks and folder moves** to keep your vault well-organised
+- **Syncs LogSeq → Obsidian** incrementally, deduplicating on every run
+- **Exports calendar events** from tagged Obsidian tasks to `.ics`
+- **Multi-turn chat** with full conversation history and streaming output
+- **Runs a background cron** every 30 minutes: sync + knowledge graph + morning plan
+- Works completely **offline** with Ollama — no cloud accounts required
 
 ---
 
-## Dependencies: What You Need Before Installing
-
-These must be installed and running before `./install.sh` will fully succeed.
+## Dependencies
 
 ### Required
 
 | Dependency | Why | Install |
 |---|---|---|
-| **Python 3.11+** | Runtime | `brew install python@3.12` (macOS) / `apt install python3.12` (Linux) |
+| **Python 3.11+** | Runtime | `brew install python@3.12` / `apt install python3.12` |
 | **Git** | Clone and updates | `brew install git` / `apt install git` |
-
-### Local LLM (Headless)
-
-| Dependency | Why | Install |
-|---|---|---|
-| **Ollama** | **Headless local LLM** — zero GUI overhead, significantly faster and lower-RAM. Best for Apple Silicon and Linux. | `curl -fsSL https://ollama.com/install.sh \| sh` then `ollama pull qwen3.5:9b` |
-
-> You need at least one local LLM **or** a cloud API key (Gemini/OpenAI). **Ollama is the primary backend.**
-
-### Notes & Vault Tools — you need the folders, not the apps
-
-| Dependency | Why | Notes |
-|---|---|---|
-| **Obsidian vault** | Task planner and note target — agents read/write `.md` files directly | The Obsidian app does not need to be running. Set `WORKSPACE_DIR` in `.config`. |
-| **LogSeq graph** | Source of `LATER`/`TODO` tasks | The LogSeq app does not need to be running. Set `LOGSEQ_DIR` in `.config`. |
 
 ### Optional — Cloud API Keys
 
-Only needed if LM Studio / Ollama are unavailable or you want cloud fallback.
+At least one key is recommended for full functionality.
 
-| Key | Provider | Free tier | Get your key |
+| Key | Provider | Free tier | Notes |
 |---|---|---|---|
-| `GROQ_API_KEY` | Groq | Yes — generous free tier, very fast inference | [console.groq.com](https://console.groq.com) |
-| `GEMINI_API_KEY` | Google AI Studio | Yes — rate-limited. `gemini-1.5-flash` has a more generous free quota than `gemini-2.0-flash`. | [aistudio.google.com](https://aistudio.google.com) |
-| `OPENAI_API_KEY` | OpenAI | No | [platform.openai.com](https://platform.openai.com) |
-| `CLAUDE_API_KEY` | Anthropic | No | [console.anthropic.com](https://console.anthropic.com) |
-| `AI_Assistant_Token` | HuggingFace Inference API | Yes — free tier gives access to thousands of open-source models | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) |
+| `GEMINI_API_KEY` | Google AI Studio | Yes — generous free quota | Primary for chat and planning |
+| `GROQ_API_KEY` | Groq | Yes — very fast inference | Best for quick/reasoning tasks |
+| `OLLAMA_ENABLED` | Local (no key) | Always free | Set `OLLAMA_ENABLED=true` in `.config` |
 
-> **Adding more LLMs:** Groq hosts many open-source models (Llama, Qwen, Kimi K2, and more). See the full list at [console.groq.com/docs/models](https://console.groq.com/docs/models) and set `GROQ_MODEL` in `.config` to any active model ID.
-
-> **HuggingFace models:** Browse inference-ready models at [huggingface.co/models](https://huggingface.co/models) — filter by "Inference API" to find ones available on the free tier. Confirmed working: `Qwen/Qwen2.5-72B-Instruct` (chat), `Qwen/Qwen2.5-Coder-32B-Instruct` (code), `facebook/bart-large-cnn` (summarisation).
-
-> If you exceed your Gemini free-tier quota, the CLI will display a clear rate-limit warning and suggest switching to LM Studio for that query.
-
-### Optional — Workflow Automation
+### Optional — Local LLM (Offline)
 
 | Dependency | Why | Install |
 |---|---|---|
-| **Docker** or **OrbStack** | Runs n8n for scheduled automation and n8n-based Google connector | [orbstack.dev](https://orbstack.dev) (macOS, recommended) / [docs.docker.com](https://docs.docker.com/desktop/) |
-| **n8n** | Scheduled morning planning, Universal Task Sync, Google Calendar/Tasks connector | `docker compose up -d n8n` — runs automatically once Docker is available |
+| **Ollama** | Headless local LLM — zero cloud dependency | `curl -fsSL https://ollama.com/install.sh \| sh` then `ollama pull qwen2.5:7b` |
 
 ### Optional — Apple Integrations (macOS only)
 
-| Dependency | Why | Notes |
+| Integration | How | Notes |
 |---|---|---|
-| **Apple Calendar** | Push events from `/add-event` directly into Apple Calendar | Must have granted Calendar access to Terminal in System Settings → Privacy → Automation |
-| **Apple Reminders** export | Sync Reminders into Obsidian planner | Run `python debug_reminders.py` to export to `datainput/reminders.json` via AppleScript |
-
-### Optional — Tool-Calling & Automation
-
-| Dependency | Why | Install |
-|---|---|---|
-| **FastAPI** | Internal **API Server** (`api_server.py`) — serves as the "brain" and Tool hub. Replaces NanoClaw Docker skills. | `pip install fastapi uvicorn` (done by installer) |
-| **Docker** | Runs n8n for scheduled automation and Google connector | [orbstack.dev](https://orbstack.dev) (macOS) / [docs.docker.com](https://docs.docker.com/desktop/) |
+| **Apple Reminders** | `/sync-reminders` exports via AppleScript | Requires Terminal access in System Settings → Privacy → Automation |
+| **Apple Calendar** | `APPLE_CALENDAR_NAME` in `.config` | Read-only via `CalendarReader` |
 
 ---
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/yourusername/ai_agent_assistant
+git clone https://github.com/motethansen/ai_agent_assistant
 cd ai_agent_assistant
-cp config.example .config        # edit: set WORKSPACE_DIR, LOGSEQ_DIR, LM_STUDIO_MODEL
+cp config.example .config        # edit: set WORKSPACE_DIR, API keys
 ./install.sh
-./run.sh                         # start the terminal chat
+./run.sh                         # start the terminal assistant
 ```
 
 On first run, `install.sh` will:
 1. Check for Python 3.11+
-2. Create `.venv` and install Python dependencies
-3. Start LM Studio or Ollama (whichever is enabled)
-4. Start n8n if Docker is available
-5. Prompt for API keys if not already set
-6. Set up a cron job for hourly background sync
+2. Create a `.venv` and install all Python dependencies
+3. Validate your `.config` and warn about any missing keys
+4. Register a background cron job for sync + knowledge graph updates
 
 To upgrade an existing installation:
 ```bash
@@ -116,186 +82,180 @@ To upgrade an existing installation:
 
 All settings live in `.config` (copy from `config.example`). **Never commit `.config`** — it contains your API keys.
 
+### Paths
+
 | Key | Description | Example |
 |---|---|---|
-| `AI_Assistant_Token` | HuggingFace token — used for RAG embeddings and the Inference API | `hf_...` |
-| `ENABLE_OLLAMA` | Use Ollama (primary local backend) | `true` |
-| `OLLAMA_MODEL` | Default Ollama model | `qwen3.5:9b` |
-| `OLLAMA_NUM_CTX` | Context window size (optimized for RAM) | `4096` |
-| `LLM_PRIORITY` | Fallback chain | `ollama,groq,gemini,openai,claude` |
-| `ROUTING_CHAT` | LLM for chat | `ollama` |
-| `ROUTING_SCHEDULING` | LLM for scheduling | `ollama` |
-| `ROUTING_PARSING` | LLM for task parsing | `ollama` |
-| `ROUTING_PLANNING` | LLM for daily plan generation | `ollama` |
-| `WORKSPACE_DIR` | Path to Obsidian vault | `/path/to/vault` |
-| `LOGSEQ_DIR` | Path to LogSeq graph | `/path/to/logseq` |
-| `OBSIDIAN_PLANNER_FILE` | Planner note (relative to vault) | `Planner.md` |
-| `APPLE_CALENDAR_NAME` | Apple Calendar to push events to | `Home` |
-| `FOCUS_CATEGORIES` | Categories for task organisation | `dev,writing,learning Thai` |
-| `DEEP_WORK_START/END` | Focus window for plan scheduling | `09:00` / `12:00` |
-| `CHRONOTYPE` | Used to shape plan suggestions | `morning_owl` |
+| `WORKSPACE_DIR` | Obsidian vault root | `/path/to/vault` |
+| `LOGSEQ_DIR` | LogSeq graph root | `/path/to/logseq` |
+| `OBSIDIAN_DASHBOARD_FILE` | Dashboard note (relative to vault) | `Dashboard.md` |
+| `LOGSEQ_JOURNAL_DAYS` | Days of journals to scan | `2` |
 
-Update any key live from the chat:
-```
-/settings set LM_STUDIO_MODEL qwen2.5-coder-7b-instruct-mlx
-```
+### LLM Routing
+
+| Key | Default | Description |
+|---|---|---|
+| `ROUTING_CHAT` | `gemini-flash` | LLM for chat and freeform questions |
+| `ROUTING_PLANNING` | `gemini-pro` | LLM for daily/weekly plan generation |
+| `ROUTING_NOTES` | `gemini-flash` | LLM for vault search and note questions |
+| `ROUTING_QUICK` | `groq` | LLM for fast single-turn queries |
+| `ROUTING_REASONING` | `groq` | LLM for SPARQL generation and knowledge graph queries |
+| `ROUTING_OFFLINE` | `ollama` | Offline fallback when cloud providers are unavailable |
+
+### LLM Providers
+
+| Key | Description |
+|---|---|
+| `GEMINI_API_KEY` | Google AI Studio key |
+| `GEMINI_FLASH_MODEL` | Flash model ID (default: `gemini-2.0-flash`) |
+| `GEMINI_PRO_MODEL` | Pro model ID (default: `gemini-2.5-flash-preview-04-17`) |
+| `GROQ_API_KEY` | Groq API key |
+| `GROQ_MODEL` | Groq model ID (default: `llama-3.3-70b-versatile`) |
+| `OLLAMA_ENABLED` | `true` / `false` |
+| `OLLAMA_MODEL` | Ollama model (default: `qwen2.5:7b`) |
+| `OLLAMA_HOST` | Ollama server URL (default: `http://localhost:11434`) |
+
+### Planning
+
+| Key | Description | Example |
+|---|---|---|
+| `CHRONOTYPE` | Shapes plan scheduling | `morning_owl` |
+| `DEEP_WORK_START` | Focus block start | `09:00` |
+| `DEEP_WORK_END` | Focus block end | `12:00` |
+| `FOCUS_CATEGORIES` | Task categories for plan prioritisation | `dev,writing,learning` |
 
 ---
 
-## Terminal Chat Commands
+## Terminal Commands
 
-Start the chat: `./run.sh` or `python main.py --chat`
+Start the assistant: `./run.sh` or `python main.py`
 
-### Calendar & Tasks
+### Views
 
 | Command | Description |
 |---|---|
 | `/today` | Today's calendar events + tasks due today |
-| `/week` | 7-day summary — event and task counts per day |
-| `/plan` | All tasks grouped by: Today, This Week, This Month, This Year, Backlog |
-| `/plan today` | Filter to today's tasks and overdue only |
-| `/cal` | Month grid with `*` (events) and `•` (tasks) markers |
-| `/cal-day 2026-04-10` | Drill into a specific day's events and tasks |
-| `/add-event` | Add event to local ICS calendar + optionally to Apple Calendar |
-| `/remove-event` | Remove an upcoming ICS event |
-| `/export-calendar` | Export local calendar to `.ics` file |
-| `/import-calendar` | Import events from an `.ics` file |
+| `/week` | 7-day task and event overview |
+| `/cal` | Upcoming calendar events (default 14 days) |
+| `/cal <N>` | Events over the next N days |
+| `/status` | System status — providers, vault path, config health |
+| `/model` | Show LLM routing table |
 
-### Tasks & Planning
+### Planning & Tasks
 
 | Command | Description |
 |---|---|
-| `/backlog` | Unified task backlog (Obsidian + LogSeq) |
-| `/add-task Write tests` | Add a `LATER` task to today's LogSeq journal |
-| `/done Write tests` | Mark a task done in LogSeq or Obsidian |
-| `/organize` | Reorganise Planner.md: surface overdue tasks + categorise by `FOCUS_CATEGORIES` |
-| `/sync-logseq` | Sync LogSeq `LATER` tasks → Obsidian planner |
-| `/sync-universal` | Full task sync through n8n conflict resolution |
-| `/google-tasks` | Pull Google Tasks → Obsidian; push completions back |
+| `/plan` | AI-generated schedule for today |
+| `/plan week` | AI-generated 7-day plan |
+| `/backlog` | All pending tasks grouped by urgency |
+| `/add-task <text>` | Add task to Obsidian inbox (supports `due:YYYY-MM-DD`) |
+| `/done <text>` | Mark a task complete in Obsidian |
 
-### LLM & Services
+### Notes & Vault
 
 | Command | Description |
 |---|---|
-| `/models` | Show all providers — enabled/disabled, active model, live status |
-| `/ask gemini <query>` | Send one query to a specific provider, bypassing routing |
-| `/ask lmstudio <query>` | Same — useful when one provider hits a rate limit |
-| `/routing` | Show and update LLM routing per task type |
-| `/model enable\|disable <provider>` | Toggle a provider on/off |
-| `/services` | Check and start local AI services |
-| `/status` | Full system health dashboard |
+| `/notes <question>` | Ask a question about your Obsidian vault |
+| `/organise` | Suggest folder moves and wikilinks (dry run with confirmation) |
+| `/links` | Suggest wikilinks only (dry run with confirmation) |
 
-### Research & Utilities
+### Knowledge Graph (Semantic Database)
 
 | Command | Description |
 |---|---|
-| `/cmd prioritize by deadline` | Custom AI command on your backlog |
-| `/develop a FastAPI endpoint` | AI code generation |
-| `/index` | Re-index notes and books for RAG search |
-| `/gmail` | List snoozed and filtered emails |
-| `/help` | Full command list |
+| `/kg` | Show knowledge graph stats (notes, tasks, tags, links, triples) |
+| `/kg <question>` | Query the graph in plain English — converts to SPARQL automatically |
+| `/rebuild-kg` | Force a full knowledge graph rebuild from scratch |
+
+### Sync
+
+| Command | Description |
+|---|---|
+| `/sync` | Run LogSeq → Obsidian sync |
+| `/sync-reminders` | Export Apple Reminders → Obsidian inbox |
+| `/cal-export` | Export `#gcal`-tagged tasks to `.ics` file |
+
+### Chat & System
+
+| Command | Description |
+|---|---|
+| `/chat` | Open multi-turn chat mode with history |
+| `/help` | Show full command list |
+| `/exit` or `/quit` | Exit the assistant |
 
 ---
 
-## How the Planner Works
+## Knowledge Graph
 
-All agents write into **`Planner.md`** in your Obsidian vault (set by `OBSIDIAN_PLANNER_FILE`). Each agent owns a named section — sections are replaced in-place on every run, never duplicated.
+The assistant builds a **semantic RDF/OWL knowledge graph** over your Obsidian vault. It indexes notes, tasks, tags, and wikilinks into a Turtle (`.ttl`) file and exposes a SPARQL query interface.
 
-| Section | Written by | When |
-|---|---|---|
-| `## 🚨 Overdue` | `/organize` | On demand — tasks with past due dates surfaced to top |
-| `## Reminders` | `datainput_agent` | Hourly cron — Apple Reminders |
-| `## LogSeq LATER Tasks` | `logseq_later_agent` | Hourly cron — LogSeq sync |
-| `## Google Tasks` | `google_tasks_agent` | Hourly cron — Google Tasks pull |
-| `## AI Calendar Plan` | `calendar_planning_agent` | Hourly cron (optional) |
+```
+output/knowledge_graph.ttl    # persisted graph (human-readable Turtle)
+output/.kg_mtimes.json        # mtime cache for incremental updates
+```
 
-A second file, **`Inbox.md`**, receives raw LogSeq task dumps from `/sync-logseq`. This is a staging area — tasks land here before you decide what to promote to `Planner.md`.
+**Graph schema:**
+
+| Class | Properties |
+|---|---|
+| `kn:Note` | `kn:path`, `kn:title`, `kn:modified`, `kn:text`, `kn:hasTag`, `kn:linksTo`, `kn:hasTask` |
+| `kn:Task` | `kn:text`, `kn:file`, `kn:dueDate`, `kn:priority`, `kn:isDone`, `kn:hasTag` |
+| `kn:Tag` | `kn:name` |
+
+**Example queries via `/kg`:**
+
+```
+/kg show all overdue tasks
+/kg which notes link to my project notes?
+/kg tasks tagged #urgent due this week
+/kg find notes without any outgoing links
+```
+
+The `/kg` command translates plain English into SPARQL, executes it, and renders results as a table. Use `/rebuild-kg` after large vault reorganisations; incremental updates run automatically via cron.
 
 ---
 
-## Agent Pipeline (cron / scheduled)
+## Agent Pipeline (Background Cron)
+
+The cron runner executes on `SYNC_INTERVAL_MINUTES` (default 30 min) via launchd (macOS) or crontab:
 
 ```bash
-python cron_job.py                              # run all agents
-python cron_job.py --agents datainput logseq    # run specific agents
+python cron_job.py              # run once and exit
+python cron_job.py --loop       # run continuously (for manual testing)
+python cron_job.py --rebuild-kg # force full knowledge graph rebuild
 ```
 
-Agents run in order:
-1. **datainput** — Apple Reminders → Obsidian planner → LLM re-organises planner
-2. **logseq** — LogSeq `LATER` tasks → Obsidian planner block
-3. **calendar_planning** — AI day/week plan → `datainput/calendar_suggestions.md`
-4. **google_tasks** — Google Tasks ↔ Obsidian two-way sync
+**Jobs and their frequency:**
+
+| Job | Frequency | What it does |
+|---|---|---|
+| **Sync** | Every run | LogSeq `LATER`/`TODO` tasks → Obsidian |
+| **Knowledge graph** | Once daily (any time) | Incremental RDF index update |
+| **Morning plan** | Once daily (07:00–10:00 window) | AI schedule → `Dashboard.md` |
 
 ---
 
-## n8n Workflow Automation
-
-n8n runs as a Docker container and automates the morning pipeline on a schedule.
+## CLI Flags
 
 ```bash
-docker compose up -d n8n        # start n8n at http://localhost:5679
-python api_server.py            # start the Python webhook callback server on port 5678
+python main.py                  # interactive terminal (default)
+python main.py --plan           # generate today's plan and exit
+python main.py --plan week      # generate weekly plan and exit
+python main.py --sync           # run LogSeq sync and exit
+python main.py --status         # show system status and exit
+python main.py --today          # show today's tasks and events and exit
+python main.py --chat           # start directly in chat mode
 ```
-
-Import workflows from `n8n-workflows/`:
-
-| File | Trigger | What it does |
-|---|---|---|
-| `morning-planning.json` | Weekdays 08:00 | Full pipeline: sync + AI plan |
-| `add-task.json` | Inbound webhook | Add task to LogSeq |
-| `backlog-digest.json` | Fridays 17:00 | Fetch backlog summary |
-| `universal_task_sync.json` | `/sync-universal` | Conflict-resolved task/calendar sync |
-| `google_tasks_sync.json` | Cron / manual | Google Tasks pull/push via n8n |
-
-See `README_N8N.md` for detailed import and configuration steps.
-
----
-
-## LLM Routing
-
-```
-ROUTING_CHAT=ollama          # all chat → Ollama
-ROUTING_SCHEDULING=ollama    # scheduling decisions → Ollama
-ROUTING_PARSING=ollama       # task parsing → Ollama
-ROUTING_PLANNING=ollama      # daily plan generation → Ollama
-LLM_PRIORITY=ollama,groq,gemini,openai,claude   # fallback if Ollama unavailable
-```
-
-To route a single query to a specific provider without changing routing config:
-```
-/ask gemini find tasks about academic papers in obsidian
-/ask groq summarise my overdue tasks
-/ask ollama summarise my overdue tasks
-```
-
-To use Groq as a free cloud fallback (no local GPU needed):
-```
-ENABLE_GROQ=true
-GROQ_API_KEY=gsk_...
-GROQ_MODEL=llama-3.3-70b-versatile
-LLM_PRIORITY=ollama,groq,gemini,openai,claude
-```
-
----
-
-## Google Services Setup
-
-Google Calendar and Tasks credentials are managed via **n8n** — no `token.json` or `credentials.json` required in Python.
-
-1. Start n8n: `docker compose up -d n8n`
-2. Open `http://localhost:5679` → Credentials → New → Google Calendar OAuth2
-3. Follow the OAuth prompts — credentials are stored inside n8n, not on disk
 
 ---
 
 ## Tests
 
 ```bash
-bash scripts/run_tests.sh       # full suite with coverage
+pytest                          # full suite
 pytest tests/ -v                # verbose per-test output
+pytest --html=output/test_report.html   # with HTML report
 ```
-
-Current status: 95 tests passing, 1 skipped.
 
 ---
 
