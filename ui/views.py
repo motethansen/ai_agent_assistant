@@ -258,6 +258,7 @@ def print_help() -> None:
         ("/status",              "System status + provider health"),
         ("/chat",                "Open multi-turn chat mode"),
         ("/help",                "Show this help"),
+        ("/exit",                "Exit the assistant"),
     ]
 
     table = Table(box=box.SIMPLE, show_header=False, expand=True)

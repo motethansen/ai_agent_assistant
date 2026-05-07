@@ -45,6 +45,8 @@ def dispatch(line: str) -> str | None:
         "kg":              cmd_kg,
         "rebuild-kg":      cmd_rebuild_kg,
         "help":            cmd_help,
+        "exit":            cmd_exit,
+        "quit":            cmd_exit,
     }
 
     handler = handlers.get(cmd)
@@ -355,6 +357,11 @@ def cmd_status(_arg: str) -> None:
     import config
     from llm.router import all_providers
     views.print_status(config.summary(), all_providers())
+
+
+def cmd_exit(_arg: str) -> None:
+    console.print("[dim]Goodbye.[/dim]")
+    sys.exit(0)
 
 
 def cmd_help(_arg: str) -> None:
