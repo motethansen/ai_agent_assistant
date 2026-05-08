@@ -15,14 +15,17 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python3"
 MIN_MAJOR=3
-MIN_MINOR=11
+MIN_MINOR=10
 
-# ── Check venv exists ────────────────────────────────────────────────────────
-if [ ! -f "$VENV_PYTHON" ]; then
-    echo "ERROR: Virtual environment not found (.venv/bin/python3 missing)."
-    echo "       Run: ./install.sh"
+# ── Locate venv (support both venv/ and .venv/) ──────────────────────────────
+if [ -f "$SCRIPT_DIR/venv/bin/python3" ]; then
+    VENV_PYTHON="$SCRIPT_DIR/venv/bin/python3"
+elif [ -f "$SCRIPT_DIR/.venv/bin/python3" ]; then
+    VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python3"
+else
+    echo "ERROR: Virtual environment not found (venv/ or .venv/ missing)."
+    echo "       Run: python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
     exit 1
 fi
 
@@ -32,9 +35,7 @@ MAJ=$(echo "$VER" | cut -d. -f1)
 MIN=$(echo "$VER" | cut -d. -f2)
 
 if [ "$MAJ" -lt "$MIN_MAJOR" ] || { [ "$MAJ" -eq "$MIN_MAJOR" ] && [ "$MIN" -lt "$MIN_MINOR" ]; }; then
-    echo "ERROR: .venv is using Python $VER but ${MIN_MAJOR}.${MIN_MINOR}+ is required."
-    echo "       Recreate the venv with a newer Python:"
-    echo "         rm -rf .venv && ./install.sh"
+    echo "ERROR: venv is using Python $VER but ${MIN_MAJOR}.${MIN_MINOR}+ is required."
     exit 1
 fi
 
