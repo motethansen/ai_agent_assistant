@@ -12,7 +12,7 @@
 | Task | Title | Estimate | Status |
 |------|-------|----------|--------|
 | T09-01 | Fix `print_backlog()` future-date bucket — dated tasks >7 days out fell into "Backlog (no date)" | S | ✅ Done (2026-06-11) |
-| T09-02 | Add category tags to `010 Planning/Task Categories.md` (`#vizneo`, `#urbanlife`, etc.) | M | 🔲 Not started |
+| T09-02 | Add category tags to `010 Planning/Task Categories.md` (`#vizneo`, `#urbanlife`, etc.) | M | ✅ Done (2026-06-11) |
 | T09-03 | Wire `/plan` output into `010 Planning/Planner.md` structured sections via `write_section()` | M | 🔲 Not started |
 | T09-04 | Archive root `Dashboard.md` → convert to static index pointing to `010 Planning/` | S | 🔲 Not started |
 | T09-05 | Clean `000 Inbox/Inbox.md` — remove junk preamble text at top | S | 🔲 Not started |
