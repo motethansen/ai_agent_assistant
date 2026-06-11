@@ -80,7 +80,7 @@ def print_tasks(tasks: list[dict], title: str = "Tasks") -> None:
 
 def print_backlog(tasks: list[dict]) -> None:
     today = datetime.date.today()
-    overdue, due_today, due_soon, undated = [], [], [], []
+    overdue, due_today, due_soon, future, undated = [], [], [], [], []
 
     for t in tasks:
         d = t.get("due_date")
@@ -92,7 +92,7 @@ def print_backlog(tasks: list[dict]) -> None:
             elif d <= today + datetime.timedelta(days=7):
                 due_soon.append(t)
             else:
-                undated.append(t)
+                future.append(t)
         else:
             undated.append(t)
 
@@ -105,6 +105,10 @@ def print_backlog(tasks: list[dict]) -> None:
     if due_soon:
         console.print(Rule("[cyan]Due This Week[/cyan]"))
         print_tasks(due_soon)
+    if future:
+        future_sorted = sorted(future, key=lambda t: t.get("due_date") or datetime.date.max)
+        console.print(Rule("[blue]Upcoming[/blue]"))
+        print_tasks(future_sorted[:50])
     if undated:
         console.print(Rule("[dim]Backlog (no date)[/dim]"))
         print_tasks(undated[:30])

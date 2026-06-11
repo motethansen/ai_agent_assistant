@@ -2,7 +2,7 @@
 
 **Sprint**: 07
 **Goal**: Replace all fragile HTTP/OpenAI-compat LM Studio calls with the official `lmstudio` SDK; get n8n running locally with all workflows imported and verified; begin migrating Google Calendar and Tasks auth out of Python and into n8n.
-**Status**: 🔲 Not started
+**Status**: ✅ Done — superseded by April 2026 refactor (LM Studio, n8n, Google OAuth removed entirely)
 **Epics**: E07, E18, E19
 
 ---
