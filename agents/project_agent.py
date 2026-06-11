@@ -254,12 +254,37 @@ def render_project_plan(project_name: str, tasks: list[dict], next_action: str) 
     return "\n".join(lines)
 
 
+# ── Folders that must never receive a _plan.md ────────────────────────────────
+# These are system/planning folders managed by the user or other agents directly.
+_SKIP_FOLDERS = {
+    "Root",           # vault root
+    "010 Planning",   # user's planning dashboard area
+    "000 Inbox",      # agent-managed inbox
+    "000 Inbox/LogSeq Pages",
+    "150 Journal",    # daily journal — never auto-plan
+    "400 Projects/Credentials",
+}
+
+
+def _is_skipped(folder: str) -> bool:
+    if folder in _SKIP_FOLDERS:
+        return True
+    # Also skip any folder whose first segment is a skip prefix
+    for skip in _SKIP_FOLDERS:
+        if folder.startswith(skip + "/"):
+            return True
+    return False
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def run(subdir: str | None = None) -> dict:
     """
     Scan tasks in subdir (default: whole vault), group by project folder,
     enrich URL-only tasks, write _plan.md per project.
+
+    Folders in _SKIP_FOLDERS are never written to — these are system or
+    user-managed planning areas that should not receive auto-generated files.
 
     Returns {projects_updated, tasks_enriched, url_tasks, skipped, errors}.
     """
@@ -275,6 +300,8 @@ def run(subdir: str | None = None) -> dict:
         folder = str(Path(t["file"]).parent)
         if folder in ("", "."):
             folder = "Root"
+        if _is_skipped(folder):
+            continue
         projects.setdefault(folder, []).append(t)
 
     stats = {

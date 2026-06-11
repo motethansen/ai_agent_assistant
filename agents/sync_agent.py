@@ -286,7 +286,7 @@ def run(enrich: bool = True) -> dict:
         stats["notes_added"] += 1
 
     if new_note_lines:
-        inbox_rel = f"Inbox/{today.isoformat()}-logseq.md"
+        inbox_rel = f"000 Inbox/{today.isoformat()}-logseq.md"
         existing_dump = vault.read_file(inbox_rel) or ""
         dump_content = existing_dump + "\n".join(new_note_lines) + "\n"
         vault.write_file(inbox_rel, dump_content)

@@ -71,7 +71,7 @@ class paths:
     @staticmethod
     def inbox_dir() -> str:
         base = get("WORKSPACE_DIR", "")
-        return str(Path(base) / "Inbox") if base else ""
+        return str(Path(base) / "000 Inbox") if base else ""
 
     @staticmethod
     def daily_dir() -> str:
