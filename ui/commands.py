@@ -47,6 +47,8 @@ def dispatch(line: str) -> str | None:
         "status":          cmd_status,
         "kg":              cmd_kg,
         "rebuild-kg":      cmd_rebuild_kg,
+        "kanban":          cmd_kanban,
+        "kanban-add":      cmd_kanban_add,
         "help":            cmd_help,
         "exit":            cmd_exit,
         "quit":            cmd_exit,
@@ -141,6 +143,28 @@ def cmd_sync(_arg: str) -> None:
         f"{result['notes_added']} note entries, "
         f"{result['skipped']} skipped"
     )
+
+
+def cmd_kanban(_arg: str) -> str:
+    from agents.kanban_agent import run
+    result = run()
+    if "error" in result:
+        return f"[red]Kanban error:[/red] {result['error']}"
+    return (
+        f"[green]Kanban refreshed[/green] — "
+        f"{result['added']} task(s) added to Queued, "
+        f"{result['skipped']} already on board"
+    )
+
+
+def cmd_kanban_add(arg: str) -> str:
+    if not arg.strip():
+        return "Usage: /kanban-add <task description>"
+    from agents.kanban_agent import add_task
+    ok = add_task(arg.strip())
+    if ok:
+        return f"Added to Queued: {arg.strip()}"
+    return f"Already on board (skipped): {arg.strip()}"
 
 
 def cmd_sync_reminders(_arg: str) -> None:
