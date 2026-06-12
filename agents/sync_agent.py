@@ -165,8 +165,8 @@ def enrich_task_text(
     if fetch_titles:
         urls = _URL_RE.findall(text)
         for url in urls:
-            # Skip if there's already a " — url" pattern (already enriched)
-            if _ENRICHED_RE.search(text):
+            # Skip this specific URL if it already has a " — <url>" prefix
+            if re.search(r' — ' + re.escape(url), text):
                 continue
             title = _fetch_url_title(url)
             if title:
@@ -185,6 +185,57 @@ def enrich_task_text(
             page_count += 1
 
     return text, url_count, page_count
+
+
+# ── Task line builder ─────────────────────────────────────────────────────────
+
+_DATE_NORM_RE = re.compile(r'(\d{4})[/_-](\d{1,2})[/_-](\d{1,2})')
+
+
+def _normalise_date(raw: str) -> str | None:
+    """Return 'YYYY-MM-DD' from various date formats, or None if unparseable."""
+    m = _DATE_NORM_RE.search(raw.strip())
+    if m:
+        return f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"
+    return None
+
+
+def _build_task_line(task_text: str, task: dict, date_ref: str) -> str:
+    """
+    Compose a full Obsidian Tasks-plugin-compatible checkbox line.
+
+    Format:
+      - [ ] <text>  _<description>_  _(📅 journal-date · source)_  📅 deadline  ⏳ scheduled  #tag1 #tag2
+    """
+    props = task.get("properties", {})
+
+    line = f"- [ ] {task_text}"
+
+    if task.get("description"):
+        line += f"  _{task['description']}_"
+
+    line += f"  _(📅 {date_ref} · {task.get('source', '')})_" if date_ref else f"  _(from {task.get('source', '')})_"
+
+    # Obsidian Tasks: due date
+    if "deadline" in props:
+        d = _normalise_date(props["deadline"])
+        if d:
+            line += f" 📅 {d}"
+
+    # Obsidian Tasks: scheduled date
+    if "scheduled" in props:
+        s = _normalise_date(props["scheduled"])
+        if s:
+            line += f" ⏳ {s}"
+
+    # Tags: LogSeq `:tags: foo, bar` → `#foo #bar`
+    if "tags" in props:
+        raw_tags = props["tags"]
+        tags = [t.strip().lstrip("#").replace(" ", "-") for t in raw_tags.split(",") if t.strip()]
+        if tags:
+            line += "  " + " ".join(f"#{t}" for t in tags)
+
+    return line
 
 
 # ── Hash helpers ──────────────────────────────────────────────────────────────
@@ -249,18 +300,14 @@ def run(enrich: bool = True) -> dict:
             stats["urls_enriched"] += n_urls
             stats["pages_synced"] += n_pages
 
-        # Build the task line with date reference
+        # Build the task line with date reference + LogSeq properties
         source = t.get("source", "")
-        # Extract YYYY-MM-DD from source like "journal/2026_05_23:1"
         date_ref = ""
         dm = re.search(r"journal/(\d{4}_\d{2}_\d{2})", source)
         if dm:
             date_ref = dm.group(1).replace("_", "-")
 
-        line = f"- [ ] {task_text}"
-        if t.get("description"):
-            line += f"  _{t['description']}_"
-        line += f"  _(📅 {date_ref} · {source})_" if date_ref else f"  _(from {source})_"
+        line = _build_task_line(task_text, t, date_ref)
 
         new_task_lines.append(line)
         new_hashes.add(h)
