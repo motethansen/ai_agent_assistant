@@ -82,14 +82,31 @@ def _fetch_url_title(url: str) -> str | None:
             html = resp.read(50_000).decode("utf-8", errors="replace")
         parser = _MetaParser()
         parser.feed(html)
-        title = (parser.title or "").strip()
-        # Clean up common suffixes like " | LinkedIn", " | GitHub"
-        title = re.sub(r'\s*[|·—–-]\s*(LinkedIn|GitHub|YouTube|Facebook|Twitter|X|Instagram|TikTok|Substack|Medium).*$', '', title, flags=re.IGNORECASE).strip()
+        title = " ".join((parser.title or "").split())  # collapse whitespace / newlines
+        # Strip " | Site Name" and " | Author Name, Credentials" suffixes
+        title = re.sub(
+            r'\s*[|·—–-]\s*(LinkedIn|GitHub|YouTube|Facebook|Twitter|X|Instagram|TikTok|Substack|Medium).*$',
+            '', title, flags=re.IGNORECASE,
+        ).strip()
+        # Strip any remaining " | short suffix" (≤40 chars) — catches author bylines
+        title = re.sub(r'\s*\|\s*.{1,40}$', '', title).strip()
         if title and len(title) > 4:
             return title[:120]
         return None
     except Exception:
-        return None
+        pass
+
+    # Fallback: derive a readable title from the URL slug for login-walled sites
+    # LinkedIn pattern: /posts/<author>_<content-slug>-ugcPost-<id> or -share-<id>
+    if 'linkedin.com/posts/' in url:
+        m = re.search(r'linkedin\.com/posts/[^_/]+_(.+?)(?:-ugcPost|-share)-\d', url)
+        if m:
+            slug = m.group(1).replace('-', ' ').strip()
+            if len(slug) > 4:
+                title = slug[:100].rsplit(' ', 1)[0] if len(slug) > 100 else slug
+                return f"{title.capitalize()} [LinkedIn]"
+
+    return None
 
 
 # ── Wikilink page sync ────────────────────────────────────────────────────────
@@ -170,9 +187,11 @@ def enrich_task_text(
                 continue
             title = _fetch_url_title(url)
             if title:
-                # Check if a (possibly truncated) version of the title is already in text
+                # Check in text-without-URLs so slug words in the URL don't
+                # fool us into thinking the title is already visible to the user
+                text_no_urls = _URL_RE.sub('', text)
                 title_words = title.lower().split()[:4]
-                already_there = all(w in text.lower() for w in title_words if len(w) > 3)
+                already_there = all(w in text_no_urls.lower() for w in title_words if len(w) > 3)
                 if not already_there:
                     text = text.replace(url, f"{title} — {url}", 1)
                     url_count += 1

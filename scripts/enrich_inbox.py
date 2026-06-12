@@ -1,8 +1,9 @@
 """
 Retroactive inbox enrichment pass.
 
-Reads the Dashboard ## inbox section, enriches each task line:
-  - Fetches page title for bare URLs and inserts it before the URL
+Reads the Dashboard agent:inbox section, enriches each task line:
+  - Fetches page title for bare URLs and inserts "Title — " before the URL
+  - Falls back to URL-slug extraction for login-walled sites (LinkedIn)
   - Copies any [[wikilink]] LogSeq pages to Obsidian 000 Inbox/LogSeq Pages/
 
 Usage:
@@ -10,7 +11,7 @@ Usage:
 
 Options:
     --dry-run   Print changes without writing
-    --limit N   Only process first N tasks (useful for testing)
+    --limit N   Only enrich first N bare-URL tasks (useful for testing)
 """
 
 import sys
@@ -22,29 +23,58 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from integrations.logseq import LogSeqReader
 from integrations.obsidian import ObsidianVault
-from agents.sync_agent import enrich_task_text
+from agents.sync_agent import _fetch_url_title, _sync_wikilink_page
 
-# Match a line like:
-#   - [ ] TASK_TEXT  _(📅 2026-05-23 · journal/2026_05_23:1)_
-#   - [ ] TASK_TEXT  _(from journal/2026_05_23:1)_
-_TASK_LINE_RE = re.compile(
-    r'^(- \[[ x]\] )(.*?)(\s{1,2}_\((?:📅 \d{4}-\d{2}-\d{2} · )?from (?:journal|page)/[^)]+\)_)$'
-)
-_ALREADY_ENRICHED_RE = re.compile(r' — https?://')
+_URL_RE      = re.compile(r'(https?://\S+)', re.IGNORECASE)
+_WIKILINK_RE = re.compile(r'\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]')
+
+
+def _enrich_line(line: str, logseq: LogSeqReader, vault: ObsidianVault,
+                 synced_pages: set, limit_hit: bool) -> tuple[str, int, int]:
+    """Enrich a single task line. Returns (new_line, url_enrichments, page_syncs)."""
+    if not line.startswith('- ['):
+        return line, 0, 0
+
+    url_count = 0
+    page_count = 0
+    enriched = line
+
+    # ── URL title enrichment ──────────────────────────────────────────────────
+    if not limit_hit:
+        for url in _URL_RE.findall(enriched):
+            # Already has a "Title — <url>" prefix for this specific URL?
+            if re.search(r' — ' + re.escape(url), enriched):
+                continue
+            title = _fetch_url_title(url)
+            if title:
+                # Strip URLs before checking so slug words don't give false positives
+                text_no_urls = _URL_RE.sub('', enriched)
+                title_words = title.lower().split()[:4]
+                already_there = all(w in text_no_urls.lower() for w in title_words if len(w) > 3)
+                if not already_there:
+                    enriched = enriched.replace(url, f"{title} — {url}", 1)
+                    url_count += 1
+
+    # ── Wikilink page sync ────────────────────────────────────────────────────
+    for page_name in _WIKILINK_RE.findall(enriched):
+        obs_rel = _sync_wikilink_page(page_name, logseq, vault, synced_pages)
+        if obs_rel:
+            page_count += 1
+
+    return enriched, url_count, page_count
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--limit", type=int, default=None,
-                        help="Only process first N unenriched tasks")
+                        help="Only enrich first N bare-URL tasks")
     args = parser.parse_args()
 
     logseq = LogSeqReader()
     vault = ObsidianVault()
     synced_pages: set[str] = set()
 
-    # Read current inbox section
     inbox = vault.read_section("inbox")
     if not inbox:
         print("Inbox section is empty or not found in Dashboard.")
@@ -52,67 +82,41 @@ def main():
 
     lines = inbox.splitlines()
     updated_lines = []
-    processed = 0
-    url_enrichments = 0
-    page_syncs = 0
-    skipped = 0
+    total_url = 0
+    total_pages = 0
+    tasks_changed = 0
+    tasks_enriched = 0  # counts tasks where at least one URL was enriched
 
-    print(f"Processing {len(lines)} lines in inbox section...")
-    print()
+    print(f"Scanning {len(lines)} lines in the inbox section...\n")
 
     for line in lines:
-        m = _TASK_LINE_RE.match(line)
-        if not m:
-            updated_lines.append(line)
-            continue
-
-        prefix = m.group(1)     # "- [ ] "
-        task_text = m.group(2)  # the actual task content
-        suffix = m.group(3)     # "  _(📅 ... · journal/...)_"
-
-        # Skip if already enriched
-        if _ALREADY_ENRICHED_RE.search(task_text):
-            skipped += 1
-            updated_lines.append(line)
-            continue
-
-        # Limit check
-        if args.limit and processed >= args.limit:
-            updated_lines.append(line)
-            continue
-
-        # Enrich
-        enriched_text, n_urls, n_pages = enrich_task_text(
-            task_text, logseq, vault, synced_pages, fetch_titles=True
+        limit_hit = args.limit is not None and tasks_enriched >= args.limit
+        new_line, n_urls, n_pages = _enrich_line(
+            line, logseq, vault, synced_pages, limit_hit
         )
-        processed += 1
-        url_enrichments += n_urls
-        page_syncs += n_pages
 
-        new_line = f"{prefix}{enriched_text}{suffix}"
-
-        if enriched_text != task_text:
-            short_old = task_text[:70]
-            short_new = enriched_text[:70]
-            print(f"  ✏  {short_old}")
-            print(f"  →  {short_new}")
+        if new_line != line:
+            tasks_changed += 1
+            if n_urls:
+                tasks_enriched += 1
+            print(f"  ✏  {line[:90]}")
+            print(f"  →  {new_line[:90]}")
             if n_pages:
-                print(f"     (+ {n_pages} page(s) copied to Obsidian)")
+                print(f"     (+ {n_pages} page(s) synced to Obsidian)")
             print()
 
+        total_url += n_urls
+        total_pages += n_pages
         updated_lines.append(new_line)
 
-    # Write back
     if not args.dry_run:
         vault.write_section("inbox", "\n".join(updated_lines))
-        print(f"\n✅ Done — {processed} tasks processed, "
-              f"{url_enrichments} URLs enriched, "
-              f"{page_syncs} pages synced to Obsidian, "
-              f"{skipped} already enriched (skipped)")
+        print(f"✅ Done — {tasks_changed} lines updated, "
+              f"{total_url} URLs enriched, "
+              f"{total_pages} pages synced to Obsidian")
     else:
-        print(f"\n[DRY RUN] Would update {url_enrichments} URL titles, "
-              f"sync {page_syncs} pages. "
-              f"{skipped} already enriched.")
+        print(f"[DRY RUN] Would update {tasks_changed} lines, "
+              f"enrich {total_url} URLs, sync {total_pages} pages.")
 
 
 if __name__ == "__main__":
