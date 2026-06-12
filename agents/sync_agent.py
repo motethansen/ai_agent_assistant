@@ -363,7 +363,7 @@ def run(enrich: bool = True) -> dict:
     # ── Kanban refresh — push new inbox tasks to Queued column ────────────────
     try:
         from agents.kanban_agent import run as kanban_run
-        k = kanban_run(push_inbox=True, push_due=False)
+        k = kanban_run(push_inbox=True, push_due=True)
         stats["kanban_added"] = k.get("added", 0)
     except Exception:
         stats["kanban_added"] = 0

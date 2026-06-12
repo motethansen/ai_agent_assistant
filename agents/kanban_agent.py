@@ -105,11 +105,15 @@ def _collect_due_tasks(vault: ObsidianVault, today: datetime.date) -> list[str]:
 
 
 def _collect_inbox_tasks(vault: ObsidianVault) -> list[str]:
-    """Pull recent LogSeq inbox tasks from the agent:inbox section."""
+    """
+    Pull tagged inbox tasks from the agent:inbox section.
+    Only includes tasks that carry an explicit #kanban tag — avoids
+    dumping every research link onto the board.
+    """
     inbox = vault.read_section("inbox") or ""
     lines = []
     for line in inbox.splitlines():
-        if re.match(r'\s*- \[ \]', line):
+        if re.match(r'\s*- \[ \]', line) and '#kanban' in line.lower():
             lines.append(line.strip())
     return lines
 
