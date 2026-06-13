@@ -25,7 +25,9 @@ _HISTORY_FILE = Path(__file__).parent.parent / "output" / "chat_history.json"
 _HISTORY_MAX   = 50   # messages persisted to disk
 _CONTEXT_TURNS = 6    # conversation turns (12 messages) sent to LLM as context
 
-_CHAT_SYSTEM = """You are a personal productivity assistant with access to the user's Obsidian notes and task system.
+_CHAT_SYSTEM = """You are a personal productivity assistant integrated with the user's Obsidian vault, LogSeq notes, and Apple Calendar.
+In this chat you answer questions and discuss plans. You do NOT have live read access to the vault here — use slash commands for that:
+  /today, /week, /backlog, /plan, /notes <question>, /kg <question>, /status, /help (full list)
 Be concise, practical, and actionable. Format responses as clean markdown.
 If you don't know something, say so. Never invent tasks or events."""
 
@@ -153,6 +155,8 @@ def run_interactive() -> None:
             result = commands.dispatch(user_input)
             if result is not None:
                 console.print(result)
+        elif user_input.lower() in ("help", "?", "commands"):
+            commands.dispatch("/help")
         else:
             _send_and_stream(user_input, history)
 

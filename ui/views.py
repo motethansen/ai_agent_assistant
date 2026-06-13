@@ -251,6 +251,8 @@ def print_help() -> None:
         ("/done <text>",         "Mark a task complete"),
         ("/sync",                "Run LogSeq → Obsidian sync now"),
         ("/sync-reminders",      "Pull Apple Reminders into inbox"),
+        ("/kanban",              "Refresh Today Kanban board from inbox #kanban tasks"),
+        ("/kanban-add <txt>",    "Add a task directly to Kanban Queued column"),
         ("/notes <question>",    "Ask a question about your notes"),
         ("/organise",                    "Suggest folder moves + wikilinks (dry run)"),
         ("/organise-projects [folder]",  "Write per-project _plan.md — sorts tasks, enriches URL tasks"),
