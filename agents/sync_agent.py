@@ -15,6 +15,7 @@ import json
 import re
 import urllib.request
 import urllib.error
+import urllib.parse
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -61,8 +62,34 @@ class _MetaParser(HTMLParser):
                 self.title = t
 
 
+_YOUTUBE_RE = re.compile(
+    r'(?:youtube\.com/(?:watch\?|.*[?&]v=)|youtu\.be/|youtube\.com/(?:shorts|embed)/)',
+    re.IGNORECASE,
+)
+
+
+def _fetch_youtube_title(url: str) -> str | None:
+    """Fetch a YouTube video title via the oEmbed API (no auth, returns JSON)."""
+    try:
+        oembed = "https://www.youtube.com/oembed?url=" + urllib.parse.quote(url, safe="") + "&format=json"
+        req = urllib.request.Request(oembed, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read(20_000).decode("utf-8", errors="replace"))
+        title = " ".join((data.get("title") or "").split())
+        if title and len(title) > 4:
+            return title[:120]
+    except Exception:
+        pass
+    return None
+
+
 def _fetch_url_title(url: str) -> str | None:
     """Fetch the <title> for a URL. Returns None on failure or timeout."""
+    # YouTube blocks scrapers / serves a consent wall — use oEmbed instead.
+    if _YOUTUBE_RE.search(url):
+        yt = _fetch_youtube_title(url)
+        if yt:
+            return yt
     try:
         req = urllib.request.Request(
             url,
@@ -112,6 +139,18 @@ def _fetch_url_title(url: str) -> str | None:
 # ── Wikilink page sync ────────────────────────────────────────────────────────
 
 _LOGSEQ_PAGES_INBOX = "000 Inbox/LogSeq Pages"
+_MAX_SUBPAGE_DEPTH = 3  # how deep to follow [[sub-page]] chains
+
+
+def _find_page_file(logseq: LogSeqReader, key: str) -> Path | None:
+    """Case-insensitive lookup of a LogSeq page file by name (without extension)."""
+    pages_dir = logseq.pages_dir
+    if not pages_dir.exists():
+        return None
+    for f in pages_dir.iterdir():
+        if f.suffix == ".md" and f.stem.lower() == key:
+            return f
+    return None
 
 
 def _sync_wikilink_page(
@@ -119,43 +158,45 @@ def _sync_wikilink_page(
     logseq: LogSeqReader,
     vault: ObsidianVault,
     synced_pages: set[str],
-) -> str | None:
+    _depth: int = 0,
+) -> int:
     """
-    Copy a LogSeq page to Obsidian inbox if it exists and hasn't been synced yet.
-    Returns the Obsidian relative path on success, None otherwise.
+    Copy a LogSeq page to Obsidian inbox, then recursively copy any sub-pages it
+    links to via [[...]] (up to _MAX_SUBPAGE_DEPTH). `synced_pages` doubles as a
+    cycle/duplicate guard. Returns the number of new Obsidian files written
+    (this page plus its descendants).
     """
     key = page_name.strip().lower()
     if key in synced_pages:
-        return None  # already processed this session
+        return 0  # already processed this session (also breaks link cycles)
 
-    # Case-insensitive search in LogSeq pages
-    pages_dir = logseq.pages_dir
-    if not pages_dir.exists():
-        return None
-
-    target_file: Path | None = None
-    for f in pages_dir.iterdir():
-        if f.suffix == ".md" and f.stem.lower() == key:
-            target_file = f
-            break
-
+    target_file = _find_page_file(logseq, key)
     if not target_file:
-        return None  # not a real LogSeq page (just a tag/category ref)
+        return 0  # not a real LogSeq page (just a tag/category ref)
 
-    obs_rel = f"{_LOGSEQ_PAGES_INBOX}/{target_file.name}"
-    obs_path = vault.vault_dir / obs_rel
-
-    # Skip if already exists in Obsidian (don't overwrite manual edits)
-    if obs_path.exists():
-        synced_pages.add(key)
-        return obs_rel
+    # Mark before recursing so a page that links back to us doesn't loop.
+    synced_pages.add(key)
 
     content = target_file.read_text(encoding="utf-8", errors="replace")
-    # Add a source header so the origin is clear
-    header = f"> Synced from LogSeq page: `pages/{target_file.name}`  \n> Sync date: {datetime.date.today()}\n\n"
-    vault.write_file(obs_rel, header + content)
-    synced_pages.add(key)
-    return obs_rel
+
+    written = 0
+    obs_rel = f"{_LOGSEQ_PAGES_INBOX}/{target_file.name}"
+    obs_path = vault.vault_dir / obs_rel
+    # Skip the write if it already exists (don't clobber manual edits), but still
+    # recurse into its sub-pages — they may not have been extracted yet.
+    if not obs_path.exists():
+        header = f"> Synced from LogSeq page: `pages/{target_file.name}`  \n> Sync date: {datetime.date.today()}\n\n"
+        vault.write_file(obs_rel, header + content)
+        written = 1
+
+    # ── Recurse into linked sub-pages ─────────────────────────────────────────
+    if _depth < _MAX_SUBPAGE_DEPTH:
+        for sub_name in _WIKILINK_RE.findall(content):
+            written += _sync_wikilink_page(
+                sub_name, logseq, vault, synced_pages, _depth + 1
+            )
+
+    return written
 
 
 # ── Task enrichment ───────────────────────────────────────────────────────────
@@ -199,9 +240,7 @@ def enrich_task_text(
     # ── 2. Wikilink page sync ─────────────────────────────────────────────────
     wikilinks = _WIKILINK_RE.findall(text)
     for page_name in wikilinks:
-        obs_rel = _sync_wikilink_page(page_name, logseq, vault, synced_pages)
-        if obs_rel:
-            page_count += 1
+        page_count += _sync_wikilink_page(page_name, logseq, vault, synced_pages)
 
     return text, url_count, page_count
 

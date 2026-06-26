@@ -55,11 +55,9 @@ def _enrich_line(line: str, logseq: LogSeqReader, vault: ObsidianVault,
                     enriched = enriched.replace(url, f"{title} — {url}", 1)
                     url_count += 1
 
-    # ── Wikilink page sync ────────────────────────────────────────────────────
+    # ── Wikilink page sync (recurses into linked sub-pages) ────────────────────
     for page_name in _WIKILINK_RE.findall(enriched):
-        obs_rel = _sync_wikilink_page(page_name, logseq, vault, synced_pages)
-        if obs_rel:
-            page_count += 1
+        page_count += _sync_wikilink_page(page_name, logseq, vault, synced_pages)
 
     return enriched, url_count, page_count
 
