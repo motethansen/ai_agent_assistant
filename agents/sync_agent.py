@@ -199,6 +199,102 @@ def _sync_wikilink_page(
     return written
 
 
+# ── Manual title overrides ────────────────────────────────────────────────────
+# Some URLs can't be auto-fetched (login walls like Facebook, scraper-blockers
+# like MSN). The sync writes a stub for each into this note; the user fills in a
+# title, and every subsequent run reads it back and applies it. Filled titles win.
+
+MANUAL_TITLES_NOTE = "000 Inbox/Manual link titles needed.md"
+
+
+def _url_key(url: str) -> str:
+    """Normalise a URL for matching: drop the query string and trailing slash."""
+    return url.split('?', 1)[0].rstrip('/').lower()
+
+
+def _is_placeholder_title(t: str) -> bool:
+    """True for empty / dotted-out placeholder titles like 'Title: …………'."""
+    return len(t.strip().strip('.…').strip()) < 2
+
+
+def load_manual_titles(vault: ObsidianVault) -> dict[str, str]:
+    """
+    Parse the manual-titles note into {url_key: title}.
+
+    Format (per entry): a line containing the URL, followed by a 'Title: <text>'
+    line. Returns {} if the note is absent. Placeholder titles are ignored.
+    """
+    raw = vault.read_file(MANUAL_TITLES_NOTE)
+    if not raw:
+        return {}
+    mapping: dict[str, str] = {}
+    current_url: str | None = None
+    for line in raw.splitlines():
+        m = _URL_RE.search(line)
+        if m:
+            current_url = m.group(1)
+            continue
+        tm = re.match(r'\s*[-*]?\s*Title:\s*(.+?)\s*$', line, re.IGNORECASE)
+        if tm and current_url:
+            title = tm.group(1).strip()
+            if not _is_placeholder_title(title):
+                mapping[_url_key(current_url)] = title[:120]
+            current_url = None  # consume; next URL starts a fresh pairing
+    return mapping
+
+
+def _apply_manual_titles(text: str, manual_titles: dict[str, str]) -> tuple[str, int]:
+    """Insert user-provided titles before any matching, not-yet-titled URL."""
+    if not manual_titles:
+        return text, 0
+    count = 0
+    for url in _URL_RE.findall(text):
+        if re.search(r' — ' + re.escape(url), text):
+            continue  # already has a "Title — <url>" prefix
+        title = manual_titles.get(_url_key(url))
+        if title:
+            text = text.replace(url, f"{title} — {url}", 1)
+            count += 1
+    return text, count
+
+
+def _note_url_keys(raw: str) -> set[str]:
+    """All URL keys already listed in the manual-titles note (filled or stub)."""
+    return {_url_key(u) for u in _URL_RE.findall(raw or "")}
+
+
+def record_unfetchable(vault: ObsidianVault, entries: list[tuple[str, str]]) -> int:
+    """
+    Append stub blocks (URL + blank 'Title:') for URLs that couldn't be
+    auto-enriched, so the user has a worklist to fill in. Skips URLs already
+    listed. Creates the note (with header) if missing. Returns count appended.
+    """
+    if not entries:
+        return 0
+    raw = vault.read_file(MANUAL_TITLES_NOTE) or ""
+    existing = _note_url_keys(raw)
+    seen = set(existing)
+    blocks = []
+    for url, context in entries:
+        k = _url_key(url)
+        if k in seen:
+            continue
+        seen.add(k)
+        label = (context or "link").strip()[:80]
+        blocks.append(f"\n- [ ] {label}\n\t- {url}\n\t- Title: ")
+    if not blocks:
+        return 0
+    if not raw.strip():
+        raw = (
+            "---\ntags:\n  - inbox\n  - link-enrichment\n---\n\n"
+            "# Manual link titles needed\n\n"
+            "URLs that couldn't be auto-enriched (login wall / scraper-blocked). "
+            "Fill in each `Title:` and the next sync applies it to the inbox.\n"
+        )
+    vault.write_file(MANUAL_TITLES_NOTE, raw.rstrip() + "\n" + "".join(blocks) + "\n")
+    return len(blocks)
+
+
 # ── Task enrichment ───────────────────────────────────────────────────────────
 
 def enrich_task_text(
@@ -207,11 +303,17 @@ def enrich_task_text(
     vault: ObsidianVault,
     synced_pages: set[str],
     fetch_titles: bool = True,
+    manual_titles: dict[str, str] | None = None,
+    unfetchable: list[tuple[str, str]] | None = None,
 ) -> tuple[str, int, int]:
     """
     Enrich a task text string:
       - URLs: fetch page title and insert "Title — " before the URL
+      - Manual overrides: apply any user-supplied title from the manual note
       - [[Wikilinks]]: copy LogSeq page to Obsidian 000 Inbox/LogSeq Pages/
+
+    If `unfetchable` is given, URLs that yield no title (auto or manual) are
+    appended to it as (url, context) for the manual-titles worklist.
 
     Returns (enriched_text, url_enrichments, pages_synced).
     """
@@ -227,17 +329,29 @@ def enrich_task_text(
             if re.search(r' — ' + re.escape(url), text):
                 continue
             title = _fetch_url_title(url)
-            if title:
-                # Check in text-without-URLs so slug words in the URL don't
-                # fool us into thinking the title is already visible to the user
-                text_no_urls = _URL_RE.sub('', text)
-                title_words = title.lower().split()[:4]
-                already_there = all(w in text_no_urls.lower() for w in title_words if len(w) > 3)
-                if not already_there:
-                    text = text.replace(url, f"{title} — {url}", 1)
-                    url_count += 1
+            if not title:
+                # Couldn't auto-fetch — flag for the manual worklist (unless a
+                # manual title already covers it; that's applied just below).
+                if unfetchable is not None and not (
+                    manual_titles and _url_key(url) in manual_titles
+                ):
+                    unfetchable.append((url, task_text[:80]))
+                continue
+            # Check in text-without-URLs so slug words in the URL don't
+            # fool us into thinking the title is already visible to the user
+            text_no_urls = _URL_RE.sub('', text)
+            title_words = title.lower().split()[:4]
+            already_there = all(w in text_no_urls.lower() for w in title_words if len(w) > 3)
+            if not already_there:
+                text = text.replace(url, f"{title} — {url}", 1)
+                url_count += 1
 
-    # ── 2. Wikilink page sync ─────────────────────────────────────────────────
+    # ── 2. Manual title overrides (user-filled, beats auto-fetch) ──────────────
+    if manual_titles:
+        text, n_manual = _apply_manual_titles(text, manual_titles)
+        url_count += n_manual
+
+    # ── 3. Wikilink page sync ─────────────────────────────────────────────────
     wikilinks = _WIKILINK_RE.findall(text)
     for page_name in wikilinks:
         page_count += _sync_wikilink_page(page_name, logseq, vault, synced_pages)
@@ -329,7 +443,11 @@ def run(enrich: bool = True) -> dict:
     synced_pages: set[str] = set()
 
     stats = {"tasks_added": 0, "notes_added": 0, "skipped": 0,
-             "urls_enriched": 0, "pages_synced": 0}
+             "urls_enriched": 0, "pages_synced": 0, "manual_stubs": 0}
+
+    # User-filled titles for links that can't be auto-fetched (read once per run)
+    manual_titles = load_manual_titles(vault)
+    unfetchable: list[tuple[str, str]] = []
 
     # ── Tasks ─────────────────────────────────────────────────────────────────
     days = config.sync.logseq_journal_days()
@@ -350,10 +468,11 @@ def run(enrich: bool = True) -> dict:
             stats["skipped"] += 1
             continue
 
-        # Enrich: fetch URL titles + sync wikilink pages
+        # Enrich: fetch URL titles + apply manual overrides + sync wikilink pages
         if enrich:
             task_text, n_urls, n_pages = enrich_task_text(
-                task_text, logseq, vault, synced_pages
+                task_text, logseq, vault, synced_pages,
+                manual_titles=manual_titles, unfetchable=unfetchable,
             )
             stats["urls_enriched"] += n_urls
             stats["pages_synced"] += n_pages
@@ -376,6 +495,9 @@ def run(enrich: bool = True) -> dict:
         existing = vault.read_section("inbox")
         combined = (section_content + "\n\n" + existing).strip() if existing else section_content
         vault.write_section("inbox", combined)
+
+    # Add any newly-seen un-fetchable links to the manual-titles worklist
+    stats["manual_stubs"] = record_unfetchable(vault, unfetchable)
 
     # ── Notes (journal entries) ───────────────────────────────────────────────
     note_entries = logseq.get_recent_notes(days=days)
