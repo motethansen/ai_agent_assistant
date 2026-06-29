@@ -103,7 +103,9 @@ def cmd_backlog(_arg: str) -> None:
 
 def cmd_add_task(arg: str) -> str:
     if not arg.strip():
-        return "Usage: /add-task <description>  or  /add-task <description> due:YYYY-MM-DD"
+        return ("Usage: /add-task <description>"
+                "  or  /add-task <description> due:YYYY-MM-DD"
+                "  or  /add-task <today|tomorrow|next week|…>, <description>")
     from integrations.obsidian import ObsidianVault
     vault = ObsidianVault()
 
@@ -115,6 +117,15 @@ def cmd_add_task(arg: str) -> str:
     if due_match:
         due_str = f" 📅 {due_match.group(1)}"
         description = arg[:due_match.start()].strip()
+    else:
+        # No explicit due: suffix — accept a leading natural-language date phrase
+        # terminated by a comma, e.g. "Today, write an email" or "next week, ...".
+        head, sep, rest = description.partition(",")
+        if sep and rest.strip():
+            target = _parse_target_date(head)
+            if target is not None:
+                due_str = f" 📅 {target.isoformat()}"
+                description = rest.strip()
 
     task_line = f"- [ ] {description}{due_str}"
 
