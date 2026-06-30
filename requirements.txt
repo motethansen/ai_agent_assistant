@@ -1,5 +1,8 @@
 # AI Agent Assistant — dependencies
 # Core (always installed)
+fastapi>=0.110,<1.0              # HTTP API server (python main.py --api)
+uvicorn[standard]>=0.29,<1.0    # ASGI server for the API
+httpx>=0.27,<1.0                 # HTTP client (used by api tests)
 google-genai>=1.0.0              # Gemini Flash + Pro
 groq>=0.11.0                     # Groq Llama 3.3
 openai>=1.0.0                    # DeepSeek (OpenAI-compatible API)

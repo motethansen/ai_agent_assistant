@@ -30,6 +30,8 @@ def main() -> None:
     parser.add_argument("--status", action="store_true", help="Show system status and exit")
     parser.add_argument("--today", action="store_true", help="Show today's view and exit")
     parser.add_argument("--chat", action="store_true", help="Start in chat mode directly")
+    parser.add_argument("--api", nargs="?", const=7890, metavar="PORT", type=int,
+                        help="Start HTTP API server for distributed agents (default port 7890)")
     args = parser.parse_args()
 
     warnings = config.validate()
@@ -37,6 +39,18 @@ def main() -> None:
         for w in warnings:
             print(f"  ⚠ {w}", file=sys.stderr)
         print()
+
+    if args.api:
+        try:
+            import uvicorn
+        except ImportError:
+            print("uvicorn not installed — run: pip install fastapi uvicorn", file=sys.stderr)
+            sys.exit(1)
+        from api.server import app
+        port = args.api if isinstance(args.api, int) else 7890
+        print(f"Starting AI Agent Assistant API on port {port}…")
+        uvicorn.run(app, host="0.0.0.0", port=port)
+        return
 
     if args.status:
         from ui.commands import cmd_status
