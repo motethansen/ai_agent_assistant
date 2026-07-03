@@ -106,6 +106,10 @@ def _collect_due_tasks(vault: ObsidianVault, today: datetime.date) -> list[str]:
             if due <= today:
                 # Strip leading whitespace/dash to normalise
                 clean = re.sub(r'^\s*- \[ \]\s*', '', line).strip()
+                # Reading links captured from LogSeq journals are not actionable
+                # tasks — keep them off the board (they live in the Reading List).
+                if "http" in clean and "journal/" in clean:
+                    continue
                 tasks.append(f"- [ ] {clean}")
     return tasks
 
