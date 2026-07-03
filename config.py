@@ -79,6 +79,11 @@ class paths:
         return str(Path(base) / "Daily") if base else ""
 
     @staticmethod
+    def kanban_board() -> str:
+        """Relative path (within the vault) of the two-way agent kanban board."""
+        return get("KANBAN_BOARD_FILE", "010 Planning/Today Kanban.md")
+
+    @staticmethod
     def local_calendar() -> str:
         return get("LOCAL_CALENDAR_FILE", "output/local_calendar.ics")
 

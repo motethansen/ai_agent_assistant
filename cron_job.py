@@ -128,6 +128,23 @@ def run_once() -> None:
                 _log("morning plan written to Dashboard")
             except Exception as e:
                 _log(f"morning plan error: {e}")
+            try:
+                from agents.kanban_agent import post_focus_card
+                focus = post_focus_card()
+                if focus:
+                    _log("focus card posted to kanban")
+            except Exception as e:
+                _log(f"focus card error: {e}")
+
+        # 4. Kanban board — act on /command and question cards (every interval;
+        #    the watcher handles them live when running, this is the fallback)
+        try:
+            from agents.kanban_agent import process_board
+            board = process_board()
+            if board.get("handled"):
+                _log(f"kanban board — {board['handled']} card(s) handled")
+        except Exception as e:
+            _log(f"kanban board error: {e}")
 
     except Exception as e:
         _log(f"cron error: {e}")

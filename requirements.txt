@@ -25,3 +25,4 @@ pytest-html>=4.0.0               # HTML test reports (output/test_report.html)
 # google-auth>=2.0.0
 # google-auth-httplib2>=0.2.0
 # google-api-python-client>=2.0.0
+watchdog>=4.0                    # board watcher (python main.py --watch)

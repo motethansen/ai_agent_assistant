@@ -8,6 +8,7 @@ Usage:
     python main.py --sync       # run LogSeq sync and exit
     python main.py --status     # show system status and exit
     python main.py --today      # show today's tasks and events and exit
+    python main.py --watch      # watch the kanban board, react to cards live
 """
 
 import argparse
@@ -32,6 +33,8 @@ def main() -> None:
     parser.add_argument("--chat", action="store_true", help="Start in chat mode directly")
     parser.add_argument("--api", nargs="?", const=7890, metavar="PORT", type=int,
                         help="Start HTTP API server for distributed agents (default port 7890)")
+    parser.add_argument("--watch", action="store_true",
+                        help="Watch the kanban board and react to command/question cards")
     args = parser.parse_args()
 
     warnings = config.validate()
@@ -50,6 +53,11 @@ def main() -> None:
         port = args.api if isinstance(args.api, int) else 7890
         print(f"Starting AI Agent Assistant API on port {port}…")
         uvicorn.run(app, host="0.0.0.0", port=port)
+        return
+
+    if args.watch:
+        import watcher
+        watcher.run()
         return
 
     if args.status:
