@@ -95,6 +95,12 @@ def parse_task_metadata(raw_line: str) -> dict:
 
 # ── Vault reader / writer ─────────────────────────────────────────────────────
 
+# Module-level task-parse cache keyed by absolute file path. Shared across
+# ObsidianVault instances (CLI commands and API requests each construct their
+# own vault object). Entries are (mtime, tasks-including-done).
+_PARSE_CACHE: dict[str, tuple[float, list[dict]]] = {}
+
+
 class ObsidianVault:
     """
     Read and write to an Obsidian vault. The app does not need to be running.
@@ -133,7 +139,7 @@ class ObsidianVault:
                         continue
                     abs_path = Path(dirpath) / fname
                     rel_path = abs_path.relative_to(self.vault_dir)
-                    tasks.extend(self._parse_file(abs_path, rel_path, include_done))
+                    tasks.extend(self._parse_file_cached(abs_path, rel_path, include_done))
 
         if gcal_only:
             tasks = [t for t in tasks if t.get("gcal")]
@@ -191,6 +197,7 @@ class ObsidianVault:
         path = self.vault_dir / rel_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+        _PARSE_CACHE.pop(str(path), None)
         return path
 
     def append_to_file(self, rel_path: str, content: str) -> Path:
@@ -199,6 +206,7 @@ class ObsidianVault:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
             f.write(content)
+        _PARSE_CACHE.pop(str(path), None)
         return path
 
     def mark_task_done(self, task_text: str) -> bool:
@@ -239,6 +247,7 @@ class ObsidianVault:
         else:
             lines[idx] = old.rstrip() + f" 📅 {new_ds}"
         abs_path.write_text("\n".join(lines), encoding="utf-8")
+        _PARSE_CACHE.pop(str(abs_path), None)
         return True
 
     def move_file(self, from_rel: str, to_rel: str) -> bool:
@@ -288,6 +297,7 @@ class ObsidianVault:
                 f"{start_marker}\n{new_content}\n{end_marker}\n",
                 encoding="utf-8",
             )
+            _PARSE_CACHE.pop(str(path), None)
             return True
 
         current = path.read_text(encoding="utf-8")
@@ -298,12 +308,14 @@ class ObsidianVault:
             # Section doesn't exist yet — append
             with open(path, "a", encoding="utf-8") as f:
                 f.write(f"\n{start_marker}\n{new_content}\n{end_marker}\n")
+            _PARSE_CACHE.pop(str(path), None)
             return True
 
         # Replace content between markers (markers themselves are preserved)
         before = current[: start_idx + len(start_marker)]
         after = current[end_idx:]
         path.write_text(f"{before}\n{new_content}\n{after}", encoding="utf-8")
+        _PARSE_CACHE.pop(str(path), None)
         return True
 
     def create_daily_note(self, date: datetime.date | None = None) -> Path:
@@ -320,6 +332,28 @@ class ObsidianVault:
         return path
 
     # ── Internal helpers ──────────────────────────────────────────────────────
+
+    def _parse_file_cached(self, abs_path: Path, rel_path: Path, include_done: bool) -> list[dict]:
+        """mtime-cached wrapper around _parse_file.
+
+        Files are parsed with done tasks included so one cache entry serves
+        both include_done modes; filtering happens on the way out. Unchanged
+        files (~99% of a vault scan) skip the read+regex entirely.
+        """
+        key = str(abs_path)
+        try:
+            mtime = abs_path.stat().st_mtime
+        except OSError:
+            _PARSE_CACHE.pop(key, None)
+            return []
+        cached = _PARSE_CACHE.get(key)
+        if cached is None or cached[0] != mtime:
+            _PARSE_CACHE[key] = (mtime, self._parse_file(abs_path, rel_path, include_done=True))
+        tasks = _PARSE_CACHE[key][1]
+        if not include_done:
+            tasks = [t for t in tasks if not t.get("done")]
+        # Shallow-copy so callers can't mutate cached entries.
+        return [dict(t) for t in tasks]
 
     def _parse_file(self, abs_path: Path, rel_path: Path, include_done: bool) -> list[dict]:
         tasks = []
@@ -365,6 +399,7 @@ class ObsidianVault:
             if search in m.group(3).strip().lower():
                 lines[idx] = f"{m.group(1)}- [x] {m.group(3)}"
                 abs_path.write_text("\n".join(lines), encoding="utf-8")
+                _PARSE_CACHE.pop(str(abs_path), None)
                 return True
         return False
 
