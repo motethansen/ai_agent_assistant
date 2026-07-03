@@ -46,31 +46,28 @@ To find the API key, check `ai_agent_assistant/.config`:
 grep ASSISTANT_API_KEY ../../.config
 ```
 
-### On Mac Mini (Remote)
+### Deployment topology (verified 2026-07-03)
 
-The assistant API already runs as launchd service `com.mh.aiassistant.api` on
-port 7890 — no need to start it manually.
+The Mac Mini is a **headless server** — it hosts the assistant API (launchd
+service `com.mh.aiassistant.api`, port 7890) and runs automated agents. The
+MacBook Pro is the interactive work machine. Split accordingly:
 
-**⚠️ Keychain caveat (verified 2026-07-03):** the `claude` CLI stores its
-credentials in the macOS Keychain, which is only unlocked in a GUI login
-session. Over plain `ssh` the CLI reports *"Not logged in"* even though the
-Mac is authenticated. Run the frontend one of these ways:
+**Interactive chat → run on the MacBook**, pointing at the Mini's API over
+Tailscale (the MacBook's `claude` CLI is authenticated in your login session):
+```bash
+cd /Users/michaelhansen/Projects/github/ai_agent_assistant/clients/claude_frontend
+ASSISTANT_API_URL=http://100.76.214.54:7890 python3 frontend.py
+```
+(`ASSISTANT_API_KEY` is picked up from `../../.config` automatically.)
 
-1. **Local/Screen Sharing terminal on the Mini** (Keychain unlocked):
-   ```bash
-   cd /Users/michaelhansen/Projects/github/ai_agent_assistant/clients/claude_frontend
-   ../../venv/bin/python frontend.py
-   ```
-
-2. **Via the distributed-infra queue** (worker runs under launchd in the GUI
-   session, so Claude is authenticated) — from the MacBook:
-   ```bash
-   # payload key is "script", pin to mac-mini
-   da run mac-mini 'export PATH=/usr/local/bin:$PATH && cd ~/Projects/github/ai_agent_assistant/clients/claude_frontend && ASSISTANT_API_URL=http://localhost:7890 ../../venv/bin/python suggest.py'
-   ```
-
-3. **Scheduled/launchd** (morning brief, WhatsApp bridge integration) — same
-   GUI-session rule applies; anything spawned by launchd user agents works.
+**Automated runs (suggest.py, morning brief) → run on the Mini via launchd
+or the distributed-infra worker.** ⚠️ Do NOT invoke `claude` over plain ssh
+on the Mini — the CLI's Keychain credentials aren't available in ssh
+sessions, only in launchd-spawned processes. Queue it instead:
+```bash
+# payload key is "script", pin to mac-mini
+da run mac-mini 'export PATH=/usr/local/bin:$PATH && cd ~/Projects/github/ai_agent_assistant/clients/claude_frontend && ASSISTANT_API_URL=http://localhost:7890 ../../venv/bin/python suggest.py'
+```
 
 ## Usage
 

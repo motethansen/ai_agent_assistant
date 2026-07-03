@@ -677,10 +677,11 @@ python scripts/status.py
 #### BLI-059 — Claude Agent SDK terminal frontend (Mac Mini)
 - **Story**: As the user, I want to talk to my assistant in natural language ("what should I focus on, and push anything overdue to next week") instead of memorising slash commands.
 - **Acceptance Criteria**:
-  - [ ] `clients/claude_frontend/frontend.py` — interactive chat via claude-agent-sdk; custom tools wrap the assistant API (get_tasks, generate_plan, add_task, mark_done, get_dashboard, get_status)
-  - [ ] `clients/claude_frontend/suggest.py` — one-shot top-3 focus for WhatsApp/kanban piping
-  - [ ] Runs on the Mac Mini next to the assistant API (:7890); auth via ASSISTANT_API_KEY
-- **Epic**: E24 | **Estimate**: M | **Status**: 🟡 In progress 2026-07-03
+  - [x] `clients/claude_frontend/frontend.py` — interactive chat via claude-agent-sdk; custom tools wrap the assistant API (get_tasks, generate_plan, add_task, mark_done, get_dashboard, get_status)
+  - [x] `clients/claude_frontend/suggest.py` — one-shot top-3 focus for WhatsApp/kanban piping (verified from MacBook → Mini API, and on the Mini via queued worker task)
+  - [x] Topology: interactive frontend runs on the MacBook (claude CLI auth) against the Mini API over Tailscale; automated runs live on the headless Mini via launchd/worker only (claude CLI has no Keychain over ssh)
+  - [ ] Wire suggest.py into the morning brief / WhatsApp (with BLI-050, Sprint-10)
+- **Epic**: E24 | **Estimate**: M | **Status**: 🟡 Core delivered 2026-07-03; WhatsApp wiring pending
 
 ---
 
