@@ -48,22 +48,29 @@ grep ASSISTANT_API_KEY ../../.config
 
 ### On Mac Mini (Remote)
 
-1. Ensure `claude` CLI is authenticated:
+The assistant API already runs as launchd service `com.mh.aiassistant.api` on
+port 7890 — no need to start it manually.
+
+**⚠️ Keychain caveat (verified 2026-07-03):** the `claude` CLI stores its
+credentials in the macOS Keychain, which is only unlocked in a GUI login
+session. Over plain `ssh` the CLI reports *"Not logged in"* even though the
+Mac is authenticated. Run the frontend one of these ways:
+
+1. **Local/Screen Sharing terminal on the Mini** (Keychain unlocked):
    ```bash
-   claude auth
+   cd /Users/michaelhansen/Projects/github/ai_agent_assistant/clients/claude_frontend
+   ../../venv/bin/python frontend.py
    ```
 
-2. Start the assistant API (in one terminal):
+2. **Via the distributed-infra queue** (worker runs under launchd in the GUI
+   session, so Claude is authenticated) — from the MacBook:
    ```bash
-   cd /Users/michaelhansen/Projects/github/ai_agent_assistant
-   python main.py --api  # Runs on http://localhost:7890
+   # payload key is "script", pin to mac-mini
+   da run mac-mini 'export PATH=/usr/local/bin:$PATH && cd ~/Projects/github/ai_agent_assistant/clients/claude_frontend && ASSISTANT_API_URL=http://localhost:7890 ../../venv/bin/python suggest.py'
    ```
 
-3. In another terminal, run the frontend:
-   ```bash
-   cd clients/claude_frontend
-   python frontend.py
-   ```
+3. **Scheduled/launchd** (morning brief, WhatsApp bridge integration) — same
+   GUI-session rule applies; anything spawned by launchd user agents works.
 
 ## Usage
 
