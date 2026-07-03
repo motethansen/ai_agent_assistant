@@ -2,7 +2,7 @@
 
 **Sprint**: 09
 **Goal**: Harden the planning pipeline: fix date-bucket bugs in the backlog view, wire `/plan` output into `010 Planning/Planner.md` via section markers, tag tasks in `Task Categories.md` by category, and clean up stale vault files.
-**Status**: 🔲 Not started
+**Status**: ✅ Complete — 2026-06-22 (T09-03/04/05 verified done; T09-01/02 done earlier)
 **Epics**: E11 (Terminal Task Visibility), E12 (Obsidian Round-trip)
 
 ---
@@ -13,9 +13,9 @@
 |------|-------|----------|--------|
 | T09-01 | Fix `print_backlog()` future-date bucket — dated tasks >7 days out fell into "Backlog (no date)" | S | ✅ Done (2026-06-11) |
 | T09-02 | Add category tags to `010 Planning/Task Categories.md` (`#vizneo`, `#urbanlife`, etc.) | M | ✅ Done (2026-06-11) |
-| T09-03 | Wire `/plan` output into `010 Planning/Planner.md` structured sections via `write_section()` | M | 🔲 Not started |
-| T09-04 | Archive root `Dashboard.md` → convert to static index pointing to `010 Planning/` | S | 🔲 Not started |
-| T09-05 | Clean `000 Inbox/Inbox.md` — remove junk preamble text at top | S | 🔲 Not started |
+| T09-03 | Wire `/plan` output into `010 Planning/Planner.md` structured sections via `write_section()` | M | ✅ Done (2026-06-22) |
+| T09-04 | Archive root `Dashboard.md` → convert to static index pointing to `010 Planning/` | S | ✅ Done (2026-06-22) |
+| T09-05 | Clean `000 Inbox/Inbox.md` — remove junk preamble text at top | S | ✅ Done (2026-06-22) |
 
 ---
 
@@ -91,9 +91,9 @@ i thought you can create the folder and file in obsidian# Inbox
 ## Definition of Done
 
 - [x] `/backlog` shows a proper "Upcoming" section for tasks due 8+ days out
-- [ ] `Task Categories.md` has `#tag` on every task
-- [ ] `010 Planning/Planner.md` has `<!-- agent:today-plan:start/end -->` markers
-- [ ] `/plan` output appears under "Today's Plan" in Planner.md
-- [ ] Root `Dashboard.md` is a static index, not a stale agent dump
-- [ ] `000 Inbox/Inbox.md` has clean content (no junk preamble)
-- [ ] `bash scripts/run_tests.sh` — zero failures
+- [x] `Task Categories.md` has `#tag` on every task
+- [x] `010 Planning/Planner.md` has `<!-- agent:today-plan:start/end -->` markers (also `week-plan`)
+- [x] `/plan` output appears under "Today's Plan" in Planner.md — verified `write_section("today-plan")` replaces between markers (placeholder restored after test)
+- [x] Root `Dashboard.md` is a static index, not a stale agent dump
+- [x] `000 Inbox/Inbox.md` has clean content (no junk preamble)
+- [x] `bash scripts/run_tests.sh` — zero failures (65 passed, 2026-06-22)

@@ -11,7 +11,7 @@
 **Repository**: /home/michaelhansen/Projects/github/ai_agent_assistant
 **Started**: 2026-03-14
 **Product Owner**: Michael Hansen
-**Current Sprint**: Sprint-05 ✅ + Sprint-06 ✅ — both complete 2026-04-03
+**Current Sprint**: Sprint-09 ✅ Complete (2026-06-22) — Vault Planning Cleanup (T09-03 Planner.md `/plan` markers verified, T09-04 Dashboard.md static index, T09-05 Inbox.md cleaned; 65 tests pass). Next: Sprint-10 (BLI-050 WhatsApp agent launcher). Stale LM Studio/n8n/Google-OAuth items (BLI-041–045) moved to Deferred/Icebox.
 **Current Team**: Claude CLI (SM + dev agents)
 
 ---

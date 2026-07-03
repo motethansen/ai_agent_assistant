@@ -58,6 +58,43 @@ def get_tasks(
     return {"tasks": tasks, "count": len(tasks)}
 
 
+@app.post("/tasks")
+def add_task(
+    body: dict,
+    x_api_key: str = Header(default=""),
+):
+    """Add a task to the vault inbox. Body: {"text": "...", "due_date": "YYYY-MM-DD"?}."""
+    _check_auth(x_api_key)
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="text is required")
+    due = (body.get("due_date") or "").strip()
+    task_line = f"- [ ] {text}" + (f" 📅 {due}" if due else "")
+
+    from integrations.obsidian import ObsidianVault
+    vault = ObsidianVault()
+    section = vault.read_section("inbox") or ""
+    vault.write_section("inbox", (section.rstrip() + "\n" + task_line).strip())
+    return {"added": task_line}
+
+
+@app.post("/tasks/done")
+def mark_task_done(
+    body: dict,
+    x_api_key: str = Header(default=""),
+):
+    """Mark the first task matching the text as done. Body: {"text_match": "..."}."""
+    _check_auth(x_api_key)
+    match = (body.get("text_match") or "").strip()
+    if not match:
+        raise HTTPException(status_code=422, detail="text_match is required")
+    from integrations.obsidian import ObsidianVault
+    ok = ObsidianVault().mark_task_done(match)
+    if not ok:
+        raise HTTPException(status_code=404, detail=f"no open task matched: {match}")
+    return {"done": match}
+
+
 # ── Calendar ──────────────────────────────────────────────────────────────────
 
 @app.get("/calendar")

@@ -29,6 +29,10 @@
 | E17 | CLI Router Simplification | Reduce main.py + ai_orchestration.py to lightweight router — delegate reasoning to NanoClaw, data-flows to n8n | Sprint-06 |
 | E18 | Google Connector Migration to n8n | Remove direct Python OAuth for Google Calendar and Google Tasks; route all Google API calls through n8n credential store | Sprint-07 |
 | E19 | LM Studio Native Integration | Replace OpenAI-compat HTTP calls to LM Studio with the official `lmstudio` Python SDK and `lms` CLI for model/server lifecycle management | Sprint-07 |
+| E20 | WhatsApp Agent Launcher | Launch a CLI agent from WhatsApp via `agent <LLM> <prompt>` — route to Claude / Claude Code / this assistant ("agy") / etc., run the agent, and stream the response back to the chat (incl. multi-turn) | Backlog |
+| E22 | Flutter Terminal Client | Phone/desktop chat client for the distributed agents — a thin Flutter client over the orchestrator queue API over Tailscale (parallel to the WhatsApp bridge) | Sprint-11 (planned) |
+| E23 | Two-Way Kanban Board | The Today Kanban is the user's single input surface: /command and question cards trigger agents, replies land in a 🤖 Agent column; live file watcher + cron fallback | ✅ Delivered 2026-07-03 |
+| E24 | Claude Agent SDK Frontend | Natural-language terminal frontend on the Mac Mini — Claude drives the assistant API (:7890) via SDK custom tools; replaces memorising 40+ slash commands; one-shot suggest mode for WhatsApp/kanban | Sprint-12 (planned) |
 
 ---
 
@@ -475,7 +479,7 @@
   - [ ] `INSTALL.md` updated with a dedicated **n8n Setup** section (steps below)
 - **Epic**: E07
 - **Estimate**: S
-- **Status**: 🔲 Not started
+- **Status**: ⛔ Superseded — n8n removed in the April 2026 refactor (moved to Deferred/Icebox)
 
 **Setup steps (for INSTALL.md):**
 
@@ -535,7 +539,7 @@ python scripts/status.py
   - [ ] All existing tests pass; new test for `_call_lmstudio()` mocking the SDK
 - **Epic**: E19
 - **Estimate**: M
-- **Status**: 🔲 Not started
+- **Status**: ⛔ Superseded — LM Studio removed in the April 2026 refactor (moved to Deferred/Icebox)
 - **Notes**: `lmstudio` SDK connects to LM Studio daemon on `ws://localhost:1234` (WebSocket, not HTTP). Timeout default is 60s (SDK 1.5.0+). Requires LM Studio installed and run at least once.
 
 #### BLI-045 — Integrate `lms` CLI into service lifecycle management
@@ -549,7 +553,7 @@ python scripts/status.py
   - [ ] All changes gated on `ENABLE_LM_STUDIO=true` — zero effect when disabled
 - **Epic**: E19
 - **Estimate**: S
-- **Status**: 🔲 Not started
+- **Status**: ⛔ Superseded — LM Studio removed in the April 2026 refactor (moved to Deferred/Icebox)
 - **Notes**: `lms` ships with LM Studio; no separate install. Must run LM Studio GUI once before `lms` works. `lms daemon` enables headless operation on Linux laptop (no GUI required after first setup).
 
 ---
@@ -567,7 +571,7 @@ python scripts/status.py
   - [ ] All existing tests pass; no new test failures
 - **Epic**: E18
 - **Estimate**: M
-- **Status**: 🔲 Not started
+- **Status**: ⛔ Superseded — Google OAuth→n8n abandoned in the April 2026 refactor (moved to Deferred/Icebox)
 - **Notes**: Depends on n8n Universal Task Sync (BLI-039) being configured and running. `ENABLE_GOOGLE_CALENDAR=false` in `.config` is the interim gate until this is complete.
 
 #### BLI-042 — Remove direct Google Tasks OAuth from Python; route via n8n
@@ -582,8 +586,101 @@ python scripts/status.py
   - [ ] All existing tests pass
 - **Epic**: E18
 - **Estimate**: M
-- **Status**: 🔲 Not started
+- **Status**: ⛔ Superseded — Google OAuth→n8n abandoned in the April 2026 refactor (moved to Deferred/Icebox)
 - **Notes**: Depends on BLI-041 (Google Calendar migration pattern established first). n8n Google Tasks node requires Google OAuth credential configured in n8n UI.
+
+#### BLI-050 — Launch a CLI agent from WhatsApp via `agent <LLM> <prompt>`
+- **Story**: As the Product Owner, I want to send `agent <LLM> <prompt>` from WhatsApp and have the named agent run on the fleet and reply in the chat, so I can drive Claude, Claude Code, or my own assistant from my phone without opening a terminal.
+- **Examples** (must all work):
+  - `agent claude help me start a new writing project. ask me questions to what i want to do` → routes to Claude in **interactive/multi-turn** mode; Claude's follow-up questions come back as WhatsApp messages and my replies feed the same session.
+  - `agent code produce an image of a car` → routes to the Claude Code CLI (codegen/tooling target); the produced artifact (image path / file) is returned or linked.
+  - `agent agy review my task list from assistant via obsidian and suggest todays activities` → routes to **this** AI Agent Assistant ("agy"), which reads the Obsidian task list and replies with suggested activities.
+- **Acceptance Criteria**:
+  - [x] WhatsApp bridge command parser recognises the `agent` prefix (alongside existing `write article` / `post` / `code-review` commands) and extracts `<LLM>` token + free-text `<prompt>`
+  - [x] LLM/agent registry maps keywords → backends: `claude`/`code`/`claude-code` → claude (Claude Code CLI), `agy`/`antigravity` → agy (Antigravity CLI), `codex`/`gpt` → codex, `groq`, `content`, `social`, plus aliases; unknown keyword returns a helpful "available agents: …" reply
+  - [x] Each agent is launched (via the existing `agent_run` task → worker `agents/runner.py` subprocess); stdout/result is captured and sent back to the originating WhatsApp chat by the result poller
+  - [x] **Multi-turn** (claude): `agent claude …` opens a session (caller-supplied `--session-id`); any later non-command reply resumes it (`--resume`); `end`/`reset`/`new` closes it; idle TTL `AGENT_SESSION_TTL` (1800s). Verified end-to-end via the queue (turn 2 recalled a codeword set in turn 1). agy/codex remain single-shot (their CLIs don't take a caller-supplied resume id here). In-memory map (lost on bridge restart).
+  - [x] Long output is chunked to fit WhatsApp message limits (full response, line-boundary split into ≤`MAX_MSG_CHARS`/3500 pieces, `▸ (k/n)` markers; failed-task errors capped to one message).
+  - [x] Non-text artifacts returned: when a done reply names an absolute/`~` file path that exists, the bridge replies with a `📎` note giving the path, size, and a **tap-to-download Tailscale link** (`GET /artifact/{token}` on the bridge; tokens unguessable + 24h TTL, map only to registered files — no arbitrary-path read). Verified live cross-node. Free WAHA can't attach binaries (422 Plus-only), so a link is used instead. Media/docs/archives; source excluded; caps `MAX_ARTIFACTS`=5 / 64MB; `BRIDGE_PUBLIC_URL` overridable.
+  - [~] Concurrency + safety: only the authorised sender(s) can launch agents (self-chat scope ✅); a runaway/timeout guard kills hung sessions (task TIMEOUT ✅); errors reported back as a readable message ✅
+  - [x] Docs: command syntax + agent keyword table added to the bridge README (`services/whatsapp-bridge/README.md`); tests cover the parser and the keyword→backend routing (`tests/test_bridge_agent.py`, 21 tests)
+- **Epic**: E20
+- **Estimate**: L
+- **Status**: 🟡 In progress — **single-shot launcher built + deployed 2026-06-22** (merged to `distributed-infra` main, pushed, Mac Mini bridge + worker restarted). Parser + registry + dispatch + README + 21 tests (full suite 32 pass).
+- **Agent readiness, verified end-to-end through the queue→launchd worker (2026-06-22)**: `claude` ✅ works (auth is in the macOS login Keychain; the gui-domain `com.techstartups.worker` can read it — note a plain non-interactive `ssh` test is a FALSE NEGATIVE, "Not logged in", because it can't reach the Keychain) · `agy` ✅ works · `codex` ⚠️ fixed code (0.128 `exec` subcommand; old `--full-auto` removed) but the ChatGPT-account login rejects every Codex model — needs re-`codex login` or a plan that allows a model, then set `CODEX_AGENT_DEFAULT_MODEL`.
+- **2026-06-22 updates**: all 3 agents verified working via the queue (claude, agy, codex — codex after user re-login + the 0.128 `exec` code fix). **Multi-turn shipped for claude** (commit `c7b2d89`). **Fixed double-reply bug** (`help` replied twice): Waha delivers each message twice (at-least-once); bridge now de-dupes by message id (commit `99d0baa`).
+- **Output chunking** (commit `2547f2e`); **session persistence** (`84ded07`) — multi-turn survives a bridge restart (`BRIDGE_STATE_FILE`, default `~/.whatsapp-bridge-sessions.json`); **artifact note + richer `help`** (`dca8dfd`). Verified live that free WAHA can't attach files (422 Plus-only), so artifacts are surfaced as a 📎 note instead. `help` rewritten into a sectioned guide. **Artifact download links over Tailscale** (`1f9f1ff`): token-gated `GET /artifact/{token}` on the bridge, link in the 📎 note — phone (now on tailnet) taps to download; verified reachable cross-node.
+- **Status**: All originally-scoped acceptance criteria met (single-shot ✅, registry ✅, dispatch ✅, multi-turn claude ✅, chunking ✅, artifacts ✅, dedup ✅, docs ✅, 57 tests ✅, deployed ✅). Remaining are **optional enhancements**, not blockers: multi-turn for codex (needs capturing codex's session id) / agy (no resume support); `_pending` in-flight map still in-memory; artifact media-send format needs first live WhatsApp confirmation.
+- **Notes**: Cross-repo — built in `distributed-infra/services/whatsapp-bridge/bridge.py` (Mac Mini bridge). Reused the existing `agent_run` queue path + result poller rather than a second listener, so it inherits the self-chat auth scope and task-timeout guard. Correction: `agy` is the **Antigravity** CLI agent (`agy -p`), not this repo's `main.py`. Multi-turn is the main design risk — agents run as one-shot `claude -p` / `agy -p` subprocesses on the worker; multi-turn needs either resumable-session flags or a pty/expect wrapper plus a session store keyed by chat/sender. Not yet committed/pushed — on a feature branch.
+
+#### BLI-052 — Flutter terminal client: scaffold + orchestrator API client + settings
+- **Story**: As the operator, I want a Flutter app skeleton that talks to the orchestrator queue API over Tailscale, so I have a base to build a richer agent chat on (parallel to WhatsApp).
+- **Acceptance Criteria**:
+  - [x] Flutter project under `distributed-infra/clients/flutter-terminal/` (`pubspec.yaml`, `lib/`), deps minimal (`http`, `shared_preferences`)
+  - [x] `OrchestratorApi`: `submitAgentTask()` (POST /tasks agent_run), `getTask()`, `awaitResult()` poll loop, `machines()`; `x-secret-key` auth
+  - [x] Settings screen + persistence: orchestrator URL, secret key, target machine — with helper text and a **"Test connection"** button (authed probe → OK+machine count / 401 bad key / unreachable) so users with their own Tailscale account/orchestrator can link the app
+  - [x] Submits **backend** agent names (claude/agy/codex/groq/content/social), not WhatsApp aliases
+  - [x] **API client verified live end-to-end** against the orchestrator over Tailscale (`tool/verify_live.dart`, 2026-06-23): `machines()`=3, agy one-shot done, claude multi-turn recalled a codeword. `flutter analyze` clean.
+  - [ ] Full UI `flutter run` on a device/simulator (needs the user to run it)
+- **Epic**: E22 | **Estimate**: M | **Status**: 🟡 Scaffolded + API verified live 2026-06-23 (on-device UI run pending)
+
+#### BLI-053 — Flutter terminal client: chat screen + multi-turn
+- **Story**: As the operator, I want a terminal-style chat that sends a prompt to a chosen agent and shows the result, with claude conversations continuing across messages.
+- **Acceptance Criteria**:
+  - [x] Chat screen: agent dropdown, message list (mono, selectable), input, send; running spinner; auto-scroll
+  - [x] Multi-turn: claude gets a generated `session_id` (resume=false first, resume=true after); switching agent / "New session" resets it; other agents one-shot
+  - [x] Errors + non-done statuses surfaced in the bubble
+  - [ ] On-device verification (user)
+- **Epic**: E22 | **Estimate**: M | **Status**: 🟡 Scaffolded 2026-06-23
+
+#### BLI-054 — Flutter terminal client: fleet status + task history
+- **Story**: As the operator, I want to see machine health and recent tasks in the app.
+- **Acceptance Criteria**:
+  - [ ] Machines view from `GET /machines` (online/role/counts)
+  - [ ] History view from `GET /tasks?limit=` (status icons, tap to view result)
+- **Epic**: E22 | **Estimate**: S | **Status**: 🔲 Not started
+
+#### BLI-055 — Flutter terminal client: artifacts + live streaming (stretch)
+- **Story**: As the operator, I want generated files to be downloadable and agent output to stream live.
+- **Acceptance Criteria**:
+  - [ ] Tappable artifact download (token endpoint on orchestrator, like the bridge's `/artifact/{token}`)
+  - [ ] Live output via an SSE endpoint on the orchestrator (`GET /tasks/{id}/stream`); queue stays source of truth
+- **Epic**: E22 | **Estimate**: L | **Status**: 🔲 Not started (needs orchestrator changes)
+
+#### Sprint-11 — Flutter Terminal Client (Epic E22)
+> Plan: `distributed-infra/docs/flutter-terminal.md`. Thin client over the existing orchestrator API over Tailscale; WhatsApp bridge unaffected. BLI-052/053 delivered as an initial scaffold (`distributed-infra/clients/flutter-terminal/`), pending on-device verification by the user; BLI-054/055 follow.
+
+#### BLI-056 — Two-way kanban: board cards trigger agents
+- **Story**: As the user, I want to type `/plan`, `/sync`, `/done <text>` or a question as a card on my Today Kanban and get the result back on the board, so the board is my single input surface.
+- **Acceptance Criteria**:
+  - [x] Cards in 📥 Queued starting with `/` are executed (plan, sync, done, kanban); replies appear in a 🤖 Agent column
+  - [x] Cards ending with `?` are answered by the LLM with due-task context
+  - [x] Processed cards leave Queued and are hash-tracked (fire exactly once)
+  - [x] `python main.py --watch` reacts within seconds (watchdog, 2s debounce); cron processes the board as fallback every interval
+  - [x] Morning cron posts a 🎯 top-3 focus card after the daily plan
+- **Epic**: E23 | **Estimate**: M | **Status**: ✅ Done 2026-07-03 (`agents/kanban_agent.py`, `watcher.py`)
+
+#### BLI-057 — Board declutter: reading links off the kanban
+- **Story**: As the user, I was overwhelmed by 69 Queued cards, mostly LogSeq link dumps; the board should hold actionable tasks only.
+- **Acceptance Criteria**:
+  - [x] Journal-sourced URL cards moved to `000 Inbox/Reading List.md` (56 moved, 13 tasks kept)
+  - [x] Due-task collector skips reading links so they don't re-flood the board
+- **Epic**: E23 | **Estimate**: S | **Status**: ✅ Done 2026-07-03
+
+#### BLI-058 — Vault-scan cache
+- **Story**: As the user, every `/today`, `/plan` and API call re-parsed all ~5.4k vault files; commands should be fast.
+- **Acceptance Criteria**:
+  - [x] mtime-keyed parse cache in `integrations/obsidian.py`; vault writes invalidate their entry
+  - [x] Warm scan 1.68s → 0.19s; all 65 tests pass
+- **Epic**: — (tech debt) | **Estimate**: S | **Status**: ✅ Done 2026-07-03
+
+#### BLI-059 — Claude Agent SDK terminal frontend (Mac Mini)
+- **Story**: As the user, I want to talk to my assistant in natural language ("what should I focus on, and push anything overdue to next week") instead of memorising slash commands.
+- **Acceptance Criteria**:
+  - [ ] `clients/claude_frontend/frontend.py` — interactive chat via claude-agent-sdk; custom tools wrap the assistant API (get_tasks, generate_plan, add_task, mark_done, get_dashboard, get_status)
+  - [ ] `clients/claude_frontend/suggest.py` — one-shot top-3 focus for WhatsApp/kanban piping
+  - [ ] Runs on the Mac Mini next to the assistant API (:7890); auth via ASSISTANT_API_KEY
+- **Epic**: E24 | **Estimate**: M | **Status**: 🟡 In progress 2026-07-03
 
 ---
 
@@ -594,6 +691,11 @@ python scripts/status.py
 | — | Streamlit web dashboard (app.py) | Keeping existing code, not a sprint priority — CLI first | 2026-03-14 |
 | — | Apple Reminders integration | macOS only — not applicable on Linux | 2026-03-14 |
 | — | Book Agent / Travel Agent | Out of scope for current sprint focus | 2026-03-14 |
+| BLI-043 | Local n8n setup (Docker, import workflows, verify) | Superseded — n8n removed in the April 2026 refactor | 2026-06-22 |
+| BLI-044 | Replace `_call_lmstudio()` with `lmstudio` Python SDK | Superseded — LM Studio removed in the April 2026 refactor | 2026-06-22 |
+| BLI-045 | Integrate `lms` CLI into service lifecycle | Superseded — LM Studio removed in the April 2026 refactor | 2026-06-22 |
+| BLI-041 | Remove Google Calendar OAuth → route via n8n | Superseded — Google OAuth + n8n abandoned in the April 2026 refactor | 2026-06-22 |
+| BLI-042 | Remove Google Tasks OAuth → route via n8n | Superseded — Google OAuth + n8n abandoned in the April 2026 refactor | 2026-06-22 |
 
 ---
 
@@ -680,12 +782,28 @@ Sprint-06 introduces the distributed, containerised architecture: LM Studio as a
 
 Sprint-06 start date: TBD (awaiting Sprint-05 completion and PO confirmation)
 
+## Sprint-10 Plan
+
+Sprint-10 picks up the one genuinely-new backlog item after Sprint-09 closes: the WhatsApp agent launcher.
+
+| Task | BLI | Title | Estimate | Epic |
+|------|-----|-------|----------|------|
+| T10-01 | BLI-050 | Launch a CLI agent from WhatsApp via `agent <LLM> <prompt>` (claude / code / agy, multi-turn) | L | E20 |
+
+**Notes**: Cross-repo — the WhatsApp bridge + command parser live in `distributed-infra` (Mac Mini); the `agy` target is this repo's `main.py`. See BLI-050 for full acceptance criteria.
+
+Sprint-10 start date: TBD (after Sprint-09 review)
+
 ---
 
 ## Changelog
 
 | Date | Changed by | Change |
 |------|------------|--------|
+| 2026-07-03 | Scrum Master | Added E23 (two-way kanban, ✅ delivered: BLI-056/057) and E24 (Claude Agent SDK frontend, BLI-059 in progress → Sprint-12). Logged BLI-058 vault-scan cache as done. |
+| 2026-06-22 | Scrum Master | Slotted BLI-050 into **Sprint-10** (T10-01) — WhatsApp agent launcher. |
+| 2026-06-22 | Scrum Master | Tidied stale items: marked **BLI-041, 042, 043, 044, 045** Superseded (April 2026 refactor removed LM Studio / n8n / Google OAuth) and moved them to Deferred/Icebox. |
+| 2026-06-22 | Product Owner | Added Epic E20 and BLI-050 — launch a CLI agent from WhatsApp via `agent <LLM> <prompt>` (Claude / Claude Code / "agy" assistant). Cross-repo with distributed-infra bridge. |
 | 2026-04-03 | Scrum Master | Marked T06-03/BLI-038 mostly done after NanoClaw LogSeq skill delivery; noted remaining cron integration gap and added Sprint-06 execution status. |
 | 2026-04-03 | Scrum Master | Added Epics E14–E17 and BLI-036–040 — LM Studio, NanoClaw containerisation, Universal Task Sync, CLI Router. Sprint-06 placeholder added. |
 | 2026-04-02 | Product Owner | Added BLI-033, BLI-034, BLI-035 — Google Tasks two-way sync (ADR-007). Sprint-05 updated with Tasks track. |

@@ -77,3 +77,11 @@ GOOGLE_CAL_CREDENTIALS=
 
 # Apple Calendar (macOS only) — name of the calendar to push events to
 APPLE_CALENDAR_NAME=Home
+
+# ── Distributed Agents API ────────────────────────────────────────────────────
+# Optional secret key for the HTTP API server (python main.py --api).
+# Workers must send this as the x-api-key header. Leave empty to disable auth
+# (only safe when the API is bound to localhost or a trusted Tailscale network).
+ASSISTANT_API_KEY=
+# Port for the API server (default 7890, used by python main.py --api)
+ASSISTANT_API_PORT=7890
