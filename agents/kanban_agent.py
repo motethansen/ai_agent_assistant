@@ -72,7 +72,7 @@ def _rewrite_kanban(content: str, new_queued_lines: list[str]) -> str:
     Replace the Queued column body with new_queued_lines.
     Everything else (frontmatter, other columns, settings block) is preserved.
     """
-    queued_col_re = re.compile(r'^## 📥 Queued\s*$', re.MULTILINE)
+    queued_col_re = re.compile(r'^## 📥 Queued[ \t]*$', re.MULTILINE)
     next_col_re   = re.compile(r'^## ', re.MULTILINE)
 
     m = queued_col_re.search(content)
@@ -232,7 +232,7 @@ def _stamp() -> str:
 
 def _rewrite_column(content: str, column: str, new_lines: list[str]) -> str:
     """Replace one column's body, preserving everything else."""
-    col_re = re.compile(rf'^## {re.escape(column)}\s*$', re.MULTILINE)
+    col_re = re.compile(rf'^## {re.escape(column)}[ \t]*$', re.MULTILINE)
     m = col_re.search(content)
     if not m:
         # Column missing — insert it before the settings block (or append).
