@@ -314,6 +314,48 @@ def suggest(
     }
 
 
+# ── Deadlines (pull backlog items into the active/dated list) ────────────────
+
+@app.post("/tasks/deadline")
+def set_task_deadline(body: dict, x_api_key: str = Header(default="")):
+    """Set a due date on the first undated task matching text.
+    Body: {"text_match": "...", "date": "YYYY-MM-DD"}."""
+    _check_auth(x_api_key)
+    import datetime as _dt
+    match = (body.get("text_match") or "").strip()
+    ds = (body.get("date") or "").strip()
+    if not match or not ds:
+        raise HTTPException(status_code=422, detail="text_match and date are required")
+    try:
+        d = _dt.date.fromisoformat(ds)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD")
+    from integrations.obsidian import ObsidianVault
+    got = ObsidianVault().set_deadline_by_text(match, d)
+    if not got:
+        raise HTTPException(status_code=404, detail=f"no undated task matched: {match}")
+    return {"set": got, "date": ds}
+
+
+@app.post("/categories/deadline")
+def set_category_deadline(body: dict, x_api_key: str = Header(default="")):
+    """Set a due date on every undated task tagged #category.
+    Body: {"category": "...", "date": "YYYY-MM-DD"}."""
+    _check_auth(x_api_key)
+    import datetime as _dt
+    cat = (body.get("category") or "").strip()
+    ds = (body.get("date") or "").strip()
+    if not cat or not ds:
+        raise HTTPException(status_code=422, detail="category and date are required")
+    try:
+        d = _dt.date.fromisoformat(ds)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD")
+    from integrations.obsidian import ObsidianVault
+    n = ObsidianVault().set_deadline_by_category(cat, d)
+    return {"category": cat, "date": ds, "tasks_updated": n}
+
+
 # ── Status ────────────────────────────────────────────────────────────────────
 
 @app.get("/status")

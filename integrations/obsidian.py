@@ -250,6 +250,29 @@ class ObsidianVault:
         _PARSE_CACHE.pop(str(abs_path), None)
         return True
 
+    def set_deadline_by_text(self, text_match: str, new_date: datetime.date) -> str | None:
+        """Set a due date (📅) on the first UNDATED open task whose text contains
+        text_match — i.e. pull one backlog item into the active/dated list."""
+        q = text_match.strip().lower()
+        for t in self.get_tasks():
+            if t.get("is_done") or t.get("due_date") or t.get("scheduled_date"):
+                continue
+            if q in t["text"].lower():
+                return t["text"] if self.update_task_date(t, new_date) else None
+        return None
+
+    def set_deadline_by_category(self, category: str, new_date: datetime.date) -> int:
+        """Set a due date (📅) on every UNDATED open task tagged #category. Returns count."""
+        cat = category.lstrip("#").lower()
+        n = 0
+        for t in self.get_tasks():
+            if t.get("is_done") or t.get("due_date") or t.get("scheduled_date"):
+                continue
+            if cat in [str(x).lstrip("#").lower() for x in (t.get("tags") or [])]:
+                if self.update_task_date(t, new_date):
+                    n += 1
+        return n
+
     def move_file(self, from_rel: str, to_rel: str) -> bool:
         """Move a note to a new location within the vault. Creates dest dir."""
         src = self.vault_dir / from_rel
