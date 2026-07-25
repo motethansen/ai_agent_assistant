@@ -93,6 +93,23 @@ def parse_task_metadata(raw_line: str) -> dict:
     }
 
 
+_URL_RE_FILTER = re.compile(r"https?://")
+_GENERATED_FILES = {"000 Inbox/Reading List.md", "000 Inbox/Reminders Backlog.md"}
+
+
+def is_actionable_task(task: dict) -> bool:
+    """Clean-scope filter shared by /suggest and the backlog migration: a genuine
+    to-do, not a saved reading link, empty checkbox, or line in a generated file
+    (010 Planning/*, per-folder _plan.md, inbox capture files)."""
+    txt = (task.get("text") or "").strip()
+    if not txt or _URL_RE_FILTER.search(txt):
+        return False
+    f = task.get("file", "")
+    if f in _GENERATED_FILES or f.startswith("010 Planning/") or f.rsplit("/", 1)[-1] == "_plan.md":
+        return False
+    return True
+
+
 # ── Vault reader / writer ─────────────────────────────────────────────────────
 
 # Module-level task-parse cache keyed by absolute file path. Shared across

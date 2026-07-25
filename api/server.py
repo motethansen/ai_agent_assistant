@@ -257,7 +257,8 @@ def suggest(
     from llm import router
 
     today = _dt.date.today()
-    tasks = ObsidianVault().get_tasks()
+    from integrations.obsidian import is_actionable_task
+    tasks = [t for t in ObsidianVault().get_tasks() if is_actionable_task(t)]  # skip reading-links / generated files
 
     def _due(t):
         return t.get("due_date") or t.get("scheduled_date")
