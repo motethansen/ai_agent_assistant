@@ -29,8 +29,32 @@ from integrations.obsidian import ObsidianVault
 from llm import router
 
 _DATE_RE = re.compile(r"\s*(?:📅|⏳)\s*\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?")
+_URL_RE = re.compile(r"https?://\S+")
 OUT = Path(__file__).parent.parent / "output"
 OUT.mkdir(exist_ok=True)
+
+# Clean scope: skip the assistant's own generated / capture files and reading-link junk.
+_EXCLUDE_FILE_PREFIXES = ("010 Planning/",)
+_EXCLUDE_FILES = {"000 Inbox/Reading List.md", "000 Inbox/Reminders Backlog.md"}
+
+
+def _excluded_file(f: str) -> bool:
+    # generated files: 010 Planning/*, the inbox capture files, and per-folder _plan.md
+    return (f in _EXCLUDE_FILES
+            or any(f.startswith(p) for p in _EXCLUDE_FILE_PREFIXES)
+            or Path(f).name == "_plan.md")
+
+
+def _reason_to_skip(t: dict) -> str | None:
+    """Return why a dated task should be skipped, or None to keep it."""
+    txt = (t.get("text") or "").strip()
+    if not txt:
+        return "empty"
+    if _URL_RE.search(txt):
+        return "reading-link"
+    if _excluded_file(t["file"]):
+        return "generated-file"
+    return None
 
 
 # ── LLM helpers (robust JSON extraction) ─────────────────────────────────────
@@ -91,8 +115,18 @@ def strip_and_tag(raw: str, category: str) -> str:
 
 # ── main ─────────────────────────────────────────────────────────────────────
 def build_plan(vault: ObsidianVault) -> list[dict]:
-    tasks = [t for t in vault.get_tasks() if (t.get("due_date") or t.get("scheduled_date")) and not t.get("is_done")]
-    print(f"▸ {len(tasks)} dated tasks found")
+    dated = [t for t in vault.get_tasks() if (t.get("due_date") or t.get("scheduled_date")) and not t.get("is_done")]
+    # clean scope: drop empty / reading-link / generated-file tasks
+    skipped = Counter()
+    tasks = []
+    for t in dated:
+        r = _reason_to_skip(t)
+        if r:
+            skipped[r] += 1
+        else:
+            tasks.append(t)
+    print(f"▸ {len(dated)} dated tasks · kept {len(tasks)} · skipped {sum(skipped.values())} "
+          f"({', '.join(f'{k}:{v}' for k, v in skipped.most_common())})")
     if not tasks:
         return []
     print("▸ proposing categories…")
@@ -169,14 +203,14 @@ def apply(plan: list[dict], vault: ObsidianVault):
 
 
 def write_backlog_index(plan: list[dict], vault: ObsidianVault):
-    by_cat = defaultdict(list)
+    by_cat: dict[str, dict[str, dict]] = defaultdict(dict)   # cat → {norm_text: task}  (deduped)
     for p in plan:
-        by_cat[p["category"]].append(p)
+        by_cat[p["category"]].setdefault(p["text"].strip().lower(), p)
     lines = ["# Backlog", "", "> Undated tasks by category. Set a deadline on a task or a whole",
              "> category via the assistant API (`POST /tasks/deadline`, `POST /categories/deadline`).", ""]
     for cat, items in sorted(by_cat.items(), key=lambda kv: -len(kv[1])):
         lines.append(f"## {cat}  ({len(items)})")
-        for p in sorted(items, key=lambda x: x["text"].lower()):
+        for p in sorted(items.values(), key=lambda x: x["text"].lower()):
             lines.append(f"- [ ] {p['text']} #{cat}")
         lines.append("")
     (vault.vault_dir / "Backlog.md").write_text("\n".join(lines), encoding="utf-8")
