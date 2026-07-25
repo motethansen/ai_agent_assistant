@@ -238,6 +238,59 @@ def generate_plan(
     return {"mode": mode, "plan": plan}
 
 
+# ── Suggest (morning focus) ──────────────────────────────────────────────────
+
+@app.get("/suggest")
+def suggest(x_api_key: str = Header(default="")):
+    """Morning focus: today's + overdue tasks distilled to a top-3 by the assistant's
+    own LLM router. Server-side counterpart of clients/claude_frontend/suggest.py, so
+    the morning brief / WhatsApp / kanban can consume it over HTTP."""
+    _check_auth(x_api_key)
+    import datetime as _dt
+    from integrations.obsidian import ObsidianVault
+    from llm import router
+
+    today = _dt.date.today()
+    tasks = ObsidianVault().get_tasks()
+
+    def _due(t):
+        return t.get("due_date") or t.get("scheduled_date")
+
+    focus_tasks = sorted(
+        [t for t in tasks if _due(t) is not None and _due(t) <= today],
+        key=lambda t: (_due(t), t.get("priority_weight", 99)),
+    )
+    if not focus_tasks:
+        return {"date": str(today), "task_count": 0,
+                "focus": "✅ Nothing due today or overdue — you're clear.", "tasks": []}
+
+    def _line(t):
+        d = _due(t)
+        overdue = " ⚠️overdue" if d < today else ""
+        pr = f" [{t['priority']}]" if t.get("priority") else ""
+        return f"- {t['text']}{pr} (📅 {d}{overdue})"
+
+    listing = "\n".join(_line(t) for t in focus_tasks)
+    prompt = (
+        f"Today is {today:%A %d %b %Y}. My tasks overdue or due today:\n\n{listing}\n\n"
+        "Pick the TOP 3 to focus on and give a one-line reason for each, then one short "
+        "suggestion (what to defer or batch). Concise plain markdown, no preamble."
+    )
+    try:
+        focus = router.ask(prompt, task="planning",
+                           system="You are a concise personal planning assistant.")
+    except Exception as e:  # LLM down → still return the raw list, never 500
+        focus = f"(LLM unavailable: {str(e)[:80]})\n\nOverdue / due today:\n{listing}"
+
+    return {
+        "date": str(today),
+        "task_count": len(focus_tasks),
+        "focus": focus,
+        "tasks": [{"text": t["text"], "priority": t.get("priority"),
+                   "date": str(_due(t)), "overdue": _due(t) < today} for t in focus_tasks],
+    }
+
+
 # ── Status ────────────────────────────────────────────────────────────────────
 
 @app.get("/status")

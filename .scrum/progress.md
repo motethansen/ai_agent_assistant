@@ -11,7 +11,15 @@
 **Repository**: /home/michaelhansen/Projects/github/ai_agent_assistant
 **Started**: 2026-03-14
 **Product Owner**: Michael Hansen
-**Current Sprint**: Sprint-09 ✅ Complete (2026-06-22) — Vault Planning Cleanup (T09-03 Planner.md `/plan` markers verified, T09-04 Dashboard.md static index, T09-05 Inbox.md cleaned; 65 tests pass). Next: Sprint-10 (BLI-050 WhatsApp agent launcher). Stale LM Studio/n8n/Google-OAuth items (BLI-041–045) moved to Deferred/Icebox.
+**Current Sprint**: Sprint-10 ✅ (2026-07-25) — `GET /suggest` morning-focus API: today + overdue tasks distilled to a top-3 by the LLM router; server-side counterpart of `clients/claude_frontend/suggest.py`, ready to wire into the morning brief.
+
+**Recently delivered (reconciled 2026-07-25 against git history):**
+- **E23 Two-way Kanban** (Jul 3) — `010 Planning/Today Kanban.md`; `/plan /sync /done /kanban` and `…?` question cards executed into a 🤖 Agent column (`agents/kanban_agent.py`); `python main.py --watch` live watcher.
+- **E24 Claude Agent SDK frontend** (Jul 3) — `clients/claude_frontend/` (`frontend.py` interactive, `suggest.py` one-shot) drives the API via SDK tools; deployed on the Mac Mini.
+- **API write endpoints** — `POST /tasks`, `POST /tasks/done`.
+- **E20 WhatsApp launcher** — DELIVERED at the fleet level in distributed-infra's bridge (`agent <llm> <prompt>` + `assist <sub>`), not in this repo → assistant-side dependency done.
+- **Deployment** — API runs on the Mac Mini as launchd `com.mh.aiassistant.api` (:7890, python3.12 venv). Deploy = push from MacBook → `git pull` + kickstart on the mini. Monitored by the **Vantage** service-monitor as `mm-assistant-api`.
+- Stale LM Studio / NanoClaw / n8n / Google-OAuth items retired by the April redesign (flat Python package — see `decisions.md`).
 **Current Team**: Claude CLI (SM + dev agents)
 
 ---
@@ -39,20 +47,22 @@ A personal AI assistant that runs from the command line, using local LLMs (Ollam
 
 ## Codebase Entry Points
 
+> Reconciled 2026-07-25 to the post-redesign flat-package structure (the old
+> `ai_orchestration.py` / `*_agent.py` / `api_server.py` / `n8n-workflows/` / Streamlit
+> `app.py` entries were pre-redesign and no longer exist).
+
 | Component | Path | Description |
 |-----------|------|-------------|
-| Main CLI | `main.py` | Orchestrator and CLI chat entry point (1092 lines) |
-| LLM routing | `ai_orchestration.py` | Routes tasks to Ollama with fallback; `list_ollama_models()` |
-| LogSeq agent | `logseq_agent.py` | Parses LATER/TODO tasks; `add_task()` and `mark_done()` write-back |
-| Obsidian agent | `obsidian_agent.py` | Direct `.md` file parser — no Obsidian app required |
-| Calendar agent | `calendar_agent.py` | Fetches Google Calendar, caches as YAML |
-| Planning agent | `planning_agent.py` | Executes confirmed task bookings to Google Calendar |
-| API server | `api_server.py` | FastAPI webhook server for n8n integration |
-| n8n workflows | `n8n-workflows/` | 3 ready-to-import workflow JSON templates |
-| Web UI | `app.py` | Streamlit dashboard (optional — CLI is the primary interface) |
-| Config | `config.template` | Full config reference; copy to `.config` |
-| Config example | `config.example` | Clean starter config for new users (Sprint-03) |
-| Tests | `tests/` | pytest test suite |
+| Main CLI | `main.py` | Entry point + flag dispatch: `--api --watch --status --sync --today --plan --chat` |
+| API server | `api/server.py` | FastAPI (:7890) — `/tasks` (GET/POST), `/tasks/done`, `/calendar`, `/notes`, `/note`, `/dashboard`, `POST /plan`, **`GET /suggest`**, `/status`, `/llm`, `/health` |
+| Agents | `agents/` | `kanban_agent`, `planning_agent`, `notes_agent`, `reminders_agent`, `sync_agent`, `project_agent`, `knowledge_agent` |
+| LLM routing | `llm/router.py` | `ask()` / `stream()` with per-task provider + fallback chain; providers: `ollama`, `gemini`, `groq`, `deepseek` |
+| Integrations | `integrations/` | `obsidian.py` (vault task parse + write-back), `logseq.py`, `calendar.py` (ICS) |
+| Terminal UI | `ui/` | `chat.py`, `commands.py`, `views.py` |
+| Claude SDK frontend | `clients/claude_frontend/` | `frontend.py` (interactive) + `suggest.py` (one-shot) over the API |
+| Watcher | `watcher.py` | live vault/kanban watchdog (`main.py --watch`) |
+| Config | `config.py`, `config.template` | config loader + full reference; copy template to `.config` |
+| Tests | `tests/` | pytest suite |
 
 ---
 
@@ -146,16 +156,21 @@ The following agents were added outside of the sprint process (commit `720f442`)
 
 ---
 
-### Sprint-06 Status — In Progress (2026-04-03)
-- **Goal**: Distributed, secure, containerised architecture — LM Studio, NanoClaw, n8n Universal Task Sync, CLI Router
-- **Status**: Wave 1 complete and Wave 2 complete. T06-01, T06-02, and T06-03 are done; Wave 3 remains blocked on Sprint-05 ICS engine for T06-04 and depends on completed NanoClaw skills for T06-05.
-- **Tracks**:
-  - **Inference**: T06-01 (LM Studio) — complete
-  - **Containers/Security**: T06-02 → T06-03 complete; T06-05 now unblocked from the NanoClaw side
-  - **Data flows**: T06-04 (Universal Task Sync) — still requires Sprint-05 ICS engine
-- **New config keys introduced**: `ENABLE_LM_STUDIO`, `LM_STUDIO_MODEL`, `NANOCLAW_ENABLED`
-- **Infrastructure requirement**: Docker must be running for NanoClaw Skills; n8n must be running for Universal Task Sync
-- **Wave 2 delivery note**: LogSeq NanoClaw now supports extracting `LATER` tasks from LogSeq and syncing them into the Obsidian planner block for manual organisation or later scheduling by the planning agent.
+### Sprint-06 → Sprint-10 — ✅ Complete (Apr–Jul 2026)
+
+_(Consolidated 2026-07-25 — this section previously read "Sprint-06 In Progress", which was long stale.)_
+
+The **April redesign** (see `decisions.md`) cut n8n / LM Studio / NanoClaw / ChromaDB / Docker in favour of a flat Python package. What the earlier Sprint-06 plan called "containerised LM Studio + NanoClaw + n8n Universal Task Sync" was **superseded** — those tracks are retired. Delivered since:
+
+- **Redesigned structure** — `agents/`, `api/`, `llm/`, `integrations/`, `ui/`, `clients/`.
+- **LLM router** — Ollama-first with `gemini → groq → deepseek` fallback (`llm/router.py`).
+- **ICS calendar engine** (Sprint-05 → integrated) — `integrations/calendar.py`, replacing the Google Calendar API path.
+- **HTTP API** (:7890) — for fleet integration (distributed-infra workers, WhatsApp bridge, Claude SDK frontend).
+- **Sprint-09** (2026-06-22) — vault planning cleanup; 65 tests pass.
+- **E23/E24** (Jul 3) — two-way Kanban + Claude Agent SDK frontend (see Current Sprint above).
+- **Sprint-10** (2026-07-25) — `GET /suggest` morning-focus API.
+
+Config keys `ENABLE_LM_STUDIO` / `LM_STUDIO_MODEL` / `NANOCLAW_ENABLED` are obsolete.
 
 ---
 
