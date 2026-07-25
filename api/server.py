@@ -241,10 +241,16 @@ def generate_plan(
 # ── Suggest (morning focus) ──────────────────────────────────────────────────
 
 @app.get("/suggest")
-def suggest(x_api_key: str = Header(default="")):
-    """Morning focus: today's + overdue tasks distilled to a top-3 by the assistant's
-    own LLM router. Server-side counterpart of clients/claude_frontend/suggest.py, so
-    the morning brief / WhatsApp / kanban can consume it over HTTP."""
+def suggest(
+    window: int = Query(14, description="overdue window (days); older overdue tasks kept only if high-priority"),
+    limit: int = Query(25, description="max tasks fed to the LLM"),
+    x_api_key: str = Header(default=""),
+):
+    """Morning focus: what's actionable *now* — due today + recently overdue +
+    high-priority overdue (🔺/⏫) — distilled to a top-3 by the LLM router. Ancient
+    unprioritised overdue tasks are summarised as a count, not dumped into the prompt
+    (the vault carries hundreds of long-overdue items). Server-side counterpart of
+    clients/claude_frontend/suggest.py."""
     _check_auth(x_api_key)
     import datetime as _dt
     from integrations.obsidian import ObsidianVault
@@ -256,38 +262,55 @@ def suggest(x_api_key: str = Header(default="")):
     def _due(t):
         return t.get("due_date") or t.get("scheduled_date")
 
-    focus_tasks = sorted(
-        [t for t in tasks if _due(t) is not None and _due(t) <= today],
-        key=lambda t: (_due(t), t.get("priority_weight", 99)),
-    )
-    if not focus_tasks:
-        return {"date": str(today), "task_count": 0,
-                "focus": "✅ Nothing due today or overdue — you're clear.", "tasks": []}
+    dated = [(t, _due(t)) for t in tasks if _due(t) is not None]
+    overdue_total = sum(1 for _, d in dated if d < today)
 
-    def _line(t):
-        d = _due(t)
-        overdue = " ⚠️overdue" if d < today else ""
+    def _high(t):
+        return t.get("priority_weight", 99) <= 1        # 🔺 highest / ⏫ high
+
+    cand = []
+    for t, d in dated:
+        age = (today - d).days                          # >0 overdue, 0 = today
+        if d == today or (0 < age <= window) or (age > 0 and _high(t)):
+            cand.append((t, d, age))
+    # today first, then priority (lower weight = higher), then freshest
+    cand.sort(key=lambda x: (0 if x[1] == today else 1, x[0].get("priority_weight", 99), x[2]))
+    cand = cand[:limit]
+
+    due_today = sum(1 for _, d, _a in cand if d == today)
+    shown_overdue = sum(1 for _, _d, a in cand if a > 0)
+
+    if not cand:
+        return {"date": str(today), "task_count": 0, "due_today": 0, "overdue_total": overdue_total,
+                "focus": "✅ Nothing due today or recently overdue — you're clear.", "tasks": []}
+
+    def _line(t, d, age):
+        tag = " ⚠️overdue" if age > 0 else ""
         pr = f" [{t['priority']}]" if t.get("priority") else ""
-        return f"- {t['text']}{pr} (📅 {d}{overdue})"
+        return f"- {t['text']}{pr} (📅 {d}{tag})"
 
-    listing = "\n".join(_line(t) for t in focus_tasks)
+    listing = "\n".join(_line(t, d, a) for t, d, a in cand)
+    tail = f"\n\n(+{overdue_total - shown_overdue} older overdue tasks not shown)" if overdue_total - shown_overdue > 0 else ""
     prompt = (
-        f"Today is {today:%A %d %b %Y}. My tasks overdue or due today:\n\n{listing}\n\n"
+        f"Today is {today:%A %d %b %Y}. My most actionable tasks (due today, recently "
+        f"overdue, or high-priority):\n\n{listing}{tail}\n\n"
         "Pick the TOP 3 to focus on and give a one-line reason for each, then one short "
         "suggestion (what to defer or batch). Concise plain markdown, no preamble."
     )
     try:
         focus = router.ask(prompt, task="planning",
                            system="You are a concise personal planning assistant.")
-    except Exception as e:  # LLM down → still return the raw list, never 500
-        focus = f"(LLM unavailable: {str(e)[:80]})\n\nOverdue / due today:\n{listing}"
+    except Exception as e:  # LLM down → still return the list, never 500
+        focus = f"(LLM unavailable: {str(e)[:80]})\n\n{listing}"
 
     return {
         "date": str(today),
-        "task_count": len(focus_tasks),
+        "task_count": len(cand),
+        "due_today": due_today,
+        "overdue_total": overdue_total,
         "focus": focus,
         "tasks": [{"text": t["text"], "priority": t.get("priority"),
-                   "date": str(_due(t)), "overdue": _due(t) < today} for t in focus_tasks],
+                   "date": str(d), "overdue": a > 0} for t, d, a in cand],
     }
 
 
