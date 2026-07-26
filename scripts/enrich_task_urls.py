@@ -67,7 +67,7 @@ def enrich_line(raw: str, manual: dict, unfetchable: list) -> tuple[str, int]:
 
 
 def build_plan(vault: ObsidianVault, limit: int | None) -> list[dict]:
-    manual = load_manual_titles()
+    manual = load_manual_titles(vault)
     unfetchable: list = []
     url_tasks = [t for t in vault.get_tasks(include_done=True) if _URL_RE.search(t.get("raw", ""))]
     print(f"▸ {len(url_tasks)} task lines contain a URL — fetching titles (cached)…")
@@ -78,8 +78,8 @@ def build_plan(vault: ObsidianVault, limit: int | None) -> list[dict]:
         new, n = enrich_line(t["raw"], manual, unfetchable)
         if n and new != t["raw"]:
             plan.append({"file": t["file"], "line": t["line"], "old": t["raw"], "new": new})
-    for u, ctx in unfetchable:
-        record_unfetchable(u, ctx)
+    if unfetchable:
+        record_unfetchable(vault, unfetchable)
     print(f"▸ {len(plan)} lines to enrich · {len(set(_url_key(u) for u, _ in unfetchable))} URLs unfetchable "
           f"(logged for the manual worklist)")
     (OUT / "enrich_plan.json").write_text(json.dumps(plan, indent=2, ensure_ascii=False), encoding="utf-8")
