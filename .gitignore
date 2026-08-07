@@ -32,10 +32,19 @@ vector_db/
 # Logs
 logs/
 
-# Generated runtime files
-output/*.log
-output/*.ics
-output/.synced_hashes.json
-output/.cron.lock
-output/chat_history.json
-output/.synced_reminders.json
+# ── Generated runtime files (SECURITY) ───────────────────────────────────────
+# Deny-all, allow by exception. The previous rule listed individual files to
+# ignore, so every NEW artefact was tracked by default — which is how a derived
+# index of the whole vault once ended up committed.
+#
+# Anything this app derives from the vault is private by construction: even an
+# index that holds no note bodies still exposes every title and path. If you
+# need to commit something under output/, add an explicit `!` exception below
+# and be certain it holds no vault-derived content.
+output/*
+!output/.gitkeep
+
+# Knowledge graphs and vault indexes — private wherever they land
+*.ttl
+.kg_mtimes.json
+knowledge_graph.*
