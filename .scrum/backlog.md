@@ -29,10 +29,33 @@
 | E17 | CLI Router Simplification | Reduce main.py + ai_orchestration.py to lightweight router — delegate reasoning to NanoClaw, data-flows to n8n | Sprint-06 |
 | E18 | Google Connector Migration to n8n | Remove direct Python OAuth for Google Calendar and Google Tasks; route all Google API calls through n8n credential store | Sprint-07 |
 | E19 | LM Studio Native Integration | Replace OpenAI-compat HTTP calls to LM Studio with the official `lmstudio` Python SDK and `lms` CLI for model/server lifecycle management | Sprint-07 |
-| E20 | WhatsApp Agent Launcher | Launch a CLI agent from WhatsApp via `agent <LLM> <prompt>` — route to Claude / Claude Code / this assistant ("agy") / etc., run the agent, and stream the response back to the chat (incl. multi-turn) | Backlog |
-| E22 | Flutter Terminal Client | Phone/desktop chat client for the distributed agents — a thin Flutter client over the orchestrator queue API over Tailscale (parallel to the WhatsApp bridge) | Sprint-11 (planned) |
+| E20 | WhatsApp Agent Launcher | Launch a CLI agent from WhatsApp via `agent <LLM> <prompt>` — route to Claude / Claude Code / this assistant ("agy") / etc., run the agent, and stream the response back to the chat (incl. multi-turn) | ✅ Delivered · **➡️ moved to `vizneoprojects/distributed-infra`** |
+| E22 | Flutter Terminal Client | Phone/desktop chat client for the distributed agents — a thin Flutter client over the orchestrator queue API over Tailscale (parallel to the WhatsApp bridge) | **➡️ moved to `vizneoprojects/distributed-infra` (DI-001…DI-005)** |
 | E23 | Two-Way Kanban Board | The Today Kanban is the user's single input surface: /command and question cards trigger agents, replies land in a 🤖 Agent column; live file watcher + cron fallback | ✅ Delivered 2026-07-03 |
-| E24 | Claude Agent SDK Frontend | Natural-language terminal frontend on the Mac Mini — Claude drives the assistant API (:7890) via SDK custom tools; replaces memorising 40+ slash commands; one-shot suggest mode for WhatsApp/kanban | Sprint-12 (planned) |
+| E24 | Claude Agent SDK Frontend | Natural-language terminal frontend on the Mac Mini — Claude drives the assistant API (:7890) via SDK custom tools; replaces memorising 40+ slash commands; one-shot suggest mode for WhatsApp/kanban | 🟡 Core delivered · **WhatsApp wiring ➡️ `distributed-infra` DI-007** |
+
+---
+
+## ➡️ Fleet stories moved out (2026-08-07)
+
+The **distributed agent fleet** (queue, workers, orchestrator, WhatsApp bridge, Flutter terminal
+client) has its own repo — `distributed-infra` — but its stories were being tracked *here*, in a
+different project's backlog. The code and the plan were in two places and neither the estate
+SCRUM Master nor the sprint report could see them.
+
+Those stories now live in **`vizneoprojects/distributed-infra/product-backlog.md`** as `DI-###`:
+
+| Was | Now | Note |
+|---|---|---|
+| E22 / BLI-052, BLI-053 | DI-001 | Flutter client — code is on `main` and the API is verified live; only the on-device `flutter run` is outstanding |
+| E22 / BLI-054 | DI-004 | Fleet status + task history views |
+| E22 / BLI-055 | DI-005 | Artifacts + SSE streaming (needs orchestrator endpoints) |
+| E24 / BLI-059 last box | DI-007 | Wire `suggest.py` into the morning brief / WhatsApp |
+| E20 / BLI-050 | — | Delivered; recorded as shipped context in the new backlog |
+
+**The BLI-0xx entries below are left in place as history — do not work from them.** Anything
+still open is in the `DI-###` table. E23 (kanban) and the rest of this backlog are genuinely
+this project's and stay here.
 
 ---
 
@@ -622,7 +645,7 @@ python scripts/status.py
   - [x] Submits **backend** agent names (claude/agy/codex/groq/content/social), not WhatsApp aliases
   - [x] **API client verified live end-to-end** against the orchestrator over Tailscale (`tool/verify_live.dart`, 2026-06-23): `machines()`=3, agy one-shot done, claude multi-turn recalled a codeword. `flutter analyze` clean.
   - [ ] Full UI `flutter run` on a device/simulator (needs the user to run it)
-- **Epic**: E22 | **Estimate**: M | **Status**: 🟡 Scaffolded + API verified live 2026-06-23 (on-device UI run pending)
+- **Epic**: E22 | **Estimate**: M | **Status**: ➡️ **Moved to `vizneoprojects/distributed-infra` as DI-001** — 🟡 scaffolded + API verified live 2026-06-23, on-device UI run pending
 
 #### BLI-053 — Flutter terminal client: chat screen + multi-turn
 - **Story**: As the operator, I want a terminal-style chat that sends a prompt to a chosen agent and shows the result, with claude conversations continuing across messages.
@@ -631,21 +654,21 @@ python scripts/status.py
   - [x] Multi-turn: claude gets a generated `session_id` (resume=false first, resume=true after); switching agent / "New session" resets it; other agents one-shot
   - [x] Errors + non-done statuses surfaced in the bubble
   - [ ] On-device verification (user)
-- **Epic**: E22 | **Estimate**: M | **Status**: 🟡 Scaffolded 2026-06-23
+- **Epic**: E22 | **Estimate**: M | **Status**: ➡️ **Moved to `vizneoprojects/distributed-infra` as DI-001** — 🟡 scaffolded 2026-06-23
 
 #### BLI-054 — Flutter terminal client: fleet status + task history
 - **Story**: As the operator, I want to see machine health and recent tasks in the app.
 - **Acceptance Criteria**:
   - [ ] Machines view from `GET /machines` (online/role/counts)
   - [ ] History view from `GET /tasks?limit=` (status icons, tap to view result)
-- **Epic**: E22 | **Estimate**: S | **Status**: 🔲 Not started
+- **Epic**: E22 | **Estimate**: S | **Status**: ➡️ **Moved to `vizneoprojects/distributed-infra` as DI-004** — 🔲 not started
 
 #### BLI-055 — Flutter terminal client: artifacts + live streaming (stretch)
 - **Story**: As the operator, I want generated files to be downloadable and agent output to stream live.
 - **Acceptance Criteria**:
   - [ ] Tappable artifact download (token endpoint on orchestrator, like the bridge's `/artifact/{token}`)
   - [ ] Live output via an SSE endpoint on the orchestrator (`GET /tasks/{id}/stream`); queue stays source of truth
-- **Epic**: E22 | **Estimate**: L | **Status**: 🔲 Not started (needs orchestrator changes)
+- **Epic**: E22 | **Estimate**: L | **Status**: ➡️ **Moved to `vizneoprojects/distributed-infra` as DI-005** — 🔲 not started (needs orchestrator changes)
 
 #### Sprint-11 — Flutter Terminal Client (Epic E22)
 > Plan: `distributed-infra/docs/flutter-terminal.md`. Thin client over the existing orchestrator API over Tailscale; WhatsApp bridge unaffected. BLI-052/053 delivered as an initial scaffold (`distributed-infra/clients/flutter-terminal/`), pending on-device verification by the user; BLI-054/055 follow.
@@ -681,7 +704,7 @@ python scripts/status.py
   - [x] `clients/claude_frontend/suggest.py` — one-shot top-3 focus for WhatsApp/kanban piping (verified from MacBook → Mini API, and on the Mini via queued worker task)
   - [x] Topology: interactive frontend runs on the MacBook (claude CLI auth) against the Mini API over Tailscale; automated runs live on the headless Mini via launchd/worker only (claude CLI has no Keychain over ssh)
   - [ ] Wire suggest.py into the morning brief / WhatsApp (with BLI-050, Sprint-10)
-- **Epic**: E24 | **Estimate**: M | **Status**: 🟡 Core delivered 2026-07-03; WhatsApp wiring pending
+- **Epic**: E24 | **Estimate**: M | **Status**: 🟡 Core delivered 2026-07-03; **WhatsApp wiring ➡️ moved to `vizneoprojects/distributed-infra` as DI-007**
 
 ---
 
@@ -801,6 +824,7 @@ Sprint-10 start date: TBD (after Sprint-09 review)
 
 | Date | Changed by | Change |
 |------|------------|--------|
+| 2026-08-07 | Claude (on instruction) | **Moved the distributed-fleet stories out** to `vizneoprojects/distributed-infra/product-backlog.md` as DI-###: E22/BLI-052…055 (Flutter terminal client) and E24/BLI-059's WhatsApp wiring. They tracked code in the `distributed-infra` repo, so the estate SCRUM Master could not see them. E20/BLI-050 recorded as shipped context. BLI entries left in place as history — work from the DI table. E23 and the rest stay here. |
 | 2026-07-03 | Scrum Master | Added E23 (two-way kanban, ✅ delivered: BLI-056/057) and E24 (Claude Agent SDK frontend, BLI-059 in progress → Sprint-12). Logged BLI-058 vault-scan cache as done. |
 | 2026-06-22 | Scrum Master | Slotted BLI-050 into **Sprint-10** (T10-01) — WhatsApp agent launcher. |
 | 2026-06-22 | Scrum Master | Tidied stale items: marked **BLI-041, 042, 043, 044, 045** Superseded (April 2026 refactor removed LM Studio / n8n / Google OAuth) and moved them to Deferred/Icebox. |
